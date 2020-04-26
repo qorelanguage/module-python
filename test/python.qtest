@@ -1,0 +1,35 @@
+#!/usr/bin/env qore
+# -*- mode: qore; indent-tabs-mode: nil -*-
+
+%new-style
+%require-types
+%strict-args
+%enable-all-warnings
+
+%requires python
+%requires QUnit
+
+%exec-class PythonTest
+
+class PythonTest inherits Test {
+    public {
+    }
+
+    constructor() : Test("python test", "1.0") {
+        addTestCase("basic test", \basicTest());
+        # Set return value for compatibility with test harnesses that check the return value
+        set_return_value(main());
+    }
+
+    basicTest() {
+        {
+            PythonProgram pp("def test():\n    return 1", "test.py");
+            assertEq(1, pp.callFunction("test"));
+        }
+
+        {
+            PythonProgram pp("def test(val):\n    return val + 1", "test.py");
+            assertEq(2, pp.callFunction("test", 1));
+        }
+    }
+}

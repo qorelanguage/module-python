@@ -1,0 +1,75 @@
+/** @mainpage Qore python Module
+
+    @tableofcontents
+
+    @section pythonintro python Module Introduction
+
+    The \c python module allows for ,,,,
+
+    This module is released under the MIT license (see \c COPYING.MIT in the source distribution for more
+    information).  The module is tagged as such in the module's header (meaning it can be loaded unconditionally
+    regardless of how the %Qore library was initialized).
+
+    To use the module in a %Qore script, use the \c %%requires directive as follows:
+    @code %requires python @endcode
+
+    Helper %Qore classes provided by this module:
+    |!Class|!Description
+    |x|x
+
+    Helper %Qore functions provided by this module:
+    |!Function|!Description
+    |x|x
+
+    @section python_examples Examples
+
+    @par Example:
+    @code{.py}
+ #!/usr/bin/env qore
+
+ %new-style
+ %require-types
+ %strict-args
+ %enable-all-warnings
+
+ %requires python
+
+xxx
+    @endcode
+
+    @section python_types Type Conversions Between Qore and Python
+
+    The \c python module
+    There are two types of conversions:
+    - @ref python_qore2python_specific "Qore to Python Defined Type Conversions": when the type is known in advance
+    - @ref python_qore2python_default "Qore to Python Default Type Conversions": when the type is \c python.lang.Object
+
+    @subsection python_qore2python_specific Qore to Python Defined Type Conversions
+
+    The following table describes type conversions for Python types when the \c python module must convert a %Qore
+    value to the declared type:
+
+    Qore to Specific Python Type Conversions
+    |!Target Python Type|!Source %Qore Type
+    |\c Boolean|any; conversions are made like with @ref Qore::boolean() "boolean()"
+    |\c Integer|any; conversions are made like with @ref Qore::int() "int()"
+    |\c Float|any; conversions are made like with @ref Qore::float() "float()"
+
+    For other types, @ref python_qore2python_default "default conversions" are used.
+
+    @subsection python_qore2python_default Qore to Python Default Type Conversions
+
+    The following table describes type conversions for Python types when the \c python module must convert a %Qore
+    value to the declared type:
+
+    Qore to Python Default Type Conversions
+    |!Source %Qore Type|!Target Python Type
+    |@ref bool_type "bool"|\c Boolean
+    |@ref int_type "int"|\c Integer
+    |@ref float_type "float"|\c Float
+
+    @section pythonreleasenotes python Module Release Notes
+
+    @subsection python_1_0 python Module Version 1.0
+    - initial public release
+*/
