@@ -29,6 +29,7 @@ set(QPP_SRC
 set(CPP_SRC
     src/python-module.cpp
     src/QorePythonProgram.cpp
+    src/QorePythonClass.cpp
 )
 
 qore_wrap_qpp_value(QPP_SOURCES ${QPP_SRC})

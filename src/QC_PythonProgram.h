@@ -82,17 +82,6 @@ public:
         // returns a borrowed reference
         module_dict = PyModule_GetDict(module);
         assert(module_dict);
-
-        /*
-        PyObject *key, *value;
-        Py_ssize_t pos = 0;
-
-        while (PyDict_Next(module_dict, &pos, &key, &value)) {
-            Py_ssize_t size;
-            const char* keystr = PyUnicode_AsUTF8AndSize(key, &size);
-            printf("'%s' -> type '%s'\n", keystr ? keystr : "n/a", Py_TYPE(value)->tp_name);
-        }
-        */
     }
 
     DLLLOCAL QoreValue run(ExceptionSink* xsink) {
@@ -108,26 +97,80 @@ public:
             return QoreValue();
         }
 
-        return getQoreValue(return_value.release(), xsink);
+        return getQoreValue(return_value, xsink);
     }
 
     //! Call the function and return the result
     DLLLOCAL QoreValue callFunction(ExceptionSink* xsink, const QoreString& func_name, const QoreListNode* args, size_t arg_offset = 0);
 
     //! Returns a Qore value for the given Python value
+    DLLLOCAL QoreValue getQoreValue(QorePythonReferenceHolder& val, ExceptionSink* xsink);
+
+    //! Returns a Qore value for the given Python value; does not dereference val
     DLLLOCAL static QoreValue getQoreValue(PyObject* val, ExceptionSink* xsink);
 
+    //! Returns a Qore list from a Python list
+    DLLLOCAL static QoreListNode* getQoreListFromList(PyObject* val, ExceptionSink* xsink);
+
+    //! Returns a Qore list from a Python tuple
+    DLLLOCAL static QoreListNode* getQoreListFromTuple(PyObject* val, ExceptionSink* xsink);
+
+    //! Returns a Qore hash from a Python dict
+    DLLLOCAL static QoreHashNode* getQoreHashFromDict(PyObject* val, ExceptionSink* xsink);
+
+    //! Returns a Qore binary from a Python Bytes object
+    DLLLOCAL static BinaryNode* getQoreBinaryFromBytes(PyObject* val, ExceptionSink* xsink);
+
+    //! Returns a Qore binary from a Python ByteArray object
+    DLLLOCAL static BinaryNode* getQoreBinaryFromByteArray(PyObject* val, ExceptionSink* xsink);
+
+    //! Returns a Qore relative date time value from a Python Delta object
+    DLLLOCAL static DateTimeNode* getQoreDateTimeFromDelta(PyObject* val, ExceptionSink* xsink);
+
+    //! Returns a Qore absolute date time value from a Python DateTime object
+    DLLLOCAL static DateTimeNode* getQoreDateTimeFromDateTime(PyObject* val, ExceptionSink* xsink);
+
+    //! Returns a Qore absolute date time value from a Python Date object
+    DLLLOCAL static DateTimeNode* getQoreDateTimeFromDate(PyObject* val, ExceptionSink* xsink);
+
+    //! Returns a Qore absolute date time value from a Python Time object
+    DLLLOCAL static DateTimeNode* getQoreDateTimeFromTime(PyObject* val, ExceptionSink* xsink);
+
     //! Returns a Python list for the given Qore list
-    DLLLOCAL static PyObject* getPythonListValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset = 0);
+    DLLLOCAL static PyObject* getPythonList(ExceptionSink* xsink, const QoreListNode* l);
 
     //! Returns a Python tuple for the given Qore list
     DLLLOCAL static PyObject* getPythonTupleValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset = 0);
+
+    //! Returns a Python dict for the given Qore hash
+    DLLLOCAL static PyObject* getPythonDict(ExceptionSink* xsink, const QoreHashNode* h);
+
+    //! Returns a Python string for the given Qore string
+    DLLLOCAL static PyObject* getPythonString(ExceptionSink* xsink, const QoreString* str);
+
+    //! Returns a Python string for the given Qore string
+    DLLLOCAL static PyObject* getPythonByteArray(ExceptionSink* xsink, const BinaryNode* b);
+
+    //! Returns a Python delta for the given Qore relative date/time value
+    DLLLOCAL static PyObject* getPythonDelta(ExceptionSink* xsink, const DateTime* dt);
+
+    //! Returns a Python string for the given Qore absolute date/time value
+    DLLLOCAL static PyObject* getPythonDateTime(ExceptionSink* xsink, const DateTime* dt);
 
     //! Returns a new reference
     DLLLOCAL static PyObject* getPythonValue(QoreValue val, ExceptionSink* xsink);
 
     //! Checks for a Python exception and creates a Qore exception from it
     DLLLOCAL static int checkPythonException(ExceptionSink* xsink);
+
+    //! Returns a c string for the given python unicode value
+    DLLLOCAL static const char* getCString(PyObject* obj) {
+        Py_ssize_t size;
+        return PyUnicode_AsUTF8AndSize(obj, &size);
+    }
+
+    //! Static initialization
+    DLLLOCAL static void staticInit();
 
 protected:
     PyThreadState* python = nullptr;

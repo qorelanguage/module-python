@@ -39,34 +39,31 @@ xxx
 
     @section python_types Type Conversions Between Qore and Python
 
-    The \c python module
-    There are two types of conversions:
-    - @ref python_qore2python_specific "Qore to Python Defined Type Conversions": when the type is known in advance
-    - @ref python_qore2python_default "Qore to Python Default Type Conversions": when the type is \c python.lang.Object
+    @subsection python_qore_to_python Type Conversions From Qore To Python
 
-    @subsection python_qore2python_specific Qore to Python Defined Type Conversions
-
-    The following table describes type conversions for Python types when the \c python module must convert a %Qore
-    value to the declared type:
-
-    Qore to Specific Python Type Conversions
-    |!Target Python Type|!Source %Qore Type
-    |\c Boolean|any; conversions are made like with @ref Qore::boolean() "boolean()"
-    |\c Integer|any; conversions are made like with @ref Qore::int() "int()"
-    |\c Float|any; conversions are made like with @ref Qore::float() "float()"
-
-    For other types, @ref python_qore2python_default "default conversions" are used.
-
-    @subsection python_qore2python_default Qore to Python Default Type Conversions
-
-    The following table describes type conversions for Python types when the \c python module must convert a %Qore
-    value to the declared type:
-
-    Qore to Python Default Type Conversions
     |!Source %Qore Type|!Target Python Type
-    |@ref bool_type "bool"|\c Boolean
-    |@ref int_type "int"|\c Integer
-    |@ref float_type "float"|\c Float
+    |@ref binary_type "binary"|\c bytearray
+    |@ref bool_type "bool"|\c bool
+    |@ref date_type "date"|\c datetime.datetime (absolute date/time values) or \c delta.deltatime (relative date/time values)
+    |@ref float_type "float"|\c float
+    |@ref hash_type "hash"|\c dict
+    |@ref int_type "int"|\c int
+    |@ref list_type "list"|\c list
+    |@ref string_type "string"|\c string
+
+    @subsection python_python_to_qore Type Conversions From Python to Qore
+
+    |!Source Python Type|!Target %Qore Type
+    |\c bool|@ref bool_type "bool"
+    |\c int|@ref int_type "int"
+    |\c float|@ref float_type "float"
+    |\c bytes|@ref binary_type "binary"
+    |\c bytearray|@ref binary_type "binary"
+    |\c datetime.datetime|@ref date_type "date" (absolute date/time values)
+    |\c datetime.delta|@ref date_type "date" (relative date/time values)
+    |\c list|@ref list_type "list"
+    |\c string|@ref string_type "string"
+    |\c tuple|@ref list_type "list"
 
     @section pythonreleasenotes python Module Release Notes
 

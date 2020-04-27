@@ -23,10 +23,134 @@
 */
 
 #include "QC_PythonProgram.h"
+#include <frameobject.h>
+#include <datetime.h>
+
+void QorePythonProgram::staticInit() {
+    PyDateTime_IMPORT;
+}
+
+QoreListNode* QorePythonProgram::getQoreListFromList(PyObject* val, ExceptionSink* xsink) {
+    assert(PyList_Check(val));
+    ReferenceHolder<QoreListNode> rv(new QoreListNode(autoTypeInfo), xsink);
+    Py_ssize_t len = PyList_Size(val);
+    for (Py_ssize_t i = 0; i < len; ++i) {
+        ValueHolder qval(getQoreValue(PyList_GetItem(val, i), xsink), xsink);
+        if (*xsink) {
+            return nullptr;
+        }
+        rv->push(qval.release(), xsink);
+        assert(!*xsink);
+    }
+    return rv.release();
+}
+
+QoreListNode* QorePythonProgram::getQoreListFromTuple(PyObject* val, ExceptionSink* xsink) {
+    assert(PyTuple_Check(val));
+    ReferenceHolder<QoreListNode> rv(new QoreListNode(autoTypeInfo), xsink);
+    Py_ssize_t len = PyTuple_Size(val);
+    for (Py_ssize_t i = 0; i < len; ++i) {
+        ValueHolder qval(getQoreValue(PyTuple_GetItem(val, i), xsink), xsink);
+        if (*xsink) {
+            return nullptr;
+        }
+        rv->push(qval.release(), xsink);
+        assert(!*xsink);
+    }
+    return rv.release();
+}
+
+QoreHashNode* QorePythonProgram::getQoreHashFromDict(PyObject* val, ExceptionSink* xsink) {
+    assert(PyDict_Check(val));
+    ReferenceHolder<QoreHashNode> rv(new QoreHashNode(autoTypeInfo), xsink);
+
+    PyObject *key, *value;
+    Py_ssize_t pos = 0;
+    while (PyDict_Next(val, &pos, &key, &value)) {
+        const char* keystr;
+        QorePythonReferenceHolder tkey;
+        if (Py_TYPE(key) != &PyUnicode_Type) {
+            Py_ssize_t size;
+            keystr = PyUnicode_AsUTF8AndSize(key, &size);
+        } else {
+            tkey = PyObject_Repr(key);
+            assert(Py_TYPE(*tkey) == &PyUnicode_Type);
+            Py_ssize_t size;
+            keystr = PyUnicode_AsUTF8AndSize(*tkey, &size);
+        }
+
+        ValueHolder qval(getQoreValue(value, xsink), xsink);
+        if (*xsink) {
+            return nullptr;
+        }
+        rv->setKeyValue(keystr, qval.release(), xsink);
+    }
+    return rv.release();
+}
+
+BinaryNode* QorePythonProgram::getQoreBinaryFromBytes(PyObject* val, ExceptionSink* xsink) {
+    assert(PyBytes_Check(val));
+    SimpleRefHolder<BinaryNode> rv(new BinaryNode);
+    rv->append(PyBytes_AS_STRING(val), PyBytes_GET_SIZE(val));
+    return rv.release();
+}
+
+BinaryNode* QorePythonProgram::getQoreBinaryFromByteArray(PyObject* val, ExceptionSink* xsink) {
+    assert(PyByteArray_Check(val));
+    SimpleRefHolder<BinaryNode> rv(new BinaryNode);
+    rv->append(PyByteArray_AsString(val), PyByteArray_Size(val));
+    return rv.release();
+}
+
+DateTimeNode* QorePythonProgram::getQoreDateTimeFromDelta(PyObject* val, ExceptionSink* xsink) {
+    assert(PyDelta_Check(val));
+    return DateTimeNode::makeRelative(0, 0, PyDateTime_DELTA_GET_DAYS(val), 0, 0, PyDateTime_DELTA_GET_SECONDS(val),
+        PyDateTime_DELTA_GET_MICROSECONDS(val));
+}
+
+DateTimeNode* QorePythonProgram::getQoreDateTimeFromDateTime(PyObject* val, ExceptionSink* xsink) {
+    assert(PyDateTime_Check(val));
+
+    // get UTC offset for time
+    QorePythonReferenceHolder tzinfo(PyObject_GetAttrString(val, "tzinfo"));
+    const AbstractQoreZoneInfo* zone = nullptr;
+    if (PyTZInfo_Check(*tzinfo)) {
+        QorePythonReferenceHolder utcoffset_func(PyObject_GetAttrString(*tzinfo, "utcoffset"));
+        if (PyCallable_Check(*utcoffset_func)) {
+            QorePythonReferenceHolder args(PyTuple_New(1));
+            Py_INCREF(val);
+            PyTuple_SET_ITEM(*args, 0, val);
+
+            QorePythonReferenceHolder delta(PyEval_CallObject(*utcoffset_func, *args));
+            if (PyDelta_Check(*delta)) {
+                zone = findCreateOffsetZone(PyDateTime_DELTA_GET_SECONDS(*delta));
+                //printd(5, "TZ RV: %p '%s' utcoffset: %d (%p)\n", *delta, Py_TYPE(*delta)->tp_name, PyDateTime_DELTA_GET_SECONDS(*delta), zone);
+            }
+        }
+    }
+    return DateTimeNode::makeAbsolute(zone ? zone : currentTZ(), PyDateTime_GET_YEAR(val), PyDateTime_GET_MONTH(val),
+        PyDateTime_GET_DAY(val), PyDateTime_DATE_GET_HOUR(val), PyDateTime_DATE_GET_MINUTE(val),
+        PyDateTime_DATE_GET_SECOND(val), PyDateTime_DATE_GET_MICROSECOND(val));
+}
+
+DateTimeNode* QorePythonProgram::getQoreDateTimeFromDate(PyObject* val, ExceptionSink* xsink) {
+    assert(PyDate_Check(val));
+    return DateTimeNode::makeAbsolute(currentTZ(), PyDateTime_GET_YEAR(val), PyDateTime_GET_MONTH(val),
+        PyDateTime_GET_DAY(val), 0, 0, 0, 0);
+}
+
+DateTimeNode* QorePythonProgram::getQoreDateTimeFromTime(PyObject* val, ExceptionSink* xsink) {
+    assert(PyDateTime_Check(val));
+    return DateTimeNode::makeAbsolute(currentTZ(), 0, 0, 0, PyDateTime_TIME_GET_HOUR(val),
+        PyDateTime_TIME_GET_MINUTE(val), PyDateTime_TIME_GET_SECOND(val), PyDateTime_TIME_GET_MICROSECOND(val));
+}
+
+QoreValue QorePythonProgram::getQoreValue(QorePythonReferenceHolder& val, ExceptionSink* xsink) {
+    return getQoreValue(*val, xsink);
+}
 
 QoreValue QorePythonProgram::getQoreValue(PyObject* val, ExceptionSink* xsink) {
-    //printd(0, "QorePythonBase::getQoreValue() val: %p\n", val);
-    QorePythonReferenceHolder holder(val);
+    //printd(5, "QorePythonBase::getQoreValue() val: %p\n", val);
     if (!val || val == Py_None) {
         return QoreValue();
     }
@@ -50,18 +174,54 @@ QoreValue QorePythonProgram::getQoreValue(PyObject* val, ExceptionSink* xsink) {
         return new QoreStringNode(str, size, QCS_UTF8);
     }
 
+    if (type == &PyList_Type) {
+        return getQoreListFromList(val, xsink);
+    }
+
+    if (type == &PyTuple_Type) {
+        return getQoreListFromTuple(val, xsink);
+    }
+
+    if (type == &PyBytes_Type) {
+        return getQoreBinaryFromBytes(val, xsink);
+    }
+
+    if (type == &PyByteArray_Type) {
+        return getQoreBinaryFromByteArray(val, xsink);
+    }
+
+    if (type == PyDateTimeAPI->DateType) {
+        return getQoreDateTimeFromDate(val, xsink);
+    }
+
+    if (type == PyDateTimeAPI->TimeType) {
+        return getQoreDateTimeFromTime(val, xsink);
+    }
+
+    if (type == PyDateTimeAPI->DateTimeType) {
+        return getQoreDateTimeFromDateTime(val, xsink);
+    }
+
+    if (type == PyDateTimeAPI->DeltaType) {
+        return getQoreDateTimeFromDelta(val, xsink);
+    }
+
+    // NOTE: Python dictionaries support multiple key types; Qore only supports a string for a hash key, so we do not
+    // automatically covert Python dictionaries to Qore hashes
+    /*
+    if (type == &PyDict_Type) {
+        return getQoreHashFromDict(val, xsink);
+    }
+    */
+
     xsink->raiseException("PYTHON-VALUE-ERROR", "don't know how to convert a value of Python type '%s' to Qore",
         type->tp_name);
     return QoreValue();
 }
 
-PyObject* QorePythonProgram::getPythonListValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset) {
-    if (!l || (l->size() < arg_offset)) {
-        return nullptr;
-    }
-
+PyObject* QorePythonProgram::getPythonList(ExceptionSink* xsink, const QoreListNode* l) {
     QorePythonReferenceHolder list(PyList_New(l->size()));
-    ConstListIterator i(l, arg_offset);
+    ConstListIterator i(l);
     while (i.next()) {
         QorePythonReferenceHolder val(getPythonValue(i.getValue(), xsink));
         if (*xsink) {
@@ -91,42 +251,91 @@ PyObject* QorePythonProgram::getPythonTupleValue(ExceptionSink* xsink, const Qor
     return tuple.release();
 }
 
+PyObject* QorePythonProgram::getPythonDict(ExceptionSink* xsink, const QoreHashNode* h) {
+    QorePythonReferenceHolder dict(PyDict_New());
+    ConstHashIterator i(h);
+    while (i.next()) {
+        QorePythonReferenceHolder key(getPythonString(xsink, i.getKeyString()));
+        if (*xsink) {
+            return nullptr;
+        }
+        QorePythonReferenceHolder val(getPythonValue(i.get(), xsink));
+        if (*xsink) {
+            return nullptr;
+        }
+        PyDict_SetItem(*dict, *key, *val);
+    }
+
+    return dict.release();
+}
+
+PyObject* QorePythonProgram::getPythonString(ExceptionSink* xsink, const QoreString* str) {
+    TempEncodingHelper py_str(str, QCS_UTF8, xsink);
+    if (*xsink) {
+        return nullptr;
+    }
+    return PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, py_str->c_str(), py_str->size());
+}
+
+PyObject* QorePythonProgram::getPythonByteArray(ExceptionSink* xsink, const BinaryNode* b) {
+    return PyByteArray_FromStringAndSize(reinterpret_cast<const char*>(b->getPtr()), b->size());
+}
+
+PyObject* QorePythonProgram::getPythonDelta(ExceptionSink* xsink, const DateTime* dt) {
+    assert(dt->isRelative());
+
+    // WARNING: years are converted to 365 days; months are converted to 30 days
+    return PyDelta_FromDSU(dt->getYear() * 365 + dt->getMonth() * 30 + dt->getDay(),
+        dt->getHour() * 3600 + dt->getMinute() * 60 + dt->getSecond(), dt->getMicrosecond());
+}
+
+PyObject* QorePythonProgram::getPythonDateTime(ExceptionSink* xsink, const DateTime* dt) {
+    assert(dt->isAbsolute());
+
+    return PyDateTime_FromDateAndTime(dt->getYear(), dt->getMonth(), dt->getDay(), dt->getHour(), dt->getMinute(),
+        dt->getSecond(), dt->getMicrosecond());
+}
+
 PyObject* QorePythonProgram::getPythonValue(QoreValue val, ExceptionSink* xsink) {
     //printd(5, "QorePythonProgram::getPythonValue() type '%s'\n", val.getFullTypeName());
     PyObject* rv = nullptr;
     switch (val.getType()) {
         case NT_NOTHING:
-            rv = Py_None;
-            break;
+            Py_INCREF(Py_None);
+            return Py_None;
 
         case NT_BOOLEAN:
             rv = val.getAsBool() ? Py_True : Py_False;
-            break;
+            Py_INCREF(rv);
+            return rv;
 
         case NT_INT:
-            rv = PyLong_FromLongLong(val.getAsBigInt());
-            break;
+            return PyLong_FromLongLong(val.getAsBigInt());
 
         case NT_FLOAT:
-            rv = PyFloat_FromDouble(val.getAsFloat());
-            break;
+            return PyFloat_FromDouble(val.getAsFloat());
 
-        case NT_STRING: {
-            TempEncodingHelper py_str(val.get<const QoreStringNode>(), QCS_UTF8, xsink);
-            if (*xsink) {
-                return nullptr;
-            }
-            rv = PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, py_str->c_str(), py_str->size());
-            break;
-        }
+        case NT_STRING:
+            return getPythonString(xsink, val.get<const QoreStringNode>());
 
         case NT_LIST:
-            rv = getPythonListValue(xsink, val.get<const QoreListNode>());
-            break;
+            return getPythonList(xsink, val.get<const QoreListNode>());
+
+        case NT_HASH:
+            return getPythonDict(xsink, val.get<const QoreHashNode>());
+
+        case NT_BINARY:
+            return getPythonByteArray(xsink, val.get<const BinaryNode>());
+
+        case NT_DATE: {
+            const DateTimeNode* dt = val.get<const DateTimeNode>();
+            return dt->isRelative()
+                ? getPythonDelta(xsink, dt)
+                : getPythonDateTime(xsink, dt);
+        }
     }
 
     if (rv) {
-        Py_INCREF(rv);
         return rv;
     }
 
@@ -173,7 +382,7 @@ QoreValue QorePythonProgram::callFunction(ExceptionSink* xsink, const QoreString
         }
     }
 
-    return getQoreValue(return_value.release(), xsink);
+    return getQoreValue(return_value, xsink);
 }
 
 int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
@@ -187,18 +396,59 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
     QorePythonReferenceHolder ex_type, ex_value, traceback;
     PyErr_Fetch(ex_type.getRef(), ex_value.getRef(), traceback.getRef());
     assert(ex_type);
-    assert(ex_value);
-    //PyErr_NormalizeException(ex_type.getRef(), ex_value.getRef(), traceback.getRef());
 
-    if (PyExceptionClass_Check(*ex_type) && PyUnicode_Check(*ex_value)) {
-        Py_ssize_t size;
-        const char* valstr = PyUnicode_AsUTF8AndSize(*ex_value, &size);
+    // get location
+    QoreExternalProgramLocationWrapper loc;
+    QoreCallStack callstack;
 
-        //printd(0, "QorePythonProgram::checkPythonException() (%s) '%s' tb: %s\n", Py_TYPE(ex)->tp_name, valstr, traceback ? Py_TYPE(*traceback)->tp_name : "n/a");
-        xsink->raiseException(PyExceptionClass_Name(*ex_type), "%s", valstr);
-    } else {
-        assert(false);
+    printd(5, "QorePythonProgram::checkPythonException() type: %s val: %s (%p) traceback: %s\n",
+        Py_TYPE(*ex_type)->tp_name, ex_value ? Py_TYPE(*ex_value)->tp_name : "(null)", *ex_value,
+        traceback ? Py_TYPE(*traceback)->tp_name : "(null)");
+
+    if (!ex_value) {
+        ex_value = Py_None;
+        Py_INCREF(Py_None);
     }
+    if (!traceback) {
+        traceback = Py_None;
+        Py_INCREF(Py_None);
+    }
+
+    PyErr_NormalizeException(ex_type.getRef(), ex_value.getRef(), traceback.getRef());
+    printd(5, "QorePythonProgram::checkPythonException() type: %s val: %s (%p) traceback: %s\n",
+        Py_TYPE(*ex_type)->tp_name, Py_TYPE(*ex_value)->tp_name, *ex_value, Py_TYPE(*traceback)->tp_name);
+
+    if (PyTraceBack_Check(*traceback)) {
+        PyTracebackObject* tb = reinterpret_cast<PyTracebackObject*>(*traceback);
+        PyFrameObject* frame = tb->tb_frame;
+        while (frame) {
+            int line = PyCode_Addr2Line(frame->f_code, frame->f_lasti);
+            const char* filename = getCString(frame->f_code->co_filename);
+            const char* funcname = getCString(frame->f_code->co_name);
+            if (frame == tb->tb_frame) {
+                loc.set(filename, line, line, nullptr, 0, "Python");
+            } else {
+                callstack.add(CT_USER, filename, line, line, nullptr, "Python");
+            }
+            frame = frame->f_back;
+        }
+    }
+
+    // get description
+    QorePythonReferenceHolder desc(PyObject_Str(*ex_value));
+    ValueHolder qore_desc(getQoreValue(*desc, xsink), xsink);
+    //ValueHolder arg(getQoreValue(*ex_value, xsink), xsink);
+    ValueHolder arg(xsink);
+    if (!*xsink) {
+        xsink->raiseExceptionArg(loc.get(), Py_TYPE(*ex_value)->tp_name, arg.release(),
+            qore_desc->getType() == NT_STRING ? qore_desc.release().get<QoreStringNode>() : nullptr, callstack);
+    } else {
+        xsink->appendLastDescription(" (while trying to convert Python exception arguments to Qore)");
+    }
+
+    ex_type = nullptr;
+    ex_value = nullptr;
+    traceback = nullptr;
 
     return -1;
 }

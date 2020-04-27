@@ -37,6 +37,48 @@ class PythonTest inherits Test {
             assertThrows("TypeError", \pp.callFunction(), ("test", 1, 2));
         }
 
+        {
+            PythonProgram pp("def test():\n    raise Exception('err', 'desc')", "test.py");
+            assertThrows("Exception", \pp.callFunction(), "test");
+        }
+
+        {
+            PythonProgram pp("import datetime\ndef test():\n    return datetime.datetime.now()", "test.py");
+            auto val = pp.callFunction("test");
+            auto control = now_us();
+            assertEq(Type::Date, val.type());
+            assertLt(1m, control - val);
+        }
+
+        {
+            PythonProgram pp("def test(dict, key):\n    return dict.get(key)", "test.py");
+            assertEq(1, pp.callFunction("test", {"a": 1}, "a"));
+            date dt = now_us();
+            assertEq(dt, pp.callFunction("test", {"a": dt}, "a"));
+            dt = 2s;
+            assertEq(dt, pp.callFunction("test", {"a": dt}, "a"));
+            binary b = <abcd>;
+            assertEq(b, pp.callFunction("test", {"a": b}, "a"));
+            list<auto> l = (1, "two", 3.0);
+            assertEq(l, pp.callFunction("test", {"a": l}, "a"));
+            assertEq(1.1, pp.callFunction("test", {"a": 1.1}, "a"));
+        }
+
+        {
+            PythonProgram pp("import datetime\ndef test():\n    return datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=1)))", "test.py");
+            auto val = pp.callFunction("test");
+            auto control = now_us();
+            assertEq(Type::Date, val.type());
+            assertLt(1m, control - val);
+            assertEq(3600, val.info().utc_secs_east);
+        }
+
         assertEq(2, PythonProgram::evalExpression("1 + 1"));
+        assertEq(1.1, PythonProgram::evalExpression("1.1"));
+        assertTrue(PythonProgram::evalExpression("True"));
+        assertFalse(PythonProgram::evalExpression("False"));
+        assertEq(<abcd>, PythonProgram::evalExpression("bytes.fromhex('abcd')"));
+        assertEq(<abcd>, PythonProgram::evalExpression("bytearray.fromhex('abcd')"));
+        #assertEq({"a": 1}, PythonProgram::evalExpression("{'a': 1}"));
     }
 }

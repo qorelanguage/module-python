@@ -48,6 +48,8 @@ static QoreStringNode* python_module_init() {
     // initialize python library
     Py_Initialize();
 
+    QorePythonProgram::staticInit();
+
     mainThreadState = PyThreadState_Get();
     PyEval_ReleaseLock();
 
