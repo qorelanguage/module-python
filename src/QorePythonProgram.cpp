@@ -166,8 +166,39 @@ QoreValue QorePythonProgram::callFunction(ExceptionSink* xsink, const QoreString
         //printd(5, "QorePythonProgram::callFunction(): calling '%s' argcount: %d\n", fname->c_str(), argcount);
         QorePythonHelper qph(python);
         return_value = PyEval_CallObject(py_func, *py_args);
+
+        // check for Python exceptions
+        if (!return_value && checkPythonException(xsink)) {
+            return QoreValue();
+        }
     }
-    // FIXME: check for exceptions
 
     return getQoreValue(return_value.release(), xsink);
+}
+
+int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
+    // returns a borrowed reference
+    PyObject* ex = PyErr_Occurred();
+    if (!ex) {
+        //printd(5, "QorePythonProgram::checkPythonException() no error\n");
+        return 0;
+    }
+
+    QorePythonReferenceHolder ex_type, ex_value, traceback;
+    PyErr_Fetch(ex_type.getRef(), ex_value.getRef(), traceback.getRef());
+    assert(ex_type);
+    assert(ex_value);
+    //PyErr_NormalizeException(ex_type.getRef(), ex_value.getRef(), traceback.getRef());
+
+    if (PyExceptionClass_Check(*ex_type) && PyUnicode_Check(*ex_value)) {
+        Py_ssize_t size;
+        const char* valstr = PyUnicode_AsUTF8AndSize(*ex_value, &size);
+
+        //printd(0, "QorePythonProgram::checkPythonException() (%s) '%s' tb: %s\n", Py_TYPE(ex)->tp_name, valstr, traceback ? Py_TYPE(*traceback)->tp_name : "n/a");
+        xsink->raiseException(PyExceptionClass_Name(*ex_type), "%s", valstr);
+    } else {
+        assert(false);
+    }
+
+    return -1;
 }

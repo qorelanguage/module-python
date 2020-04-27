@@ -31,5 +31,12 @@ class PythonTest inherits Test {
             PythonProgram pp("def test(val):\n    return val + 1", "test.py");
             assertEq(2, pp.callFunction("test", 1));
         }
+
+        {
+            PythonProgram pp("def test(val):\n    return val + 1", "test.py");
+            assertThrows("TypeError", \pp.callFunction(), ("test", 1, 2));
+        }
+
+        assertEq(2, PythonProgram::evalExpression("1 + 1"));
     }
 }

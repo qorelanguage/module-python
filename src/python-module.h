@@ -91,6 +91,10 @@ public:
         return rv;
     }
 
+    DLLLOCAL PyObject** getRef() {
+        return &obj;
+    }
+
     DLLLOCAL PyObject* operator*() {
         return obj;
     }

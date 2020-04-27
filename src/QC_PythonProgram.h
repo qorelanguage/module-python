@@ -90,7 +90,6 @@ public:
         while (PyDict_Next(module_dict, &pos, &key, &value)) {
             Py_ssize_t size;
             const char* keystr = PyUnicode_AsUTF8AndSize(key, &size);
-            //const char* valstr = PyUnicode_AsUTF8AndSize(value, &size);
             printf("'%s' -> type '%s'\n", keystr ? keystr : "n/a", Py_TYPE(value)->tp_name);
         }
         */
@@ -103,6 +102,12 @@ public:
             QorePythonHelper qph(python);
             return_value = PyEval_EvalCode(python_code, module_dict, module_dict);
         }
+
+        // check for Python exceptions
+        if (checkPythonException(xsink)) {
+            return QoreValue();
+        }
+
         return getQoreValue(return_value.release(), xsink);
     }
 
@@ -120,6 +125,9 @@ public:
 
     //! Returns a new reference
     DLLLOCAL static PyObject* getPythonValue(QoreValue val, ExceptionSink* xsink);
+
+    //! Checks for a Python exception and creates a Qore exception from it
+    DLLLOCAL static int checkPythonException(ExceptionSink* xsink);
 
 protected:
     PyThreadState* python = nullptr;

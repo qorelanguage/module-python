@@ -86,7 +86,7 @@ static auto PythonProgram::evalStatement(string source_code, string source_label
 
     @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
  */
-static auto PythonProgram::evalExpression(string source_code, string source_label) {
+static auto PythonProgram::evalExpression(string source_code, string source_label = "exp") {
     ReferenceHolder<QorePythonProgram> pp(new QorePythonProgram(*source_code, *source_label, Py_eval_input, xsink),
         xsink);
     if (*xsink) {
