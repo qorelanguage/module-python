@@ -117,14 +117,11 @@ auto PythonProgram::callMethodArgs(string class_name, string method_name, *softl
     @param source_label the label or file name of the source
 
     @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
+
+    @note This method uses a shared static PythonProgram object to parse, compile, and evaluate the input string
  */
-static auto PythonProgram::evalStatement(string source_code, string source_label) {
-    ReferenceHolder<QorePythonProgram> pp(new QorePythonProgram(*source_code, *source_label, Py_single_input, xsink),
-        xsink);
-    if (*xsink) {
-        return QoreValue();
-    }
-    return pp->run(xsink);
+static auto PythonProgram::evalStatement(string source_code, string source_label = "stmt") {
+    return py_static_pgm->eval(*source_code, *source_label, Py_single_input, xsink);
 }
 
 //! Parse, compilem and evaluate the given expression and return any result
@@ -132,12 +129,9 @@ static auto PythonProgram::evalStatement(string source_code, string source_label
     @param source_label the label or file name of the source
 
     @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
+
+    @note This method uses a shared static PythonProgram object to parse, compile, and evaluate the input string
  */
 static auto PythonProgram::evalExpression(string source_code, string source_label = "exp") {
-    ReferenceHolder<QorePythonProgram> pp(new QorePythonProgram(*source_code, *source_label, Py_eval_input, xsink),
-        xsink);
-    if (*xsink) {
-        return QoreValue();
-    }
-    return pp->run(xsink);
+    return py_static_pgm->eval(*source_code, *source_label, Py_eval_input, xsink);
 }

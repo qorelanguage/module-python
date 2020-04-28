@@ -40,6 +40,8 @@ DLLEXPORT qore_module_delete_t qore_module_delete = python_module_delete;
 DLLEXPORT qore_license_t qore_module_license = QL_MIT;
 DLLEXPORT char qore_module_license_str[] = "MIT";
 
+QorePythonProgram* py_static_pgm = nullptr;
+
 static QoreNamespace PNS("Python");
 static PyThreadState* mainThreadState = nullptr;
 
@@ -54,6 +56,9 @@ static QoreStringNode* python_module_init() {
 
     PNS.addSystemClass(initPythonProgramClass(PNS));
 
+    ExceptionSink xsink;
+    py_static_pgm = new QorePythonProgram(&xsink);
+
     return nullptr;
 }
 
@@ -62,6 +67,10 @@ static void python_module_ns_init(QoreNamespace *rns, QoreNamespace *qns) {
 }
 
 static void python_module_delete() {
+    if (py_static_pgm) {
+        py_static_pgm->deref();
+    }
+
     PyThreadState_Swap(nullptr);
     PyEval_AcquireThread(mainThreadState);
     Py_Finalize();

@@ -126,4 +126,7 @@ protected:
     PyGILState_STATE old_state;
 };
 
+class QorePythonProgram;
+DLLLOCAL extern QorePythonProgram* py_static_pgm;
+
 #endif
