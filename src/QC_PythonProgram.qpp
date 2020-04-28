@@ -33,7 +33,7 @@ qclass PythonProgram [arg=QorePythonProgram* pp; ns=Qore::Python; dom=EMBEDDED_L
 /** @param source_code the Python source to parse and compile
     @param source_label the label or file name of the source
 
-    @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
+    @note Exceptions parsing or compiling the Python code are thrown according to @ref python_exceptions
  */
 PythonProgram::constructor(string source_code, string source_label) {
     ReferenceHolder<QorePythonProgram> pp(new QorePythonProgram(*source_code, *source_label, Py_file_input, xsink),
@@ -44,25 +44,72 @@ PythonProgram::constructor(string source_code, string source_label) {
     self->setPrivate(CID_PYTHONPROGRAM, pp.release());
 }
 
-//! run
+//! Runs the program
 /**
+    @note Exceptions parsing or compiling the Python code are thrown according to @ref python_exceptions
  */
 auto PythonProgram::run() {
     return pp->run(xsink);
 }
 
-//! Call runction and return the result
-/**
- */
-auto PythonProgram::callFunction(string name, ...) {
-    return pp->callFunction(xsink, name, args, 1);
+//! Call the given function and return the result
+/** @param func_name the function name to call
+    @param ... arguments to the function should follow the name converted to Python values as per @ref python_qore_to_python
+
+    @return the return value of the Python function converted to Qore as per @ref python_python_to_qore
+
+    @throw NO-FUNCTION the given function cannot be found in the Python program's module dictionary
+
+    @see @ref python_exceptions
+*/
+auto PythonProgram::callFunction(string func_name, ...) {
+    return pp->callFunction(xsink, func_name, args, 1);
 }
 
-//! Call runction and return the result
-/**
- */
-auto PythonProgram::callFunctionArgs(string name, *softlist<auto> argv) {
-    return pp->callFunction(xsink, name, argv);
+//! Call the given function and return the result
+/** @param func_name the function name to call
+    @param argv arguments to the function as a list converted to Python values as per @ref python_qore_to_python
+
+    @return the return value of the Python function converted to Qore as per @ref python_python_to_qore
+
+    @throw NO-FUNCTION the given function cannot be found in the Python program's module dictionary
+
+    @see @ref python_exceptions
+*/
+auto PythonProgram::callFunctionArgs(string func_name, *softlist<auto> argv) {
+    return pp->callFunction(xsink, func_name, argv);
+}
+
+//! Call the given method and return the result
+/** @param class_name the name of the class implementing the method to call
+    @param method_name the method to call
+    @param ... arguments to the method should follow the name converted to Python values as per @ref python_qore_to_python
+
+    @return the return value of the Python method call converted to Qore as per @ref python_python_to_qore
+
+    @throw NO-CLASS the given class cannot be found in the Python program's module dictionary
+    @throw NO-METHOD the given method cannot be found in the class
+
+    @see @ref python_exceptions
+*/
+auto PythonProgram::callMethod(string class_name, string method_name, ...) {
+    return pp->callMethod(xsink, class_name, method_name, args, 2);
+}
+
+//! Call the given method and return the result
+/** @param class_name the name of the class implementing the method to call
+    @param method_name the method to call
+    @param argv arguments to the method as a list converted to Python values as per @ref python_qore_to_python
+
+    @return the return value of the Python method call converted to Qore as per @ref python_python_to_qore
+
+    @throw NO-CLASS the given class cannot be found in the Python program's module dictionary
+    @throw NO-METHOD the given method cannot be found in the class
+
+    @see @ref python_exceptions
+*/
+auto PythonProgram::callMethodArgs(string class_name, string method_name, *softlist<auto> argv) {
+    return pp->callMethod(xsink, class_name, method_name, args);
 }
 
 //! Parse, compilem and evaluate the given statement and return any result

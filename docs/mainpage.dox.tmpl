@@ -15,26 +15,22 @@
 
     Helper %Qore classes provided by this module:
     |!Class|!Description
-    |x|x
-
-    Helper %Qore functions provided by this module:
-    |!Function|!Description
-    |x|x
+    |@ref Qore::Python::PythonProgram "PythonProgram"|Allows Python code to be embedded and executed in %Qore
 
     @section python_examples Examples
 
     @par Example:
     @code{.py}
- #!/usr/bin/env qore
+#!/usr/bin/env qore
 
- %new-style
- %require-types
- %strict-args
- %enable-all-warnings
+%new-style
+%require-types
+%strict-args
+%enable-all-warnings
 
- %requires python
+%requires python
 
-xxx
+PythonProgram::evalExpression("print('hello world!')");
     @endcode
 
     @section python_types Type Conversions Between Qore and Python
@@ -42,28 +38,36 @@ xxx
     @subsection python_qore_to_python Type Conversions From Qore To Python
 
     |!Source %Qore Type|!Target Python Type
-    |@ref binary_type "binary"|\c bytearray
-    |@ref bool_type "bool"|\c bool
-    |@ref date_type "date"|\c datetime.datetime (absolute date/time values) or \c delta.deltatime (relative date/time values)
-    |@ref float_type "float"|\c float
-    |@ref hash_type "hash"|\c dict
-    |@ref int_type "int"|\c int
-    |@ref list_type "list"|\c list
-    |@ref string_type "string"|\c string
+    |\c binary|\c bytearray
+    |\c bool|\c bool
+    |\c date|\c datetime.datetime (absolute date/time values) or \c datetime.delta (relative date/time values)
+    |\c float|\c float
+    |\c hash|\c dict
+    |\c int|\c int
+    |\c list|\c list
+    |\c list|\c string
 
     @subsection python_python_to_qore Type Conversions From Python to Qore
 
     |!Source Python Type|!Target %Qore Type
-    |\c bool|@ref bool_type "bool"
-    |\c int|@ref int_type "int"
-    |\c float|@ref float_type "float"
-    |\c bytes|@ref binary_type "binary"
-    |\c bytearray|@ref binary_type "binary"
-    |\c datetime.datetime|@ref date_type "date" (absolute date/time values)
-    |\c datetime.delta|@ref date_type "date" (relative date/time values)
-    |\c list|@ref list_type "list"
-    |\c string|@ref string_type "string"
-    |\c tuple|@ref list_type "list"
+    |\c bool|\c bool
+    |\c int|\c int
+    |\c float|\c float
+    |\c bytes|\c binary
+    |\c bytearray|\c binary
+    |\c datetime.datetime|\c date (absolute date/time values)
+    |\c datetime.delta|\c date (relative date/time values)
+    |\c dict|\c hash
+    |\c list|\c list
+    |\c string|\c list
+    |\c tuple|\c list
+
+    @section python_exceptions Python Exception Handling
+
+    Python exceptions are mapped to Qore exceptions as follows:
+    - \c err: the Python exception class name (ex: \c "SyntaxError")
+    - \c desc: the string description, if none, then the exception arguments converted to a string with \c repr()
+    - \c arg: the Python exception object itself converted to a Qore value (TODO)
 
     @section pythonreleasenotes python Module Release Notes
 

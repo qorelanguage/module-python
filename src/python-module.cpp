@@ -40,8 +40,7 @@ DLLEXPORT qore_module_delete_t qore_module_delete = python_module_delete;
 DLLEXPORT qore_license_t qore_module_license = QL_MIT;
 DLLEXPORT char qore_module_license_str[] = "MIT";
 
-QoreNamespace PNS("Python");
-
+static QoreNamespace PNS("Python");
 static PyThreadState* mainThreadState = nullptr;
 
 static QoreStringNode* python_module_init() {

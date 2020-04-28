@@ -64,12 +64,12 @@ QoreHashNode* QorePythonProgram::getQoreHashFromDict(PyObject* val, ExceptionSin
     assert(PyDict_Check(val));
     ReferenceHolder<QoreHashNode> rv(new QoreHashNode(autoTypeInfo), xsink);
 
-    PyObject *key, *value;
+    PyObject* key, * value;
     Py_ssize_t pos = 0;
     while (PyDict_Next(val, &pos, &key, &value)) {
         const char* keystr;
         QorePythonReferenceHolder tkey;
-        if (Py_TYPE(key) != &PyUnicode_Type) {
+        if (Py_TYPE(key) == &PyUnicode_Type) {
             Py_ssize_t size;
             keystr = PyUnicode_AsUTF8AndSize(key, &size);
         } else {
@@ -111,18 +111,20 @@ DateTimeNode* QorePythonProgram::getQoreDateTimeFromDelta(PyObject* val, Excepti
 DateTimeNode* QorePythonProgram::getQoreDateTimeFromDateTime(PyObject* val, ExceptionSink* xsink) {
     assert(PyDateTime_Check(val));
 
-    // get UTC offset for time
-    QorePythonReferenceHolder tzinfo(PyObject_GetAttrString(val, "tzinfo"));
     const AbstractQoreZoneInfo* zone = nullptr;
-    if (PyTZInfo_Check(*tzinfo)) {
-        QorePythonReferenceHolder utcoffset_func(PyObject_GetAttrString(*tzinfo, "utcoffset"));
-        if (PyCallable_Check(*utcoffset_func)) {
+    if (PyObject_HasAttrString(val, "tzinfo")) {
+        // get UTC offset for time
+        QorePythonReferenceHolder tzinfo(PyObject_GetAttrString(val, "tzinfo"));
+        if (tzinfo && PyTZInfo_Check(*tzinfo)) {
+            assert(PyObject_HasAttrString(*tzinfo, "utcoffset"));
+            QorePythonReferenceHolder utcoffset_func(PyObject_GetAttrString(*tzinfo, "utcoffset"));
+            assert(PyCallable_Check(*utcoffset_func));
             QorePythonReferenceHolder args(PyTuple_New(1));
             Py_INCREF(val);
             PyTuple_SET_ITEM(*args, 0, val);
 
             QorePythonReferenceHolder delta(PyEval_CallObject(*utcoffset_func, *args));
-            if (PyDelta_Check(*delta)) {
+            if (delta && PyDelta_Check(*delta)) {
                 zone = findCreateOffsetZone(PyDateTime_DELTA_GET_SECONDS(*delta));
                 //printd(5, "TZ RV: %p '%s' utcoffset: %d (%p)\n", *delta, Py_TYPE(*delta)->tp_name, PyDateTime_DELTA_GET_SECONDS(*delta), zone);
             }
@@ -206,13 +208,9 @@ QoreValue QorePythonProgram::getQoreValue(PyObject* val, ExceptionSink* xsink) {
         return getQoreDateTimeFromDelta(val, xsink);
     }
 
-    // NOTE: Python dictionaries support multiple key types; Qore only supports a string for a hash key, so we do not
-    // automatically covert Python dictionaries to Qore hashes
-    /*
     if (type == &PyDict_Type) {
         return getQoreHashFromDict(val, xsink);
     }
-    */
 
     xsink->raiseException("PYTHON-VALUE-ERROR", "don't know how to convert a value of Python type '%s' to Qore",
         type->tp_name);
@@ -301,6 +299,7 @@ PyObject* QorePythonProgram::getPythonValue(QoreValue val, ExceptionSink* xsink)
     PyObject* rv = nullptr;
     switch (val.getType()) {
         case NT_NOTHING:
+        case NT_NULL:
             Py_INCREF(Py_None);
             return Py_None;
 
@@ -353,7 +352,7 @@ QoreValue QorePythonProgram::callFunction(ExceptionSink* xsink, const QoreString
 
     // returns a borrowed reference
     PyObject* py_func = PyDict_GetItemString(module_dict, fname->c_str());
-    if (!py_func) {
+    if (!py_func || !PyFunction_Check(py_func)) {
         xsink->raiseException("NO-FUNCTION", "cannot find function '%s'", fname->c_str());
         return QoreValue();
     }
@@ -375,6 +374,66 @@ QoreValue QorePythonProgram::callFunction(ExceptionSink* xsink, const QoreString
         //printd(5, "QorePythonProgram::callFunction(): calling '%s' argcount: %d\n", fname->c_str(), argcount);
         QorePythonHelper qph(python);
         return_value = PyEval_CallObject(py_func, *py_args);
+
+        // check for Python exceptions
+        if (!return_value && checkPythonException(xsink)) {
+            return QoreValue();
+        }
+    }
+
+    return getQoreValue(return_value, xsink);
+}
+
+QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const QoreString& class_name, const QoreString& method_name, const QoreListNode* args, size_t arg_offset) {
+    TempEncodingHelper cname(class_name, QCS_UTF8, xsink);
+    if (*xsink) {
+        xsink->appendLastDescription(" (while processing the \"class_name\" argument)");
+        return QoreValue();
+    }
+
+    TempEncodingHelper mname(method_name, QCS_UTF8, xsink);
+    if (*xsink) {
+        xsink->appendLastDescription(" (while processing the \"method_name\" argument)");
+        return QoreValue();
+    }
+
+    // returns a borrowed reference
+    PyObject* py_class = PyDict_GetItemString(module_dict, cname->c_str());
+    if (!py_class || !PyType_Check(py_class)) {
+        py_class = PyDict_GetItemString(builtin_dict, cname->c_str());
+        if (!py_class || !PyType_Check(py_class)) {
+            xsink->raiseException("NO-CLASS", "cannot find class '%s'", cname->c_str());
+            return QoreValue();
+        }
+    }
+
+    // returns a borrowed reference
+    QorePythonReferenceHolder py_method;
+    if (PyObject_HasAttrString(py_class, mname->c_str())) {
+        py_method = PyObject_GetAttrString(py_class, mname->c_str());
+    }
+    if (!py_method || (!PyFunction_Check(*py_method) && (Py_TYPE(*py_method) != &PyMethodDescr_Type))) {
+        xsink->raiseException("NO-METHOD", "cannot find method '%s.%s()'", cname->c_str(), mname->c_str());
+        return QoreValue();
+    }
+
+    QorePythonReferenceHolder py_args;
+    int argcount;
+    if (args && args->size() > arg_offset) {
+        py_args = getPythonTupleValue(xsink, args, arg_offset);
+        if (*xsink) {
+            return QoreValue();
+        }
+        argcount = args->size() - arg_offset;
+    } else {
+        argcount = 0;
+    }
+
+    QorePythonReferenceHolder return_value;
+    {
+        //printd(5, "QorePythonProgram::callFunction(): calling '%s' argcount: %d\n", fname->c_str(), argcount);
+        QorePythonHelper qph(python);
+        return_value = PyEval_CallObject(*py_method, *py_args);
 
         // check for Python exceptions
         if (!return_value && checkPythonException(xsink)) {
@@ -418,6 +477,7 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
     printd(5, "QorePythonProgram::checkPythonException() type: %s val: %s (%p) traceback: %s\n",
         Py_TYPE(*ex_type)->tp_name, Py_TYPE(*ex_value)->tp_name, *ex_value, Py_TYPE(*traceback)->tp_name);
 
+    bool use_loc;
     if (PyTraceBack_Check(*traceback)) {
         PyTracebackObject* tb = reinterpret_cast<PyTracebackObject*>(*traceback);
         PyFrameObject* frame = tb->tb_frame;
@@ -432,6 +492,9 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
             }
             frame = frame->f_back;
         }
+        use_loc = true;
+    } else {
+        use_loc = false;
     }
 
     // get description
@@ -440,8 +503,13 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
     //ValueHolder arg(getQoreValue(*ex_value, xsink), xsink);
     ValueHolder arg(xsink);
     if (!*xsink) {
-        xsink->raiseExceptionArg(loc.get(), Py_TYPE(*ex_value)->tp_name, arg.release(),
-            qore_desc->getType() == NT_STRING ? qore_desc.release().get<QoreStringNode>() : nullptr, callstack);
+        if (use_loc) {
+            xsink->raiseExceptionArg(loc.get(), Py_TYPE(*ex_value)->tp_name, arg.release(),
+                qore_desc->getType() == NT_STRING ? qore_desc.release().get<QoreStringNode>() : nullptr, callstack);
+        } else {
+            xsink->raiseExceptionArg(Py_TYPE(*ex_value)->tp_name, arg.release(),
+                qore_desc->getType() == NT_STRING ? qore_desc.release().get<QoreStringNode>() : nullptr, callstack);
+        }
     } else {
         xsink->appendLastDescription(" (while trying to convert Python exception arguments to Qore)");
     }

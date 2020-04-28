@@ -65,23 +65,31 @@ public:
         // parse code
         _node* node = PyParser_SimpleParseString(src_code->c_str(), start);
         if (!node) {
-            xsink->raiseException("PYTHON-COMPILE-ERROR", "parse failed");
+            if (!checkPythonException(xsink)) {
+                xsink->raiseException("PYTHON-COMPILE-ERROR", "parse failed");
+            }
             return;
         }
 
         // compile parsed code
         python_code = (PyObject*)PyNode_Compile(node, src_label->c_str());
         if (!python_code) {
-            xsink->raiseException("PYTHON-COMPILE-ERROR", "compile failed");
+            if (!checkPythonException(xsink)) {
+                xsink->raiseException("PYTHON-COMPILE-ERROR", "compile failed");
+            }
             return;
         }
 
         // create module for code
-        module = PyImport_ExecCodeModule(src_label->c_str(), python_code);
+        module = PyImport_ExecCodeModule(src_label->c_str(), *python_code);
 
         // returns a borrowed reference
-        module_dict = PyModule_GetDict(module);
+        module_dict = PyModule_GetDict(*module);
         assert(module_dict);
+
+        // returns a borrowed reference
+        builtin_dict = PyDict_GetItemString(module_dict, "__builtins__");
+        assert(builtin_dict);
     }
 
     DLLLOCAL QoreValue run(ExceptionSink* xsink) {
@@ -89,7 +97,7 @@ public:
         QorePythonReferenceHolder return_value;
         {
             QorePythonHelper qph(python);
-            return_value = PyEval_EvalCode(python_code, module_dict, module_dict);
+            return_value = PyEval_EvalCode(*python_code, module_dict, module_dict);
         }
 
         // check for Python exceptions
@@ -102,6 +110,9 @@ public:
 
     //! Call the function and return the result
     DLLLOCAL QoreValue callFunction(ExceptionSink* xsink, const QoreString& func_name, const QoreListNode* args, size_t arg_offset = 0);
+
+    //! Call a method and return the result
+    DLLLOCAL QoreValue callMethod(ExceptionSink* xsink, const QoreString& class_name, const QoreString& method_name, const QoreListNode* args, size_t arg_offset = 0);
 
     //! Returns a Qore value for the given Python value
     DLLLOCAL QoreValue getQoreValue(QorePythonReferenceHolder& val, ExceptionSink* xsink);
@@ -174,17 +185,12 @@ public:
 
 protected:
     PyThreadState* python = nullptr;
-    PyObject* module = nullptr;
-    PyObject* python_code = nullptr;
+    QorePythonReferenceHolder module;
+    QorePythonReferenceHolder python_code;
     PyObject* module_dict = nullptr;
+    PyObject* builtin_dict = nullptr;
 
     DLLLOCAL virtual ~QorePythonProgram() {
-        if (python_code) {
-            Py_DECREF(python_code);
-        }
-        if (module) {
-            Py_DECREF(module);
-        }
         if (python) {
             QorePythonHelper qph(python);
             Py_EndInterpreter(python);
