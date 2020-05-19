@@ -112,7 +112,29 @@ auto PythonProgram::callMethodArgs(string class_name, string method_name, *softl
     return pp->callMethod(xsink, class_name, method_name, args);
 }
 
-//! Parse, compilem and evaluate the given statement and return any result
+//! Parse, compile, and evaluate the given statement and return any result
+/** @param source_code the Python source to parse and compile
+    @param source_label the label or file name of the source
+
+    @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
+ */
+auto PythonProgram::evalStatement(string source_code, string source_label = "stmt") {
+    return pp->eval(*source_code, *source_label, Py_single_input, xsink);
+}
+
+//! Parse, compile, and evaluate the given expression and return any result
+/** @param source_code the Python source to parse and compile
+    @param source_label the label or file name of the source
+
+    @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
+
+    @note This method uses a shared static PythonProgram object to parse, compile, and evaluate the input string
+ */
+auto PythonProgram::evalExpression(string source_code, string source_label = "exp") {
+    return pp->eval(*source_code, *source_label, Py_eval_input, xsink);
+}
+
+//! Parse, compile, and evaluate the given statement and return any result
 /** @param source_code the Python source to parse and compile
     @param source_label the label or file name of the source
 
@@ -124,7 +146,7 @@ static auto PythonProgram::evalStatement(string source_code, string source_label
     return py_static_pgm->eval(*source_code, *source_label, Py_single_input, xsink);
 }
 
-//! Parse, compilem and evaluate the given expression and return any result
+//! Parse, compile, and evaluate the given expression and return any result
 /** @param source_code the Python source to parse and compile
     @param source_label the label or file name of the source
 

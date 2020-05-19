@@ -13,6 +13,28 @@
 
 class PythonTest inherits Test {
     public {
+        const ExprTests = (
+            {"expr": "1 + 1", "val": 2},
+            {"expr": "1.1", "val": 1.1},
+            {"expr": "True", "val": True},
+            {"expr": "False", "val": False},
+            {"expr": "'str'", "val": "str"},
+            {"expr": "bytes.fromhex('abcd')", "val": <abcd>},
+            {"expr": "bytearray.fromhex('abcd')", "val": <abcd>},
+            {"expr": "{'a': 1}", "val": {"a": 1}},
+            {"expr": "(1).bit_length()", "val": 1},
+        );
+
+        const Values = (
+            1,
+            1.1,
+            True,
+            False,
+            "str",
+            <abcd>,
+            {"a": 1},
+            (1, 2, 3),
+        );
     }
 
     constructor() : Test("python test", "1.0") {
@@ -22,14 +44,14 @@ class PythonTest inherits Test {
     }
 
     basicTest() {
-        assertEq(2, PythonProgram::evalExpression("1 + 1"));
-        assertEq(1.1, PythonProgram::evalExpression("1.1"));
-        assertTrue(PythonProgram::evalExpression("True"));
-        assertFalse(PythonProgram::evalExpression("False"));
-        assertEq(<abcd>, PythonProgram::evalExpression("bytes.fromhex('abcd')"));
-        assertEq(<abcd>, PythonProgram::evalExpression("bytearray.fromhex('abcd')"));
-        assertEq({"a": 1}, PythonProgram::evalExpression("{'a': 1}"));
-        assertEq(1, PythonProgram::evalExpression("(1).bit_length()"));
+        {
+            PythonProgram p("def test(val):\n    return val", "value test container");
+            foreach hash<auto> info in (ExprTests) {
+                assertEq(info.val, PythonProgram::evalExpression(info.expr), "static: " + info.expr);
+                assertEq(info.val, p.evalExpression(info.expr), info.expr);
+            }
+            map assertEq($1, p.callFunction("test", $1), sprintf("value %d/%d", $# + 1, Values.size())), Values;
+        }
 
         {
             PythonProgram pp("def test():\n    return 1", "test.py");
