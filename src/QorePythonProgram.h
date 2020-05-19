@@ -179,10 +179,20 @@ public:
     }
 
     //! Call the function and return the result
-    DLLLOCAL QoreValue callFunction(ExceptionSink* xsink, const QoreString& func_name, const QoreListNode* args, size_t arg_offset = 0);
+    DLLLOCAL QoreValue callFunction(ExceptionSink* xsink, const QoreString& func_name, const QoreListNode* args,
+        size_t arg_offset = 0);
 
     //! Call a method and return the result
-    DLLLOCAL QoreValue callMethod(ExceptionSink* xsink, const QoreString& class_name, const QoreString& method_name, const QoreListNode* args, size_t arg_offset = 0);
+    /** converts the string arguments to UTF-8 and makes the call
+    */
+    DLLLOCAL QoreValue callMethod(ExceptionSink* xsink, const QoreString& class_name, const QoreString& method_name,
+        const QoreListNode* args, size_t arg_offset = 0);
+
+    //! Call a method and return the result
+    /** string args are assumed to be in UTF-8 encoding
+    */
+    DLLLOCAL QoreValue callMethod(ExceptionSink* xsink, const char* cname, const char* mname,
+        const QoreListNode* args, size_t arg_offset = 0, PyObject* first = nullptr);
 
     //! Returns a Qore value for the given Python value
     DLLLOCAL QoreValue getQoreValue(QorePythonReferenceHolder& val, ExceptionSink* xsink);
@@ -221,7 +231,8 @@ public:
     DLLLOCAL static PyObject* getPythonList(ExceptionSink* xsink, const QoreListNode* l);
 
     //! Returns a Python tuple for the given Qore list
-    DLLLOCAL static PyObject* getPythonTupleValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset = 0);
+    DLLLOCAL static PyObject* getPythonTupleValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset = 0,
+        PyObject* first = nullptr);
 
     //! Returns a Python dict for the given Qore hash
     DLLLOCAL static PyObject* getPythonDict(ExceptionSink* xsink, const QoreHashNode* h);

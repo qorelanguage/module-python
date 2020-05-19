@@ -231,19 +231,29 @@ PyObject* QorePythonProgram::getPythonList(ExceptionSink* xsink, const QoreListN
     return list.release();
 }
 
-PyObject* QorePythonProgram::getPythonTupleValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset) {
+PyObject* QorePythonProgram::getPythonTupleValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset, PyObject* first) {
     if (!l || (l->size() < arg_offset)) {
         return nullptr;
     }
 
-    QorePythonReferenceHolder tuple(PyTuple_New(l->size() - arg_offset));
+    Py_ssize_t size = l->size() - arg_offset;
+    if (first) {
+        ++size;
+    }
+    QorePythonReferenceHolder tuple(PyTuple_New(size));
+    size_t offset = 0;
+    if (first) {
+        Py_INCREF(first);
+        PyTuple_SET_ITEM(*tuple, 0, first);
+        offset = 1;
+    }
     ConstListIterator i(l, arg_offset - 1);
     while (i.next()) {
         QorePythonReferenceHolder val(getPythonValue(i.getValue(), xsink));
         if (*xsink) {
             return nullptr;
         }
-        PyTuple_SET_ITEM(*tuple, i.index() - arg_offset, val.release());
+        PyTuple_SET_ITEM(*tuple, i.index() - arg_offset + offset, val.release());
     }
 
     return tuple.release();
@@ -296,17 +306,17 @@ PyObject* QorePythonProgram::getPythonDateTime(ExceptionSink* xsink, const DateT
 
 PyObject* QorePythonProgram::getPythonValue(QoreValue val, ExceptionSink* xsink) {
     //printd(5, "QorePythonProgram::getPythonValue() type '%s'\n", val.getFullTypeName());
-    PyObject* rv = nullptr;
     switch (val.getType()) {
         case NT_NOTHING:
         case NT_NULL:
             Py_INCREF(Py_None);
             return Py_None;
 
-        case NT_BOOLEAN:
-            rv = val.getAsBool() ? Py_True : Py_False;
+        case NT_BOOLEAN: {
+            PyObject* rv = val.getAsBool() ? Py_True : Py_False;
             Py_INCREF(rv);
             return rv;
+        }
 
         case NT_INT:
             return PyLong_FromLongLong(val.getAsBigInt());
@@ -332,10 +342,6 @@ PyObject* QorePythonProgram::getPythonValue(QoreValue val, ExceptionSink* xsink)
                 ? getPythonDelta(xsink, dt)
                 : getPythonDateTime(xsink, dt);
         }
-    }
-
-    if (rv) {
-        return rv;
     }
 
     xsink->raiseException("PYTHON-VALUE-ERROR", "don't know how to convert a value of Qore type '%s' to Python",
@@ -397,41 +403,42 @@ QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const QoreString& 
         return QoreValue();
     }
 
+    return callMethod(xsink, cname->c_str(), mname->c_str(), args, arg_offset);
+}
+
+QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const char* cname, const char* mname,
+    const QoreListNode* args, size_t arg_offset, PyObject* first) {
     // returns a borrowed reference
-    PyObject* py_class = PyDict_GetItemString(module_dict, cname->c_str());
+    PyObject* py_class = PyDict_GetItemString(module_dict, cname);
     if (!py_class || !PyType_Check(py_class)) {
-        py_class = PyDict_GetItemString(builtin_dict, cname->c_str());
+        py_class = PyDict_GetItemString(builtin_dict, cname);
         if (!py_class || !PyType_Check(py_class)) {
-            xsink->raiseException("NO-CLASS", "cannot find class '%s'", cname->c_str());
+            xsink->raiseException("NO-CLASS", "cannot find class '%s'", cname);
             return QoreValue();
         }
     }
 
     // returns a borrowed reference
     QorePythonReferenceHolder py_method;
-    if (PyObject_HasAttrString(py_class, mname->c_str())) {
-        py_method = PyObject_GetAttrString(py_class, mname->c_str());
+    if (PyObject_HasAttrString(py_class, mname)) {
+        py_method = PyObject_GetAttrString(py_class, mname);
     }
     if (!py_method || (!PyFunction_Check(*py_method) && (Py_TYPE(*py_method) != &PyMethodDescr_Type))) {
-        xsink->raiseException("NO-METHOD", "cannot find method '%s.%s()'", cname->c_str(), mname->c_str());
+        xsink->raiseException("NO-METHOD", "cannot find method '%s.%s()'", cname, mname);
         return QoreValue();
     }
 
     QorePythonReferenceHolder py_args;
-    int argcount;
     if (args && args->size() > arg_offset) {
-        py_args = getPythonTupleValue(xsink, args, arg_offset);
+        py_args = getPythonTupleValue(xsink, args, arg_offset, first);
         if (*xsink) {
             return QoreValue();
         }
-        argcount = args->size() - arg_offset;
-    } else {
-        argcount = 0;
     }
 
     QorePythonReferenceHolder return_value;
     {
-        //printd(5, "QorePythonProgram::callFunction(): calling '%s' argcount: %d\n", fname->c_str(), argcount);
+        //printd(5, "QorePythonProgram::callFunction(): calling '%s' argcount: %d\n", fname->c_str(), (args && args->size() > arg_offset) ? args->size() - arg_offset : 0);
         QorePythonHelper qph(python);
         return_value = PyEval_CallObject(*py_method, *py_args);
 
