@@ -21,6 +21,7 @@
 
 #include "python-module.h"
 #include "QC_PythonProgram.h"
+#include "QorePythonExternalProgramData.h"
 
 static QoreStringNode* python_module_init();
 static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns);
@@ -40,9 +41,7 @@ DLLEXPORT qore_module_delete_t qore_module_delete = python_module_delete;
 DLLEXPORT qore_license_t qore_module_license = QL_MIT;
 DLLEXPORT char qore_module_license_str[] = "MIT";
 
-QorePythonProgram* py_static_pgm = nullptr;
-
-static QoreNamespace PNS("Python");
+QoreNamespace PNS("Python");
 static PyThreadState* mainThreadState = nullptr;
 
 static QoreStringNode* python_module_init() {
@@ -50,27 +49,27 @@ static QoreStringNode* python_module_init() {
     Py_Initialize();
 
     QorePythonProgram::staticInit();
+    QorePythonExternalProgramData::staticInit();
 
     mainThreadState = PyThreadState_Get();
     PyEval_ReleaseLock();
 
     PNS.addSystemClass(initPythonProgramClass(PNS));
 
-    ExceptionSink xsink;
-    py_static_pgm = new QorePythonProgram(&xsink);
-
     return nullptr;
 }
 
 static void python_module_ns_init(QoreNamespace *rns, QoreNamespace *qns) {
-    qns->addNamespace(PNS.copy());
+    QoreProgram* pgm = getProgram();
+    assert(pgm->getRootNS() == rns);
+    if (!pgm->getExternalData("python")) {
+        QoreNamespace* pyns = PNS.copy();
+        rns->addNamespace(pyns);
+        pgm->setExternalData("python", new QorePythonExternalProgramData(pyns));
+    }
 }
 
 static void python_module_delete() {
-    if (py_static_pgm) {
-        py_static_pgm->deref();
-    }
-
     PyThreadState_Swap(nullptr);
     PyEval_AcquireThread(mainThreadState);
     Py_Finalize();

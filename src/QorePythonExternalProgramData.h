@@ -29,6 +29,54 @@
 #include "QorePythonProgram.h"
 
 class QorePythonExternalProgramData : public AbstractQoreProgramExternalData, public QorePythonProgram {
+public:
+    DLLLOCAL QorePythonExternalProgramData(QoreNamespace* pyns) : QorePythonProgram(nullptr), pyns(pyns) {
+    }
+
+    DLLLOCAL QorePythonExternalProgramData(const QorePythonExternalProgramData& old, QoreProgram* pgm)
+        : QorePythonProgram(nullptr), pyns(pgm->findNamespace("Python")) {
+        if (!pyns) {
+            pyns = PNS.copy();
+            pgm->getRootNS()->addNamespace(pyns);
+        }
+    }
+
+    DLLLOCAL QoreValue getQoreValue(PyObject* val, ExceptionSink* xsink);
+
+    DLLLOCAL virtual AbstractQoreProgramExternalData* copy(QoreProgram* pgm) const {
+        return new QorePythonExternalProgramData(*this, pgm);
+    }
+
+    DLLLOCAL virtual void doDeref() {
+        delete this;
+    }
+
+    //! Static initialization
+    DLLLOCAL static void staticInit();
+
+    DLLLOCAL static QorePythonExternalProgramData* getContext() {
+        QorePythonExternalProgramData* pypd;
+
+        // first try to get the actual Program context
+        QoreProgram* pgm = getProgram();
+        if (pgm) {
+            pypd = static_cast<QorePythonExternalProgramData*>(pgm->getExternalData("python"));
+            if (pypd) {
+                return pypd;
+            }
+        }
+        pgm = qore_get_call_program_context();
+        if (pgm) {
+            pypd = static_cast<QorePythonExternalProgramData*>(pgm->getExternalData("python"));
+            if (pypd) {
+                return pypd;
+            }
+        }
+        return nullptr;
+    }
+
+protected:
+    QoreNamespace* pyns;
 };
 
 #endif

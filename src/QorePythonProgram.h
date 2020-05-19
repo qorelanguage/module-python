@@ -77,7 +77,7 @@ public:
         }
 
         // parse code
-        _node* node = PyParser_SimpleParseString(src_code->c_str(), start);
+        QorePythonNodeHolder node(PyParser_SimpleParseString(src_code->c_str(), start));
         if (!node) {
             if (!checkPythonException(xsink)) {
                 xsink->raiseException("PYTHON-COMPILE-ERROR", "parse failed");
@@ -86,7 +86,7 @@ public:
         }
 
         // compile parsed code
-        python_code = (PyObject*)PyNode_Compile(node, src_label->c_str());
+        python_code = (PyObject*)PyNode_Compile(*node, src_label->c_str());
         if (!python_code) {
             if (!checkPythonException(xsink)) {
                 xsink->raiseException("PYTHON-COMPILE-ERROR", "compile failed");
@@ -134,45 +134,48 @@ public:
             return QoreValue();
         }
 
-        QorePythonReferenceHolder python_code;
-        {
-            //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
-            QorePythonGilHelper qpgh;
-
-            // save thread state to restore on exit
-            PyThreadState* current_state = PyThreadState_Get();
-            ON_BLOCK_EXIT(PyThreadState_Swap, current_state);
-
-            // parse code
-            _node* node = PyParser_SimpleParseString(src_code->c_str(), input);
-            if (!node) {
-                if (!checkPythonException(xsink)) {
-                    xsink->raiseException("PYTHON-COMPILE-ERROR", "parse failed");
-                }
-                return QoreValue();
-            }
-
-            // compile parsed code
-            python_code = (PyObject*)PyNode_Compile(node, src_label->c_str());
-            if (!python_code) {
-                if (!checkPythonException(xsink)) {
-                    xsink->raiseException("PYTHON-COMPILE-ERROR", "compile failed");
-                }
-                return QoreValue();
-            }
-        }
-
         QorePythonReferenceHolder return_value;
         {
             QorePythonHelper qph(python);
-            PyObject* main = PyImport_AddModule("__main__");
-            PyObject* main_dict = PyModule_GetDict(main);
-            return_value = PyEval_EvalCode(*python_code, main_dict, main_dict);
-        }
 
-        // check for Python exceptions
-        if (checkPythonException(xsink)) {
-            return QoreValue();
+            QorePythonReferenceHolder python_code;
+            {
+                //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
+
+                // save thread state to restore on exit
+                PyThreadState* current_state = PyThreadState_Get();
+                ON_BLOCK_EXIT(PyThreadState_Swap, current_state);
+
+                // parse code
+                QorePythonNodeHolder node(PyParser_SimpleParseString(src_code->c_str(), input));
+                if (!node) {
+                    if (!checkPythonException(xsink)) {
+                        xsink->raiseException("PYTHON-COMPILE-ERROR", "parse failed");
+                    }
+                    return QoreValue();
+                }
+
+                // compile parsed code
+                python_code = (PyObject*)PyNode_Compile(*node, src_label->c_str());
+                if (!python_code) {
+                    if (!checkPythonException(xsink)) {
+                        xsink->raiseException("PYTHON-COMPILE-ERROR", "compile failed");
+                    }
+                    return QoreValue();
+                }
+            }
+
+            {
+                //QorePythonHelper qph(python);
+                PyObject* main = PyImport_AddModule("__main__");
+                PyObject* main_dict = PyModule_GetDict(main);
+                return_value = PyEval_EvalCode(*python_code, main_dict, main_dict);
+            }
+
+            // check for Python exceptions
+            if (checkPythonException(xsink)) {
+                return QoreValue();
+            }
         }
 
         return getQoreValue(return_value, xsink);
@@ -196,6 +199,19 @@ public:
 
     //! Returns a Qore value for the given Python value
     DLLLOCAL QoreValue getQoreValue(QorePythonReferenceHolder& val, ExceptionSink* xsink);
+
+    //! Sets the "save object callback" for %Qore objects created in Python code
+    DLLLOCAL void setSaveObjectCallback(const ResolvedCallReferenceNode* save_object_callback) {
+        if (this->save_object_callback) {
+            this->save_object_callback->deref(nullptr);
+        }
+        this->save_object_callback = save_object_callback ? save_object_callback->refRefSelf() : nullptr;
+    }
+
+    //! Returns the "save object callback" for %Qore objects created in Python code
+    DLLLOCAL ResolvedCallReferenceNode* getSaveObjectCallback() const {
+        return save_object_callback;
+    }
 
     //! Returns a Qore value for the given Python value; does not dereference val
     DLLLOCAL static QoreValue getQoreValue(PyObject* val, ExceptionSink* xsink);
@@ -270,8 +286,13 @@ protected:
     QorePythonReferenceHolder python_code;
     PyObject* module_dict = nullptr;
     PyObject* builtin_dict = nullptr;
+    // call reference for saving object references
+    ResolvedCallReferenceNode* save_object_callback = nullptr;
 
     DLLLOCAL virtual ~QorePythonProgram() {
+        if (save_object_callback) {
+            save_object_callback->deref(nullptr);
+        }
         if (python) {
             QorePythonHelper qph(python);
             Py_EndInterpreter(python);
@@ -283,7 +304,9 @@ protected:
         assert(PyGILState_Check());
         python = Py_NewInterpreter();
         if (!python) {
-            xsink->raiseException("PYTHON-COMPILE-ERROR", "error creating the Pythong subinterpreter");
+            if (xsink) {
+                xsink->raiseException("PYTHON-COMPILE-ERROR", "error creating the Pythong subinterpreter");
+            }
             return -1;
         }
         return 0;

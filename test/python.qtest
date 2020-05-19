@@ -120,6 +120,10 @@ class PythonTest inherits Test {
     def test(val):
         return val + test.base
 
+    @staticmethod
+    def do_ex():
+        raise Exception('test')
+
     base = 1
 ", "test.py");
             assertEq(2, pp.callMethod("test", "test", 1));
@@ -128,6 +132,17 @@ class PythonTest inherits Test {
             assertThrows("NO-METHOD", \pp.callMethod(), ("test", "xxx"));
             assertThrows("NameError", \pp.callMethod(), ("test", "normal", NOTHING, 1));
             assertThrows("NO-METHOD", \pp.callMethod(), ("test", "__name__"));
+            assertThrows("Exception", \pp.callMethod(), ("test", "do_ex"));
+            assertThrows("NameError", \pp.evalExpression(), "test()");
         }
+
+        /*
+        {
+            PythonProgram pp("class test:\n    def get():\n         return test();", "test.py");
+
+            object x = pp.callMethod("test", "get");
+            printf("%y\n", x);
+        }
+        */
     }
 }

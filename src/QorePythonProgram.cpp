@@ -23,6 +23,8 @@
 */
 
 #include "QC_PythonProgram.h"
+#include "QorePythonExternalProgramData.h"
+
 #include <frameobject.h>
 #include <datetime.h>
 
@@ -152,69 +154,9 @@ QoreValue QorePythonProgram::getQoreValue(QorePythonReferenceHolder& val, Except
 }
 
 QoreValue QorePythonProgram::getQoreValue(PyObject* val, ExceptionSink* xsink) {
-    //printd(5, "QorePythonBase::getQoreValue() val: %p\n", val);
-    if (!val || val == Py_None) {
-        return QoreValue();
-    }
-
-    PyTypeObject* type = Py_TYPE(val);
-    if (type == &PyBool_Type) {
-        return QoreValue(val == Py_True);
-    }
-
-    if (type == &PyLong_Type) {
-        return QoreValue(PyLong_AsLong(val));
-    }
-
-    if (type == &PyFloat_Type) {
-        return QoreValue(PyFloat_AS_DOUBLE(val));
-    }
-
-    if (type == &PyUnicode_Type) {
-        Py_ssize_t size;
-        const char* str = PyUnicode_AsUTF8AndSize(val, &size);
-        return new QoreStringNode(str, size, QCS_UTF8);
-    }
-
-    if (type == &PyList_Type) {
-        return getQoreListFromList(val, xsink);
-    }
-
-    if (type == &PyTuple_Type) {
-        return getQoreListFromTuple(val, xsink);
-    }
-
-    if (type == &PyBytes_Type) {
-        return getQoreBinaryFromBytes(val, xsink);
-    }
-
-    if (type == &PyByteArray_Type) {
-        return getQoreBinaryFromByteArray(val, xsink);
-    }
-
-    if (type == PyDateTimeAPI->DateType) {
-        return getQoreDateTimeFromDate(val, xsink);
-    }
-
-    if (type == PyDateTimeAPI->TimeType) {
-        return getQoreDateTimeFromTime(val, xsink);
-    }
-
-    if (type == PyDateTimeAPI->DateTimeType) {
-        return getQoreDateTimeFromDateTime(val, xsink);
-    }
-
-    if (type == PyDateTimeAPI->DeltaType) {
-        return getQoreDateTimeFromDelta(val, xsink);
-    }
-
-    if (type == &PyDict_Type) {
-        return getQoreHashFromDict(val, xsink);
-    }
-
-    xsink->raiseException("PYTHON-VALUE-ERROR", "don't know how to convert a value of Python type '%s' to Qore",
-        type->tp_name);
-    return QoreValue();
+    QorePythonExternalProgramData* pypd = QorePythonExternalProgramData::getContext();
+    assert(pypd);
+    return pypd->getQoreValue(val, xsink);
 }
 
 PyObject* QorePythonProgram::getPythonList(ExceptionSink* xsink, const QoreListNode* l) {

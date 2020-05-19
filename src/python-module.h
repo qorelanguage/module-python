@@ -26,6 +26,7 @@
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <node.h>
 
 #include <qore/Qore.h>
 
@@ -126,7 +127,40 @@ protected:
     PyGILState_STATE old_state;
 };
 
+class QorePythonNodeHolder {
+public:
+    DLLLOCAL QorePythonNodeHolder(_node* node) : node(node) {
+    }
+
+    DLLLOCAL ~QorePythonNodeHolder() {
+        if (node) {
+            PyNode_Free(node);
+        }
+    }
+
+    DLLLOCAL _node* release() {
+        _node* rv = node;
+        node = nullptr;
+        return rv;
+    }
+
+    DLLLOCAL operator bool() const {
+        return (bool)node;
+    }
+
+    DLLLOCAL _node* operator*() {
+        return node;
+    }
+
+    DLLLOCAL const _node* operator*() const {
+        return node;
+    }
+
+protected:
+    _node* node;
+};
+
 class QorePythonProgram;
-DLLLOCAL extern QorePythonProgram* py_static_pgm;
+DLLLOCAL extern QoreNamespace PNS;
 
 #endif

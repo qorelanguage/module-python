@@ -40,5 +40,7 @@ QoreValue QorePythonClass::memberGate(const QoreMethod& meth, void* m, QoreObjec
     QorePythonExternalProgramData* pypd = static_cast<QorePythonExternalProgramData*>(pgm->getExternalData("python"));
     assert(pypd);
 
-    return pypd->callMethod(xsink, meth.getClassName(), meth.getName(), args, 0, pd->get());
+    //return pypd->callMethod(xsink, meth.getClassName(), meth.getName(), args, 0, pd->get());
+    xsink->raiseException("X", "x");
+    return QoreValue();
 }
