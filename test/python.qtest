@@ -136,13 +136,12 @@ class PythonTest inherits Test {
             assertThrows("NameError", \pp.evalExpression(), "test()");
         }
 
-        /*
         {
-            PythonProgram pp("class test:\n    def get():\n         return test();", "test.py");
+            PythonProgram pp("class test:\n    @staticmethod\n    def get():\n         return test();\n    def other():\n        return 1;", "test.py");
 
             object x = pp.callMethod("test", "get");
-            printf("%y\n", x);
+            assertEq(32, x.__sizeof__());
+            assertEq(1, x.other());
         }
-        */
     }
 }

@@ -65,7 +65,7 @@ static void python_module_ns_init(QoreNamespace *rns, QoreNamespace *qns) {
     if (!pgm->getExternalData("python")) {
         QoreNamespace* pyns = PNS.copy();
         rns->addNamespace(pyns);
-        pgm->setExternalData("python", new QorePythonExternalProgramData(pyns));
+        pgm->setExternalData("python", new QorePythonExternalProgramData(pyns, pgm));
     }
 }
 

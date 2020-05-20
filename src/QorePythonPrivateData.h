@@ -27,11 +27,16 @@
 
 #include "python-module.h"
 
+//! Manages a reference to a Python object; will be dereferenced when destroyed
 class QorePythonPrivateData : public AbstractPrivateData, QorePythonReferenceHolder {
 public:
+    //! Manages the reference passed
+    /** @param pyobj must be already referenced before passed to this constructor
+    */
     DLLLOCAL QorePythonPrivateData(PyObject* pyobj) : QorePythonReferenceHolder(pyobj) {
     }
 
+    //! Returns the object being managed
     DLLLOCAL PyObject* get() {
         return obj;
     }

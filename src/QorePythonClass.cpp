@@ -23,7 +23,15 @@
 
 #include "QorePythonClass.h"
 
-type_vec_t QorePythonClass::paramTypeInfo = { stringTypeInfo, boolTypeInfo };
+type_vec_t QorePythonClass::memberGateParamTypeInfo = { stringTypeInfo, boolTypeInfo };
+
+QorePythonClass::QorePythonClass(const char* name) : QoreBuiltinClass(name, QDOM_UNCONTROLLED_API) {
+    addMethod(nullptr, "memberGate", (q_external_method_t)memberGate, Public, 0, QDOM_UNCONTROLLED_API,
+        autoTypeInfo, memberGateParamTypeInfo);
+
+    setPublicMemberFlag();
+    setGateAccessFlag();
+}
 
 // static method
 QoreValue QorePythonClass::memberGate(const QoreMethod& meth, void* m, QoreObject* self, QorePythonPrivateData* pd,

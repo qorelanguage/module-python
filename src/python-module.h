@@ -110,7 +110,6 @@ protected:
 private:
     QorePythonReferenceHolder(const QorePythonReferenceHolder&) = delete;
     QorePythonReferenceHolder& operator=(QorePythonReferenceHolder&) = delete;
-    void* operator new(size_t) = delete;
 };
 
 class QorePythonGilStateHelper {

@@ -34,26 +34,13 @@
 
 class QorePythonClass : public QoreBuiltinClass {
 public:
-    DLLLOCAL QorePythonClass(const char* name) : QoreBuiltinClass(name, QDOM_UNCONTROLLED_API) {
-        addMethod(nullptr, "memberGate", (q_external_method_t)memberGate, Public, 0, QDOM_UNCONTROLLED_API,
-            autoTypeInfo, paramTypeInfo);
-
-        setPublicMemberFlag();
-        setGateAccessFlag();
-    }
-
-    DLLLOCAL const std::string& getJavaName() const {
-        return jname;
-    }
+    DLLLOCAL QorePythonClass(const char* name);
 
     static QoreValue memberGate(const QoreMethod& meth, void* m, QoreObject* self, QorePythonPrivateData* pd,
         const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
 
 private:
-    // java dot name for the class; ex: "java.lang.Object"
-    std::string jname;
-
-    static type_vec_t paramTypeInfo;
+    static type_vec_t memberGateParamTypeInfo;
 };
 
 #endif

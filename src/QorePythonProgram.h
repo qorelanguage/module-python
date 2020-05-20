@@ -136,16 +136,12 @@ public:
 
         QorePythonReferenceHolder return_value;
         {
+            // ensure atomic access to the Python interpreter (GIL) and manage the Python thread state
             QorePythonHelper qph(python);
 
             QorePythonReferenceHolder python_code;
             {
                 //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
-
-                // save thread state to restore on exit
-                PyThreadState* current_state = PyThreadState_Get();
-                ON_BLOCK_EXIT(PyThreadState_Swap, current_state);
-
                 // parse code
                 QorePythonNodeHolder node(PyParser_SimpleParseString(src_code->c_str(), input));
                 if (!node) {
@@ -196,6 +192,10 @@ public:
     */
     DLLLOCAL QoreValue callMethod(ExceptionSink* xsink, const char* cname, const char* mname,
         const QoreListNode* args, size_t arg_offset = 0, PyObject* first = nullptr);
+
+    //! Call a callable and and return the result
+    DLLLOCAL QoreValue callInternal(ExceptionSink* xsink, PyObject* callable, const QoreListNode* args,
+        size_t arg_offset = 0, PyObject* first = nullptr);
 
     //! Returns a Qore value for the given Python value
     DLLLOCAL QoreValue getQoreValue(QorePythonReferenceHolder& val, ExceptionSink* xsink);

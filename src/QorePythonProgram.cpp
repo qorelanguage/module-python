@@ -305,31 +305,7 @@ QoreValue QorePythonProgram::callFunction(ExceptionSink* xsink, const QoreString
         return QoreValue();
     }
 
-    QorePythonReferenceHolder py_args;
-    int argcount;
-    if (args && args->size() > arg_offset) {
-        py_args = getPythonTupleValue(xsink, args, arg_offset);
-        if (*xsink) {
-            return QoreValue();
-        }
-        argcount = args->size() - arg_offset;
-    } else {
-        argcount = 0;
-    }
-
-    QorePythonReferenceHolder return_value;
-    {
-        //printd(5, "QorePythonProgram::callFunction(): calling '%s' argcount: %d\n", fname->c_str(), argcount);
-        QorePythonHelper qph(python);
-        return_value = PyEval_CallObject(py_func, *py_args);
-
-        // check for Python exceptions
-        if (!return_value && checkPythonException(xsink)) {
-            return QoreValue();
-        }
-    }
-
-    return getQoreValue(return_value, xsink);
+    return callInternal(xsink, py_func, args, arg_offset);
 }
 
 QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const QoreString& class_name, const QoreString& method_name, const QoreListNode* args, size_t arg_offset) {
@@ -370,6 +346,10 @@ QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const char* cname,
         return QoreValue();
     }
 
+    return callInternal(xsink, *py_method, args, arg_offset);
+}
+
+QoreValue QorePythonProgram::callInternal(ExceptionSink* xsink, PyObject* callable, const QoreListNode* args, size_t arg_offset, PyObject* first) {
     QorePythonReferenceHolder py_args;
     if (args && args->size() > arg_offset) {
         py_args = getPythonTupleValue(xsink, args, arg_offset, first);
@@ -382,7 +362,7 @@ QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const char* cname,
     {
         //printd(5, "QorePythonProgram::callFunction(): calling '%s' argcount: %d\n", fname->c_str(), (args && args->size() > arg_offset) ? args->size() - arg_offset : 0);
         QorePythonHelper qph(python);
-        return_value = PyEval_CallObject(*py_method, *py_args);
+        return_value = PyEval_CallObject(callable, *py_args);
 
         // check for Python exceptions
         if (!return_value && checkPythonException(xsink)) {
