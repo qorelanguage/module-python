@@ -174,11 +174,13 @@ PyObject* QorePythonProgram::getPythonList(ExceptionSink* xsink, const QoreListN
 }
 
 PyObject* QorePythonProgram::getPythonTupleValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset, PyObject* first) {
-    if (!l || (l->size() < arg_offset)) {
+    bool has_list = (l && l->size() >= arg_offset);
+
+    if (!first && !has_list) {
         return nullptr;
     }
 
-    Py_ssize_t size = l->size() - arg_offset;
+    Py_ssize_t size = has_list ? (l->size() - arg_offset) : 0;
     if (first) {
         ++size;
     }
@@ -189,13 +191,15 @@ PyObject* QorePythonProgram::getPythonTupleValue(ExceptionSink* xsink, const Qor
         PyTuple_SET_ITEM(*tuple, 0, first);
         offset = 1;
     }
-    ConstListIterator i(l, arg_offset - 1);
-    while (i.next()) {
-        QorePythonReferenceHolder val(getPythonValue(i.getValue(), xsink));
-        if (*xsink) {
-            return nullptr;
+    if (has_list) {
+        ConstListIterator i(l, arg_offset - 1);
+        while (i.next()) {
+            QorePythonReferenceHolder val(getPythonValue(i.getValue(), xsink));
+            if (*xsink) {
+                return nullptr;
+            }
+            PyTuple_SET_ITEM(*tuple, i.index() - arg_offset + offset, val.release());
         }
-        PyTuple_SET_ITEM(*tuple, i.index() - arg_offset + offset, val.release());
     }
 
     return tuple.release();
@@ -351,7 +355,7 @@ QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const char* cname,
 
 QoreValue QorePythonProgram::callInternal(ExceptionSink* xsink, PyObject* callable, const QoreListNode* args, size_t arg_offset, PyObject* first) {
     QorePythonReferenceHolder py_args;
-    if (args && args->size() > arg_offset) {
+    if (first || (args && args->size() > arg_offset)) {
         py_args = getPythonTupleValue(xsink, args, arg_offset, first);
         if (*xsink) {
             return QoreValue();

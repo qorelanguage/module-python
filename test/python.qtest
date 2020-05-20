@@ -112,7 +112,8 @@ class PythonTest inherits Test {
         }
 
         {
-            PythonProgram pp("class test:
+            PythonProgram pp("
+class test:
     def normal(self, val):
         return val + base
 
@@ -137,11 +138,33 @@ class PythonTest inherits Test {
         }
 
         {
-            PythonProgram pp("class test:\n    @staticmethod\n    def get():\n         return test();\n    def other():\n        return 1;", "test.py");
+            PythonProgram pp("
+class test:
+    @staticmethod
+    def get():
+        return test()
+
+    @staticmethod
+    def dostatic():
+        return 1
+
+    def doit(self):
+        return 1
+
+    def doerr():
+        return 1
+
+    def other(self):
+        return self.num
+
+    num = 1", "test.py");
 
             object x = pp.callMethod("test", "get");
-            assertEq(32, x.__sizeof__());
+            assertEq(Type::Int, x.__sizeof__().type());
+            assertEq(1, x.dostatic());
+            assertEq(1, x.doit());
             assertEq(1, x.other());
+            assertThrows("TypeError", \x.doerr());
         }
     }
 }

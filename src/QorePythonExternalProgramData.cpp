@@ -106,14 +106,16 @@ QorePythonClass* QorePythonExternalProgramData::getCreateQorePythonClass(PyTypeO
     // grab current Program's parse lock before manipulating namespaces
     CurrentProgramRuntimeExternalParseContextHelper pch;
     if (!pch) {
-        xsink->raiseException("PROGRAM-ERROR", "cannot process Python type '%s' in deleted Program object", type->tp_name);
+        xsink->raiseException("PROGRAM-ERROR", "cannot process Python type '%s' in deleted Program object",
+            type->tp_name);
         return nullptr;
     }
 
     return getCreateQorePythonClassIntern(type, xsink);
 }
 
-QorePythonClass* QorePythonExternalProgramData::getCreateQorePythonClassIntern(PyTypeObject* type, ExceptionSink* xsink) {
+QorePythonClass* QorePythonExternalProgramData::getCreateQorePythonClassIntern(PyTypeObject* type,
+    ExceptionSink* xsink) {
     std::string name = type->tp_name;
 
     clmap_t::iterator i = clmap.find(name);
@@ -149,11 +151,13 @@ QorePythonClass* QorePythonExternalProgramData::getCreateQorePythonClassIntern(P
             return nullptr;
         }
 
-        printd(5, "QorePythonExternalProgramData::getCreateQorePythonClassIntern() %s parent: %s (bclass: %p)\n", name.c_str(), b->tp_name, bclass);
+        printd(5, "QorePythonExternalProgramData::getCreateQorePythonClassIntern() %s parent: %s (bclass: %p)\n",
+            name.c_str(), b->tp_name, bclass);
         cls->addBuiltinVirtualBaseClass(bclass);
     }
 
-    printd(5, "QorePythonExternalProgramData::getCreateQorePythonClassIntern() %s methods: %p\n", name.c_str(), type->tp_methods);
+    printd(5, "QorePythonExternalProgramData::getCreateQorePythonClassIntern() %s methods: %p\n", name.c_str(),
+        type->tp_methods);
 
     // process builtin methods
     if (type->tp_methods) {
@@ -161,7 +165,8 @@ QorePythonClass* QorePythonExternalProgramData::getCreateQorePythonClassIntern(P
             assert(!((meth->ml_flags & METH_CLASS) && (meth->ml_flags & METH_STATIC)));
             bool is_static = meth->ml_flags & METH_STATIC;
 
-            printd(5, "QorePythonExternalProgramData::getCreateQorePythonClassIntern() adding builtin method %s.%s() meth: %p\n", name.c_str(), meth->ml_name, meth);
+            printd(5, "QorePythonExternalProgramData::getCreateQorePythonClassIntern() adding builtin method " \
+                "%s.%s() meth: %p\n", name.c_str(), meth->ml_name, meth);
             assert(PyCallable_Check((PyObject*)meth));
 
             type_vec_t param_types;
@@ -181,25 +186,34 @@ QorePythonClass* QorePythonExternalProgramData::getCreateQorePythonClassIntern(P
     if (type->tp_dict) {
         PyObject* key, * value;
         Py_ssize_t pos = 0;
+
         while (PyDict_Next(type->tp_dict, &pos, &key, &value)) {
             assert(Py_TYPE(key) == &PyUnicode_Type);
             const char* keystr;
             Py_ssize_t size;
             keystr = PyUnicode_AsUTF8AndSize(key, &size);
 
+            //printd(5, "%s: %s: %s\n", name.c_str(), keystr, Py_TYPE(value)->tp_name);
+
             PyTypeObject* meth_type = Py_TYPE(value);
             if (meth_type == &PyStaticMethod_Type) {
-                cls->addStaticMethod((void*)value, keystr,
+                // get callable from static method
+                PyObject* py_method = PyStaticMethod_Type.tp_descr_get(value, nullptr, nullptr);
+                assert(py_method);
+                cls->addObj(py_method);
+                cls->addStaticMethod((void*)py_method, keystr,
                     (q_external_static_method_t)QorePythonExternalProgramData::execPythonStaticMethod,
                     Public, QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API, autoTypeInfo);
-                printd(5, "QorePythonExternalProgramData::getCreateQorePythonClassIntern() added static method %s.%s() (%s)\n", name.c_str(), keystr, Py_TYPE(value)->tp_name);
+                printd(5, "QorePythonExternalProgramData::getCreateQorePythonClassIntern() added static method " \
+                    "%s.%s() (%s)\n", name.c_str(), keystr, Py_TYPE(value)->tp_name);
                 continue;
             }
             if (PyFunction_Check(value)) {
                 cls->addMethod((void*)value, keystr,
-                    (q_external_method_t)QorePythonExternalProgramData::execPythonNormalMethod,
-                    Public, QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API, autoTypeInfo);
-                printd(5, "QorePythonExternalProgramData::getCreateQorePythonClassIntern() added normal method %s.%s() (%s)\n", name.c_str(), keystr, Py_TYPE(value)->tp_name);
+                    (q_external_method_t)QorePythonExternalProgramData::execPythonNormalMethod, Public,
+                    QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API, autoTypeInfo);
+                printd(5, "QorePythonExternalProgramData::getCreateQorePythonClassIntern() added normal method " \
+                    "%s.%s() (%s)\n", name.c_str(), keystr, Py_TYPE(value)->tp_name);
                 continue;
             }
         }
@@ -223,15 +237,16 @@ QorePythonClass* QorePythonExternalProgramData::getCreateQorePythonClassIntern(P
     return cls.release();
 }
 
-QoreValue QorePythonExternalProgramData::execPythonStaticCMethod(const QoreMethod& meth, PyMethodDef* m, const QoreListNode* args,
-    q_rt_flags_t rtflags, ExceptionSink* xsink) {
+QoreValue QorePythonExternalProgramData::execPythonStaticCMethod(const QoreMethod& meth, PyMethodDef* m,
+    const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink) {
     QorePythonExternalProgramData* pypd = QorePythonExternalProgramData::getContext();
     assert(pypd);
     return pypd->callCMethod(xsink, m, args);
 }
 
-QoreValue QorePythonExternalProgramData::execPythonNormalCMethod(const QoreMethod& meth, PyMethodDef* m, QoreObject* self,
-    QorePythonPrivateData* pd, const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink) {
+QoreValue QorePythonExternalProgramData::execPythonNormalCMethod(const QoreMethod& meth, PyMethodDef* m,
+    QoreObject* self, QorePythonPrivateData* pd, const QoreListNode* args, q_rt_flags_t rtflags,
+    ExceptionSink* xsink) {
     QoreProgram* pgm = self->getProgram();
     assert(pgm);
     QorePythonExternalProgramData* pypd = static_cast<QorePythonExternalProgramData*>(pgm->getExternalData("python"));
@@ -255,7 +270,8 @@ QoreValue QorePythonExternalProgramData::callCMethod(ExceptionSink* xsink, PyMet
         //printd(5, "QorePythonProgram::callFunction(): calling '%s' argcount: %d\n", fname->c_str(), (args && args->size() > arg_offset) ? args->size() - arg_offset : 0);
         QorePythonHelper qph(python);
         //return_value = PyCFunction_Call((PyObject*)meth->ml_meth, *py_args, nullptr);
-        return_value = _PyMethodDef_RawFastCallDict(meth, first, py_args.getRef(), (args && args->size() > arg_offset) ? args->size() - arg_offset : 0, nullptr);
+        return_value = _PyMethodDef_RawFastCallDict(meth, first, py_args.getRef(),
+            (args && args->size() > arg_offset) ? args->size() - arg_offset : 0, nullptr);
 
         // check for Python exceptions
         if (!return_value && checkPythonException(xsink)) {

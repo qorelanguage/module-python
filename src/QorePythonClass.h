@@ -31,12 +31,56 @@
 #include "QorePythonPrivateData.h"
 
 #include <string>
+#include <vector>
+#include <memory>
 
+// Maintains references to Python objects reference in the class definition when it was scanned
+class QorePythonClassData : public AbstractQoreClassUserData {
+public:
+    DLLLOCAL virtual ~QorePythonClassData() {
+        for (auto& i : obj_sink) {
+            Py_DECREF(i);
+        }
+    }
+
+    DLLLOCAL void addObj(PyObject* obj) {
+        obj_sink.push_back(obj);
+    }
+
+    DLLLOCAL virtual QorePythonClassData* copy() const override {
+        std::unique_ptr<QorePythonClassData> rv(new QorePythonClassData);
+        for (auto& i : obj_sink) {
+            Py_INCREF(i);
+            rv->addObj(i);
+        }
+        return rv.release();
+    }
+
+    DLLLOCAL virtual void doDeref() override {
+        delete this;
+    }
+
+private:
+    // list of objects to dereference when the class is deleted
+    typedef std::vector<PyObject*> obj_sink_t;
+    obj_sink_t obj_sink;
+};
+
+//! Represents a Python class in Qore
 class QorePythonClass : public QoreBuiltinClass {
 public:
     DLLLOCAL QorePythonClass(const char* name);
 
-    static QoreValue memberGate(const QoreMethod& meth, void* m, QoreObject* self, QorePythonPrivateData* pd,
+    DLLLOCAL void addObj(PyObject* obj) {
+        QorePythonClassData* user = getManagedUserData<QorePythonClassData>();
+        if (!user) {
+            user = new QorePythonClassData;
+            setUserData(user);
+        }
+        user->addObj(obj);
+    }
+
+    DLLLOCAL static QoreValue memberGate(const QoreMethod& meth, void* m, QoreObject* self, QorePythonPrivateData* pd,
         const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
 
 private:
