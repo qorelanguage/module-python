@@ -7,7 +7,10 @@ set (VERSION_PATCH 1)
 
 set(PROJECT_VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}")
 
-cmake_policy(SET CMP0074 NEW)
+if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.12.0")
+  cmake_policy(SET CMP0074 NEW)
+endif()
+
 cmake_policy(SET CMP0042 NEW)
 
 find_package(Qore 0.9.4 REQUIRED)
