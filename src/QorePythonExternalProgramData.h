@@ -34,82 +34,8 @@ class QorePythonPrivateData;
 
 class QorePythonExternalProgramData : public AbstractQoreProgramExternalData, public QorePythonProgram {
 public:
-    DLLLOCAL QorePythonExternalProgramData(QoreNamespace* pyns, QoreProgram* pgm) : QorePythonProgram(nullptr),
-        pyns(pyns), pgm(pgm) {
-    }
-
-    DLLLOCAL QorePythonExternalProgramData(const QorePythonExternalProgramData& old, QoreProgram* pgm)
-        : QorePythonProgram(nullptr), pyns(pgm->findNamespace("Python")), pgm(pgm) {
-        if (!pyns) {
-            pyns = PNS.copy();
-            pgm->getRootNS()->addNamespace(pyns);
-        }
-    }
-
-    DLLLOCAL QoreValue getQoreValue(PyObject* val, ExceptionSink* xsink);
-
-    DLLLOCAL virtual AbstractQoreProgramExternalData* copy(QoreProgram* pgm) const {
-        return new QorePythonExternalProgramData(*this, pgm);
-    }
-
-    DLLLOCAL virtual void doDeref() {
-        delete this;
-    }
-
-    //! Static initialization
-    DLLLOCAL static void staticInit();
-
-    DLLLOCAL static QorePythonExternalProgramData* getContext() {
-        QorePythonExternalProgramData* pypd;
-
-        // first try to get the actual Program context
-        QoreProgram* pgm = getProgram();
-        if (pgm) {
-            pypd = static_cast<QorePythonExternalProgramData*>(pgm->getExternalData("python"));
-            if (pypd) {
-                return pypd;
-            }
-        }
-        pgm = qore_get_call_program_context();
-        if (pgm) {
-            pypd = static_cast<QorePythonExternalProgramData*>(pgm->getExternalData("python"));
-            if (pypd) {
-                return pypd;
-            }
-        }
-        return nullptr;
-    }
 
 protected:
-    //! Python namespace ptr
-    QoreNamespace* pyns;
-
-    //! Owning Program context
-    QoreProgram* pgm;
-
-    //! Atomic lock
-    //QoreRecursiveThreadLock lck;
-
-    //! maps types to classes
-    typedef std::map<std::string, QorePythonClass*> clmap_t;
-    clmap_t clmap;
-
-    DLLLOCAL QorePythonClass* getCreateQorePythonClass(PyTypeObject* type, ExceptionSink* xsink);
-    DLLLOCAL QorePythonClass* getCreateQorePythonClassIntern(PyTypeObject* type, ExceptionSink* xsink);
-
-    //! Call a method and and return the result
-    DLLLOCAL QoreValue callCMethod(ExceptionSink* xsink, PyMethodDef* meth, const QoreListNode* args,
-        size_t arg_offset = 0, PyObject* first = nullptr);
-
-    DLLLOCAL static QoreValue execPythonStaticCMethod(const QoreMethod& meth, PyMethodDef* m, const QoreListNode* args,
-        q_rt_flags_t rtflags, ExceptionSink* xsink);
-    DLLLOCAL static QoreValue execPythonNormalCMethod(const QoreMethod& meth, PyMethodDef* m, QoreObject* self,
-        QorePythonPrivateData* pd, const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
-
-    DLLLOCAL static QoreValue execPythonStaticMethod(const QoreMethod& meth, PyObject* m, const QoreListNode* args,
-        q_rt_flags_t rtflags, ExceptionSink* xsink);
-    DLLLOCAL static QoreValue execPythonNormalMethod(const QoreMethod& meth, PyObject* m, QoreObject* self,
-        QorePythonPrivateData* pd, const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
 };
 
 #endif

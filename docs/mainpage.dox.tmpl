@@ -15,7 +15,7 @@
 
     Helper %Qore classes provided by this module:
     |!Class|!Description
-    |@ref Qore::Python::PythonProgram "PythonProgram"|Allows Python code to be embedded and executed in %Qore
+    |@ref Python::PythonProgram "PythonProgram"|Allows Python code to be embedded and executed in %Qore
 
     @section python_examples Examples
 
@@ -31,6 +31,30 @@
 %requires python
 
 PythonProgram::evalExpression("print('hello world!')");
+    @endcode
+
+    @par Implrt Example:
+    @code{.py}
+#!/usr/bin/env qore
+
+%new-style
+%require-types
+%strict-args
+%enable-all-warnings
+
+# import the math module into the Qore "Python::math" namespace
+%module-cmd(python) import math
+# import the JSONEncoder class into the "Python::json" namespace
+%module-cmd(python) import json.JSONEncoder
+
+%exec-class Main
+
+public class Main {
+    constructor() {
+        JSONEncoder enc();
+        printf("%s\n", enc.encode(math::sin(1)));
+    }
+}
     @endcode
 
     @section python_types Type Conversions Between Qore and Python
@@ -67,7 +91,7 @@ PythonProgram::evalExpression("print('hello world!')");
     Python exceptions are mapped to Qore exceptions as follows:
     - \c err: the Python exception class name (ex: \c "SyntaxError")
     - \c desc: the string description, if none, then the exception arguments converted to a string with \c repr()
-    - \c arg: the Python exception object itself converted to a Qore value (TODO)
+    - \c arg: the Python exception object itself converted to a Qore value
 
     @section python_qore_object_lifecycle_management Managing the Lifecycle of Qore objects from Python
 

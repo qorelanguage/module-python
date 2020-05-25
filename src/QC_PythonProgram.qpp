@@ -23,11 +23,10 @@
 */
 
 #include "QC_PythonProgram.h"
-#include "QorePythonExternalProgramData.h"
 
 //! Program for embedding and executing Python code
 /**
- */
+*/
 qclass PythonProgram [arg=QorePythonProgram* pp; ns=Python; dom=EMBEDDED_LOGIC];
 
 //! Creates the object and parses the given source code
@@ -35,7 +34,7 @@ qclass PythonProgram [arg=QorePythonProgram* pp; ns=Python; dom=EMBEDDED_LOGIC];
     @param source_label the label or file name of the source
 
     @note Exceptions parsing or compiling the Python code are thrown according to @ref python_exceptions
- */
+*/
 PythonProgram::constructor(string source_code, string source_label) {
     ReferenceHolder<QorePythonProgram> pp(new QorePythonProgram(*source_code, *source_label, Py_file_input, xsink),
         xsink);
@@ -45,10 +44,18 @@ PythonProgram::constructor(string source_code, string source_label) {
     self->setPrivate(CID_PYTHONPROGRAM, pp.release());
 }
 
+//! Destroys the interpreter context and invalidates the object
+/**
+*/
+PythonProgram::destructor() {
+    //printd(5, "Qore PythonProgram::destructor() this: %p\n", pp);
+    pp->destructor();
+}
+
 //! Runs the program
 /**
     @note Exceptions parsing or compiling the Python code are thrown according to @ref python_exceptions
- */
+*/
 auto PythonProgram::run() {
     return pp->run(xsink);
 }
@@ -171,9 +178,9 @@ PythonProgram::setSaveObjectCallback(*code save_object_callback) [dom=PROCESS] {
     @note This method uses the PythonProgram context in the current program to parse, compile, and evaluate the input string
  */
 static auto PythonProgram::evalStatement(string source_code, string source_label = "stmt") {
-    QorePythonExternalProgramData* pypd = QorePythonExternalProgramData::getContext();
-    assert(pypd);
-    return pypd->eval(*source_code, *source_label, Py_single_input, xsink);
+    QorePythonProgram* pypgm = QorePythonProgram::getContext();
+    assert(pypgm);
+    return pypgm->eval(*source_code, *source_label, Py_single_input, xsink);
 }
 
 //! Parse, compile, and evaluate the given expression and return any result
@@ -185,9 +192,9 @@ static auto PythonProgram::evalStatement(string source_code, string source_label
     @note This method uses a shared static PythonProgram object to parse, compile, and evaluate the input string
  */
 static auto PythonProgram::evalExpression(string source_code, string source_label = "exp") {
-    QorePythonExternalProgramData* pypd = QorePythonExternalProgramData::getContext();
-    assert(pypd);
-    return pypd->eval(*source_code, *source_label, Py_eval_input, xsink);
+    QorePythonProgram* pypgm = QorePythonProgram::getContext();
+    assert(pypgm);
+    return pypgm->eval(*source_code, *source_label, Py_eval_input, xsink);
 }
 
 //! Sets the "save object" callback for %Qore objects created from Python code in the root %Qore Program context
@@ -214,8 +221,8 @@ PythonProgram::setSaveObjectCallback(callback);
     @see @ref python_qore_object_lifecycle_management for more information
 */
 static PythonProgram::setSaveObjectCallback(*code save_object_callback) [dom=PROCESS] {
-    QorePythonExternalProgramData* pypd = QorePythonExternalProgramData::getContext();
-    assert(pypd);
-    pypd->setSaveObjectCallback(save_object_callback);
+    QorePythonProgram* pypgm = QorePythonProgram::getContext();
+    assert(pypgm);
+    pypgm->setSaveObjectCallback(save_object_callback);
 }
 

@@ -30,6 +30,13 @@
 
 #include <qore/Qore.h>
 
+//! the name of the module
+#define QORE_PYTHON_MODULE_NAME "python"
+//! the name of the main Python namespace in Qore
+#define QORE_PYTHON_NS_NAME "Python"
+//! the name of the language in stack traces
+#define QORE_PYTHON_LANG_NAME "Python"
+
 //! acquires the GIL and manages thread state
 class QorePythonHelper {
 public:
