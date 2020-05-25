@@ -26,8 +26,16 @@
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <node.h>
 
 #include <qore/Qore.h>
+
+//! the name of the module
+#define QORE_PYTHON_MODULE_NAME "python"
+//! the name of the main Python namespace in Qore
+#define QORE_PYTHON_NS_NAME "Python"
+//! the name of the language in stack traces
+#define QORE_PYTHON_LANG_NAME "Python"
 
 //! acquires the GIL and manages thread state
 class QorePythonHelper {
@@ -109,7 +117,6 @@ protected:
 private:
     QorePythonReferenceHolder(const QorePythonReferenceHolder&) = delete;
     QorePythonReferenceHolder& operator=(QorePythonReferenceHolder&) = delete;
-    void* operator new(size_t) = delete;
 };
 
 class QorePythonGilStateHelper {
@@ -126,7 +133,40 @@ protected:
     PyGILState_STATE old_state;
 };
 
+class QorePythonNodeHolder {
+public:
+    DLLLOCAL QorePythonNodeHolder(_node* node) : node(node) {
+    }
+
+    DLLLOCAL ~QorePythonNodeHolder() {
+        if (node) {
+            PyNode_Free(node);
+        }
+    }
+
+    DLLLOCAL _node* release() {
+        _node* rv = node;
+        node = nullptr;
+        return rv;
+    }
+
+    DLLLOCAL operator bool() const {
+        return (bool)node;
+    }
+
+    DLLLOCAL _node* operator*() {
+        return node;
+    }
+
+    DLLLOCAL const _node* operator*() const {
+        return node;
+    }
+
+protected:
+    _node* node;
+};
+
 class QorePythonProgram;
-DLLLOCAL extern QorePythonProgram* py_static_pgm;
+DLLLOCAL extern QoreNamespace PNS;
 
 #endif

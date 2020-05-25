@@ -26,15 +26,15 @@
 
 //! Program for embedding and executing Python code
 /**
- */
-qclass PythonProgram [arg=QorePythonProgram* pp; ns=Qore::Python; dom=EMBEDDED_LOGIC];
+*/
+qclass PythonProgram [arg=QorePythonProgram* pp; ns=Python; dom=EMBEDDED_LOGIC];
 
 //! Creates the object and parses the given source code
 /** @param source_code the Python source to parse and compile
     @param source_label the label or file name of the source
 
     @note Exceptions parsing or compiling the Python code are thrown according to @ref python_exceptions
- */
+*/
 PythonProgram::constructor(string source_code, string source_label) {
     ReferenceHolder<QorePythonProgram> pp(new QorePythonProgram(*source_code, *source_label, Py_file_input, xsink),
         xsink);
@@ -44,10 +44,18 @@ PythonProgram::constructor(string source_code, string source_label) {
     self->setPrivate(CID_PYTHONPROGRAM, pp.release());
 }
 
+//! Destroys the interpreter context and invalidates the object
+/**
+*/
+PythonProgram::destructor() {
+    //printd(5, "Qore PythonProgram::destructor() this: %p\n", pp);
+    pp->destructor();
+}
+
 //! Runs the program
 /**
     @note Exceptions parsing or compiling the Python code are thrown according to @ref python_exceptions
- */
+*/
 auto PythonProgram::run() {
     return pp->run(xsink);
 }
@@ -112,7 +120,17 @@ auto PythonProgram::callMethodArgs(string class_name, string method_name, *softl
     return pp->callMethod(xsink, class_name, method_name, args);
 }
 
-//! Parse, compilem and evaluate the given statement and return any result
+//! Parse, compile, and evaluate the given statement and return any result
+/** @param source_code the Python source to parse and compile
+    @param source_label the label or file name of the source
+
+    @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
+ */
+auto PythonProgram::evalStatement(string source_code, string source_label = "stmt") {
+    return pp->eval(*source_code, *source_label, Py_single_input, xsink);
+}
+
+//! Parse, compile, and evaluate the given expression and return any result
 /** @param source_code the Python source to parse and compile
     @param source_label the label or file name of the source
 
@@ -120,11 +138,52 @@ auto PythonProgram::callMethodArgs(string class_name, string method_name, *softl
 
     @note This method uses a shared static PythonProgram object to parse, compile, and evaluate the input string
  */
-static auto PythonProgram::evalStatement(string source_code, string source_label = "stmt") {
-    return py_static_pgm->eval(*source_code, *source_label, Py_single_input, xsink);
+auto PythonProgram::evalExpression(string source_code, string source_label = "exp") {
+    return pp->eval(*source_code, *source_label, Py_eval_input, xsink);
 }
 
-//! Parse, compilem and evaluate the given expression and return any result
+//! Sets the "save object" callback for %Qore objects created from Python code
+/** @par Example:
+    @code{.py}
+hash<string, object> object_cache;
+code callback = sub (object obj) {
+    # save object in object cache, so it doesn't go out of scope
+    object_cache{obj.uniqueHash()} = obj;
+}
+pypgm.setSaveObjectCallback(callback);
+    @endcode
+
+    @param save_object_callback the callback to save any %Qore objects created in Python code, must take an argument
+    of type @ref object_type "object"
+
+    Due to the differences in garbage collection approaches between %Qore and Python, %Qore objects must be managed with
+    a deterministic life cycle; JaPythona objects have only weak references to %Qore objects due to the lack of
+    destructors in Python and the lack of determinism in the Python runtime for object lifecycle management.
+
+    The callback set here will be called any time a %Qore object is created from Python code; if no callback is set,
+    then the standard thread-local implementation is used where %Qore objects are saved in a thread-local hash.
+
+    @see @ref python_qore_object_lifecycle_management for more information
+*/
+PythonProgram::setSaveObjectCallback(*code save_object_callback) [dom=PROCESS] {
+    pp->setSaveObjectCallback(save_object_callback);
+}
+
+//! Parse, compile, and evaluate the given statement and return any result
+/** @param source_code the Python source to parse and compile
+    @param source_label the label or file name of the source
+
+    @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
+
+    @note This method uses the PythonProgram context in the current program to parse, compile, and evaluate the input string
+ */
+static auto PythonProgram::evalStatement(string source_code, string source_label = "stmt") {
+    QorePythonProgram* pypgm = QorePythonProgram::getContext();
+    assert(pypgm);
+    return pypgm->eval(*source_code, *source_label, Py_single_input, xsink);
+}
+
+//! Parse, compile, and evaluate the given expression and return any result
 /** @param source_code the Python source to parse and compile
     @param source_label the label or file name of the source
 
@@ -133,5 +192,37 @@ static auto PythonProgram::evalStatement(string source_code, string source_label
     @note This method uses a shared static PythonProgram object to parse, compile, and evaluate the input string
  */
 static auto PythonProgram::evalExpression(string source_code, string source_label = "exp") {
-    return py_static_pgm->eval(*source_code, *source_label, Py_eval_input, xsink);
+    QorePythonProgram* pypgm = QorePythonProgram::getContext();
+    assert(pypgm);
+    return pypgm->eval(*source_code, *source_label, Py_eval_input, xsink);
 }
+
+//! Sets the "save object" callback for %Qore objects created from Python code in the root %Qore Program context
+/** @par Example:
+    @code{.py}
+hash<string, object> object_cache;
+code callback = sub (object obj) {
+    # save object in object cache, so it doesn't go out of scope
+    object_cache{obj.uniqueHash()} = obj;
+}
+PythonProgram::setSaveObjectCallback(callback);
+    @endcode
+
+    @param save_object_callback the callback to save any %Qore objects created in Python code, must take an argument
+    of type @ref object_type "object"
+
+    Due to the differences in garbage collection approaches between %Qore and Python, %Qore objects must be managed with
+    a deterministic life cycle; JaPythona objects have only weak references to %Qore objects due to the lack of
+    destructors in Python and the lack of determinism in the Python runtime for object lifecycle management.
+
+    The callback set here will be called any time a %Qore object is created from Python code; if no callback is set,
+    then the standard thread-local implementation is used where %Qore objects are saved in a thread-local hash.
+
+    @see @ref python_qore_object_lifecycle_management for more information
+*/
+static PythonProgram::setSaveObjectCallback(*code save_object_callback) [dom=PROCESS] {
+    QorePythonProgram* pypgm = QorePythonProgram::getContext();
+    assert(pypgm);
+    pypgm->setSaveObjectCallback(save_object_callback);
+}
+

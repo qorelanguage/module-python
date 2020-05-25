@@ -8,28 +8,54 @@
 
 %requires python
 %requires QUnit
+%try-module json
+%define NO_JSON
+%endtry
 
 %exec-class PythonTest
 
 class PythonTest inherits Test {
     public {
+        const ExprTests = (
+            {"expr": "1 + 1", "val": 2},
+            {"expr": "1.1", "val": 1.1},
+            {"expr": "True", "val": True},
+            {"expr": "False", "val": False},
+            {"expr": "'str'", "val": "str"},
+            {"expr": "bytes.fromhex('abcd')", "val": <abcd>},
+            {"expr": "bytearray.fromhex('abcd')", "val": <abcd>},
+            {"expr": "{'a': 1}", "val": {"a": 1}},
+            {"expr": "(1).bit_length()", "val": 1},
+        );
+
+        const Values = (
+            1,
+            1.1,
+            True,
+            False,
+            "str",
+            <abcd>,
+            {"a": 1},
+            (1, 2, 3),
+        );
     }
 
     constructor() : Test("python test", "1.0") {
         addTestCase("basic test", \basicTest());
+        addTestCase("import test", \importTest());
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
     }
 
     basicTest() {
-        assertEq(2, PythonProgram::evalExpression("1 + 1"));
-        assertEq(1.1, PythonProgram::evalExpression("1.1"));
-        assertTrue(PythonProgram::evalExpression("True"));
-        assertFalse(PythonProgram::evalExpression("False"));
-        assertEq(<abcd>, PythonProgram::evalExpression("bytes.fromhex('abcd')"));
-        assertEq(<abcd>, PythonProgram::evalExpression("bytearray.fromhex('abcd')"));
-        assertEq({"a": 1}, PythonProgram::evalExpression("{'a': 1}"));
-        assertEq(1, PythonProgram::evalExpression("(1).bit_length()"));
+        {
+            PythonProgram p("def test(val):\n    return val", "value test container");
+            foreach hash<auto> info in (ExprTests) {
+                assertEq(info.val, PythonProgram::evalExpression(info.expr), "static: " + info.expr);
+                assertEq(info.val, p.evalExpression(info.expr), info.expr);
+            }
+            map assertEq($1, p.callFunction("test", $1), sprintf("value %d/%d", $# + 1, Values.size())), Values;
+        }
 
         {
             PythonProgram pp("def test():\n    return 1", "test.py");
@@ -90,13 +116,18 @@ class PythonTest inherits Test {
         }
 
         {
-            PythonProgram pp("class test:
+            PythonProgram pp("
+class test:
     def normal(self, val):
         return val + base
 
     @staticmethod
     def test(val):
         return val + test.base
+
+    @staticmethod
+    def do_ex():
+        raise Exception('test')
 
     base = 1
 ", "test.py");
@@ -106,6 +137,156 @@ class PythonTest inherits Test {
             assertThrows("NO-METHOD", \pp.callMethod(), ("test", "xxx"));
             assertThrows("NameError", \pp.callMethod(), ("test", "normal", NOTHING, 1));
             assertThrows("NO-METHOD", \pp.callMethod(), ("test", "__name__"));
+            assertThrows("Exception", \pp.callMethod(), ("test", "do_ex"));
+            assertThrows("NameError", \pp.evalExpression(), "test()");
+        }
+
+        {
+            PythonProgram pp("
+class test:
+    \"\"\"test docs\"\"\"
+
+    @staticmethod
+    def get():
+        return test()
+
+    @staticmethod
+    def dostatic():
+        return 1
+
+    def doit(self):
+        return 1
+
+    def doerr():
+        return 1
+
+    def other(self):
+        return self.num
+
+    def editdoc(self):
+        self.__doc__ = 1
+
+    def edittype(self):
+        t = type(self)
+        t.__basicsize__ = 2
+
+    def gettype(self):
+        return type(self)
+
+    def getattr(self, attr):
+        return getattr(self, attr)
+
+    def delclassattr(self, attr):
+        delattr(self.__class__, attr)
+
+    def delparentclassattr(self, attr):
+        delattr(self.__class__.__bases__[0], attr)
+
+    def delattr(self, attr):
+        delattr(self, attr)
+
+    num = 1", "test.py");
+
+            object x = pp.callMethod("test", "get");
+            assertEq(Type::Int, x.__sizeof__().type());
+            assertEq(1, x.dostatic());
+            assertEq(1, x.doit());
+            assertEq(1, x.other());
+            assertThrows("TypeError", \x.doerr());
+            assertRegex("^<test.py.test object", x.__repr__());
+            assertThrows("TypeError", \x.__new__());
+            assertEq(Type::List, x.__reduce__().type());
+            assertEq(Type::Object, x.__subclasshook__().type());
+            assertEq(Type::List, x.__dir__().type());
+            assertEq("test docs", x.__doc__);
+            x.editdoc();
+            assertEq(1, x.__doc__);
+            assertThrows("AttributeError", \x.edittype());
+            assertEq(Type::Int, x.gettype().__basicsize__.type());
+            assertEq(1, x.getattr("num"));
+            x.delclassattr("dostatic");
+            assertEq(1, x.dostatic());
+            x.delclassattr("doit");
+            assertEq(1, x.doit());
+            assertThrows("TypeError", \x.delparentclassattr(), "__repr__");
+            assertRegex("^<test.py.test object", x.__repr__());
+            assertThrows("TypeError", \x.delparentclassattr(), "__sizeof__");
+            assertEq(Type::Int, x.__sizeof__().type());
+            assertThrows("TypeError", \x.delparentclassattr(), "__subclasshook__");
+            assertEq(Type::Object, x.__subclasshook__().type());
+            assertThrows("TypeError", \x.delparentclassattr(), "__new__");
+            assertThrows("TypeError", \x.__new__());
+
+            delete pp;
+            assertThrows("PROGRAM-ERROR", \x.dostatic());
+        }
+    }
+
+    importTest() {
+        {
+            Program p();
+            p.parse("
+%module-cmd(python) import math.sin
+
+auto sub get(auto arg) {
+    return math::sin(arg);
+}", "import.q");
+
+            assertFloatEq(0.841470985, p.callFunction("get", 1), 0.000000001);
+            assertFloatEq(0.841470985, p.callFunction("math::sin", 1), 0.000000001);
+            assertThrows("NO-FUNCTION", \p.callFunction(), ("math::cos", 1));
+        }
+
+        {
+            Program p();
+            p.parse("
+%module-cmd(python) import math
+
+auto sub get(auto arg) {
+    return math::sin(arg);
+}", "import.q");
+
+            assertEq("math", p.getExpression("__name__", "test").eval());
+            assertEq(Type::String, p.getExpression("__doc__", "test").eval().type());
+            assertEq(Type::String, p.getExpression("__package__", "test").eval().type());
+            #__file__ not present in staticly-linked C modules
+            #assertEq(Type::String, p.getExpression("__file__", "test").eval().type());
+            assertFloatEq(0.841470985, p.callFunction("get", 1), 0.000000001);
+            assertFloatEq(0.841470985, p.callFunction("math::sin", 1), 0.000000001);
+            assertFloatEq(0.540302306, p.callFunction("math::cos", 1), 0.000000001);
+            assertEq(M_PI, p.getExpression("pi", "test").eval());
+        }
+
+        {
+            Program p();
+            p.parse("
+%module-cmd(python) import json.JSONEncoder
+
+auto sub get() {
+    return new JSONEncoder();
+}", "import.q");
+
+            assertEq(Type::Object, p.callFunction("get").type());
+            object o = p.callFunction("get");
+%ifndef NO_JSON
+            assertEq({"a": 1}, parse_json(o.encode({"a": 1})));
+%endif
+        }
+
+        {
+            Program p();
+            p.parse("
+%module-cmd(python) import json
+
+auto sub get() {
+    return new JSONEncoder();
+}", "import.q");
+
+            assertEq(Type::Object, p.callFunction("get").type());
+            object o = p.callFunction("get");
+%ifndef NO_JSON
+            assertEq({"a": 1}, parse_json(o.encode({"a": 1})));
+%endif
         }
     }
 }
