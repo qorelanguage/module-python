@@ -249,7 +249,8 @@ auto sub get(auto arg) {
             assertEq("math", p.getExpression("__name__", "test").eval());
             assertEq(Type::String, p.getExpression("__doc__", "test").eval().type());
             assertEq(Type::String, p.getExpression("__package__", "test").eval().type());
-            assertEq(Type::String, p.getExpression("__file__", "test").eval().type());
+            #__file__ not present in staticly-linked C modules
+            #assertEq(Type::String, p.getExpression("__file__", "test").eval().type());
             assertFloatEq(0.841470985, p.callFunction("get", 1), 0.000000001);
             assertFloatEq(0.841470985, p.callFunction("math::sin", 1), 0.000000001);
             assertFloatEq(0.540302306, p.callFunction("math::cos", 1), 0.000000001);
