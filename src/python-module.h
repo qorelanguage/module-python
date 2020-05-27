@@ -37,37 +37,86 @@
 //! the name of the language in stack traces
 #define QORE_PYTHON_LANG_NAME "Python"
 
-//! acquires the GIL and manages thread state
-class QorePythonHelper {
-public:
-    DLLLOCAL QorePythonHelper(PyThreadState* python) : old_python(python) {
-        old_python = PyThreadState_Swap(python);
-        PyEval_AcquireLock();
-        assert(PyGILState_Check());
-    }
+DLLLOCAL extern PyThreadState* mainThreadState;
 
-    DLLLOCAL ~QorePythonHelper() {
-        PyEval_ReleaseLock();
-        PyThreadState_Swap(old_python);
-    }
+// forward reference
+class QorePythonProgram;
+class QorePythonClass;
 
-protected:
-    PyThreadState* old_python;
-};
+DLLLOCAL extern QorePythonClass* QC_PYTHONBASEOBJECT;
+DLLLOCAL extern qore_classid_t CID_PYTHONBASEOBJECT;
 
-//! acquires the GIL
+/** NOTE: depends on Python internals to work around limitations with the GIL and multiple thread states with multiple
+          interpreters
+*/
+#define Py_BUILD_CORE
+#include <internal/pycore_pystate.h>
+
+DLLLOCAL PyThreadState* _qore_PyRuntimeGILState_GetThreadState(_gilstate_runtime_state& gilstate = _PyRuntime.gilstate);
+DLLLOCAL PyThreadState* _qore_PyGILState_GetThisThreadState(_gilstate_runtime_state& gilstate = _PyRuntime.gilstate);
+DLLLOCAL void _qore_PyGILState_SetThisThreadState(PyThreadState* state, _gilstate_runtime_state& gilstate = _PyRuntime.gilstate);
+
+//! acquires the GIL and sets the main interpreter thread context
+/** This class is used when a new interpreter context is created.
+
+    The new interpreter context has its gilstate_counter decremented in the destructor, and the main interpreter
+    thread context is restored before releasing the GIL.
+
+    This way we don't need to use the deprecated GIL acquire and release APIs
+*/
 class QorePythonGilHelper {
 public:
     DLLLOCAL QorePythonGilHelper() {
-        PyEval_AcquireLock();
+        assert(!PyGILState_Check());
+        assert(!_qore_PyRuntimeGILState_GetThreadState());
+        assert(!_qore_PyGILState_GetThisThreadState());
+        PyEval_AcquireThread(mainThreadState);
+        assert(PyThreadState_Get() == mainThreadState);
+        // set this thread state
+        _qore_PyGILState_SetThisThreadState(mainThreadState);
+        assert(_qore_PyGILState_GetThisThreadState() == mainThreadState);
         assert(PyGILState_Check());
     }
 
     DLLLOCAL ~QorePythonGilHelper() {
-        PyEval_ReleaseLock();
+        // swap back to the mainThreadState before releasing the GIL
+        PyThreadState* state = PyThreadState_Get();
+        if (state != mainThreadState) {
+            assert(state->gilstate_counter == 1);
+            --state->gilstate_counter;
+            PyThreadState_Swap(mainThreadState);
+        }
+        state = _qore_PyGILState_GetThisThreadState();
+        if (state != mainThreadState) {
+            _qore_PyGILState_SetThisThreadState(mainThreadState);
+        }
+        assert(PyGILState_Check());
+        // release the GIL
+        PyEval_ReleaseThread(mainThreadState);
+        assert(!PyGILState_Check());
+        _qore_PyGILState_SetThisThreadState(nullptr);
     }
 
 protected:
+    PyThreadState* state;
+};
+
+struct QorePythonThreadInfo {
+    PyThreadState* t_state;
+    PyGILState_STATE g_state;
+    bool valid;
+};
+
+//! acquires the GIL and manages thread state
+class QorePythonHelper {
+public:
+    DLLLOCAL QorePythonHelper(const QorePythonProgram* pypgm);
+
+    DLLLOCAL ~QorePythonHelper();
+
+protected:
+    const QorePythonProgram* pypgm;
+    QorePythonThreadInfo old_state;
 };
 
 //! Python ref holder
@@ -80,8 +129,13 @@ public:
     }
 
     DLLLOCAL ~QorePythonReferenceHolder() {
+        purge();
+    }
+
+    DLLLOCAL void purge() {
         if (obj) {
             Py_DECREF(obj);
+            obj = nullptr;
         }
     }
 

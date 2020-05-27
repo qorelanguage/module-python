@@ -33,7 +33,7 @@
 PythonProgram::evalExpression("print('hello world!')");
     @endcode
 
-    @par Implrt Example:
+    @par Import Example:
     @code{.py}
 #!/usr/bin/env qore
 
@@ -57,6 +57,12 @@ public class Main {
 }
     @endcode
 
+    @section python_import Importing Python APIs into Qore
+
+    To import Python APIs and definitions into a %Qore program, any of the following python-module-specific parse
+    directives can be used, each of which also causes the python module to be loaded and initialized:
+    - @code{.qore} %module-cmd(jni) import module[.symbol|*] @endcode imports the given symbol into the %Qore program
+
     @section python_types Type Conversions Between Qore and Python
 
     @subsection python_qore_to_python Type Conversions From Qore To Python
@@ -75,7 +81,7 @@ public class Main {
 
     |!Source Python Type|!Target %Qore Type
     |\c bool|\c bool
-    |\c int|\c int
+    |\c int|\c int or \c number if greater than 64-bits
     |\c float|\c float
     |\c bytes|\c binary
     |\c bytearray|\c binary
@@ -85,6 +91,9 @@ public class Main {
     |\c list|\c list
     |\c string|\c list
     |\c tuple|\c list
+
+    All other Python types are converted to a %Qore object using a dynamically-created class that wraps the Python
+    type or class.
 
     @section python_exceptions Python Exception Handling
 

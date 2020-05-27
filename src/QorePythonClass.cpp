@@ -28,20 +28,27 @@
 
 type_vec_t QorePythonClass::gateParamTypeInfo = { stringTypeInfo, boolOrNothingTypeInfo };
 
-QorePythonClass::QorePythonClass(const char* name) : QoreBuiltinClass(name, QDOM_UNCONTROLLED_API) {
-    addMethod(nullptr, "memberGate", (q_external_method_t)memberGate, Public, 0, QDOM_UNCONTROLLED_API,
+QorePythonClass::QorePythonClass(const char* name) : QoreBuiltinClass(name, QDOM_UNCONTROLLED_API), pypgm(nullptr) {
+}
+
+QorePythonClass::QorePythonClass(QorePythonProgram* pypgm, const char* name) : QoreBuiltinClass(name, QDOM_UNCONTROLLED_API), pypgm(pypgm) {
+    addMethod(nullptr, "memberGate", (q_external_method_t)memberGate, Public, QCF_NO_FLAGS, QDOM_UNCONTROLLED_API,
         autoTypeInfo, gateParamTypeInfo);
-    addMethod(nullptr, "methodGate", (q_external_method_t)methodGate, Public, 0, QDOM_UNCONTROLLED_API,
+    addMethod(nullptr, "methodGate", (q_external_method_t)methodGate, Public, QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API,
         autoTypeInfo, gateParamTypeInfo);
 
     setPublicMemberFlag();
     setGateAccessFlag();
 }
 
+void QorePythonClass::addObj(PyObject* obj) {
+    pypgm->addObj(obj);
+}
+
 // static method
 QoreValue QorePythonClass::methodGate(const QoreMethod& meth, void* m, QoreObject* self, QorePythonPrivateData* pd,
     const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink) {
-    assert(args && args->size() == 2);
+    assert(args && args->size() >= 2);
     assert(args->retrieveEntry(0).getType() == NT_STRING);
     assert(args->retrieveEntry(1).getType() == NT_BOOLEAN);
 
@@ -83,6 +90,10 @@ QoreValue QorePythonClass::callPythonMethod(ExceptionSink* xsink, QorePythonProg
     QorePythonPrivateData* pd, size_t arg_offset) const {
     PyObject* pyobj = pd->get();
     PyTypeObject* mtype = Py_TYPE(pyobj);
+    QorePythonHelper qph(pypgm);
+    if (pypgm->checkValid(xsink)) {
+        return QoreValue();
+    }
     // returns a borrowed reference
     PyObject* attr = PyDict_GetItemString(mtype->tp_dict, mname);
     if (!attr) {
@@ -95,10 +106,15 @@ QoreValue QorePythonClass::callPythonMethod(ExceptionSink* xsink, QorePythonProg
 
 QoreValue QorePythonClass::getPythonMember(QorePythonProgram* pypgm, const char* mname, QorePythonPrivateData* pd,
     ExceptionSink* xsink) const {
+    QorePythonHelper qph(pypgm);
+    if (pypgm->checkValid(xsink)) {
+        return QoreValue();
+    }
+
     {
         PyMemberDef* m = getPythonMember(mname);
         if (m) {
-            return pypgm->getQoreValue(PyMember_GetOne((const char*)pd->get(), m), xsink);
+            return pypgm->getQoreValue(xsink, PyMember_GetOne((const char*)pd->get(), m));
         }
     }
 

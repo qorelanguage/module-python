@@ -13,7 +13,7 @@ endif()
 
 cmake_policy(SET CMP0042 NEW)
 
-find_package(Qore 0.9.4 REQUIRED)
+find_package(Qore 0.9.5 REQUIRED)
 find_package(PythonLibs 3.6.0)
 
 # Check for C++11.

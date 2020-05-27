@@ -45,7 +45,10 @@ DLLEXPORT qore_license_t qore_module_license = QL_MIT;
 DLLEXPORT char qore_module_license_str[] = "MIT";
 
 QoreNamespace PNS(QORE_PYTHON_NS_NAME);
-static PyThreadState* mainThreadState = nullptr;
+PyThreadState* mainThreadState = nullptr;
+
+QorePythonClass* QC_PYTHONBASEOBJECT;
+qore_classid_t CID_PYTHONBASEOBJECT;
 
 // module cmd type
 using qore_python_module_cmd_t = void (*) (ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
@@ -64,9 +67,16 @@ static QoreStringNode* python_module_init() {
     QorePythonProgram::staticInit();
 
     mainThreadState = PyThreadState_Get();
-    PyEval_ReleaseLock();
+    PyEval_ReleaseThread(mainThreadState);
+    assert(!_qore_PyRuntimeGILState_GetThreadState());
+    _qore_PyGILState_SetThisThreadState(nullptr);
 
     PNS.addSystemClass(initPythonProgramClass(PNS));
+
+    tclist.push(QorePythonProgram::pythonThreadCleanup, nullptr);
+
+    QC_PYTHONBASEOBJECT = new QorePythonClass("__qore_base__");
+    CID_PYTHONBASEOBJECT = QC_PYTHONBASEOBJECT->getID();
 
     return nullptr;
 }
@@ -79,11 +89,14 @@ static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns) {
         rns->addNamespace(pyns);
         pgm->setExternalData(QORE_PYTHON_MODULE_NAME, new QorePythonProgram(pgm, pyns));
     }
+
+    assert(!PyGILState_Check());
 }
 
 static void python_module_delete() {
     PyThreadState_Swap(nullptr);
     PyEval_AcquireThread(mainThreadState);
+    _qore_PyGILState_SetThisThreadState(mainThreadState);
     Py_Finalize();
 }
 
@@ -134,6 +147,8 @@ static void py_mc_import(ExceptionSink* xsink, QoreString& arg, QorePythonProgra
     // process import statement
     //printd(5, "python_module_parse_cmd() pypgm: %p arg: %s\n", pypgm, arg.c_str());
 
+    QorePythonHelper qph(pypgm);
+
     // see if there is a dot (.) in the name
     qore_offset_t i = arg.find('.');
     if (i < 0 || i == static_cast<qore_offset_t>(arg.size() - 1)) {
@@ -149,4 +164,11 @@ static void py_mc_import(ExceptionSink* xsink, QoreString& arg, QorePythonProgra
             pypgm->import(xsink, arg.c_str(), symbol);
         }
     }
+}
+
+QorePythonHelper::QorePythonHelper(const QorePythonProgram* pypgm) : pypgm(pypgm), old_state(pypgm->setContext()) {
+}
+
+QorePythonHelper::~QorePythonHelper() {
+    pypgm->releaseContext(old_state);
 }

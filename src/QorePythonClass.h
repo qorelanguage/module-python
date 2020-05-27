@@ -40,23 +40,20 @@ class QorePythonProgram;
 //! Represents a Python class in Qore
 class QorePythonClass : public QoreBuiltinClass {
 public:
+    //! only for the base python class
     DLLLOCAL QorePythonClass(const char* name);
 
-    DLLLOCAL QorePythonClass(const QorePythonClass& old) : QoreBuiltinClass(old) {
-        doCopy(old);
+    DLLLOCAL QorePythonClass(QorePythonProgram* pypgm, const char* name);
+
+    DLLLOCAL QorePythonClass(const QorePythonClass& old) : QoreBuiltinClass(old), pypgm(old.pypgm) {
     }
 
     DLLLOCAL virtual ~QorePythonClass() {
-        for (auto& i : obj_sink) {
-            Py_DECREF(i);
-        }
     }
 
     //! Called when a class is copied for import
     DLLLOCAL virtual QoreClass* copyImport() {
-        QorePythonClass* rv = new QorePythonClass;
-        rv->doCopy(*this);
-        return rv;
+        return new QorePythonClass;
     }
 
     //! Called when a class is copied
@@ -66,9 +63,7 @@ public:
         return new QorePythonClass(*this);
     }
 
-    DLLLOCAL void addObj(PyObject* obj) {
-        obj_sink.push_back(obj);
-    }
+    DLLLOCAL void addObj(PyObject* obj);
 
     DLLLOCAL void addPythonMember(std::string member, PyMemberDef* memdef) {
         assert(mem_map.find(member) == mem_map.end());
@@ -88,8 +83,7 @@ public:
     }
 
     DLLLOCAL QorePythonProgram* getPythonProgram() const {
-        QoreProgram* qpgm = QoreClass::getProgram();
-        return reinterpret_cast<QorePythonProgram*>(qpgm->getExternalData(QORE_PYTHON_MODULE_NAME));
+        return pypgm;
     }
 
     DLLLOCAL QoreValue getPythonMember(QorePythonProgram* pypgm, const char* mname, QorePythonPrivateData* pd,
@@ -105,23 +99,16 @@ public:
         const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
 
 private:
-    // list of objects to dereference when the class is deleted
-    typedef std::vector<PyObject*> obj_sink_t;
-    obj_sink_t obj_sink;
+    QorePythonProgram* pypgm;
+
     // map of builtin members: name -> member
     typedef std::map<std::string, PyMemberDef*> mem_map_t;
     mem_map_t mem_map;
+    std::string pname;
 
     static type_vec_t gateParamTypeInfo;
 
     DLLLOCAL QorePythonClass() {
-    }
-
-    DLLLOCAL void doCopy(const QorePythonClass& old) {
-        for (auto& i : old.obj_sink) {
-            Py_INCREF(i);
-            addObj(i);
-        }
     }
 };
 
