@@ -26,7 +26,7 @@
 
 #include <structmember.h>
 
-type_vec_t QorePythonClass::gateParamTypeInfo = { stringTypeInfo, boolOrNothingTypeInfo };
+type_vec_t QorePythonClass::gateParamTypeInfo = { stringTypeInfo };
 
 QorePythonClass::QorePythonClass(const char* name) : QoreBuiltinClass(name, QDOM_UNCONTROLLED_API), pypgm(nullptr) {
 }
@@ -38,7 +38,6 @@ QorePythonClass::QorePythonClass(QorePythonProgram* pypgm, const char* name) : Q
         autoTypeInfo, gateParamTypeInfo);
 
     setPublicMemberFlag();
-    setGateAccessFlag();
 }
 
 void QorePythonClass::addObj(PyObject* obj) {
@@ -48,12 +47,10 @@ void QorePythonClass::addObj(PyObject* obj) {
 // static method
 QoreValue QorePythonClass::methodGate(const QoreMethod& meth, void* m, QoreObject* self, QorePythonPrivateData* pd,
     const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink) {
-    assert(args && args->size() >= 2);
+    assert(args && args->size() >= 1);
     assert(args->retrieveEntry(0).getType() == NT_STRING);
-    assert(args->retrieveEntry(1).getType() == NT_BOOLEAN);
 
     const QoreStringNode* mname = args->retrieveEntry(0).get<QoreStringNode>();
-    bool cls_access = args->retrieveEntry(1).getAsBool();
 
     QorePythonProgram* pypgm = QorePythonProgram::getPythonProgramFromMethod(meth, xsink);
     if (!pypgm) {
@@ -69,12 +66,10 @@ QoreValue QorePythonClass::methodGate(const QoreMethod& meth, void* m, QoreObjec
 // static method
 QoreValue QorePythonClass::memberGate(const QoreMethod& meth, void* m, QoreObject* self, QorePythonPrivateData* pd,
     const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink) {
-    assert(args && args->size() == 2);
+    assert(args && args->size() == 1);
     assert(args->retrieveEntry(0).getType() == NT_STRING);
-    assert(args->retrieveEntry(1).getType() == NT_BOOLEAN);
 
     const QoreStringNode* mname = args->retrieveEntry(0).get<QoreStringNode>();
-    bool cls_access = args->retrieveEntry(1).getAsBool();
 
     QorePythonProgram* pypgm = QorePythonProgram::getPythonProgramFromMethod(meth, xsink);
     if (!pypgm) {

@@ -1,6 +1,6 @@
 /* -*- mode: c++; indent-tabs-mode: nil -*- */
 /*
-    python_internals.h
+    python38_internals.h
 
     Qore Programming Language
 
@@ -25,6 +25,7 @@
 #define _QORE_PYTHON_INTERNALS_H
 
 #include <dynamic_annotations.h>
+#include <fileobject.h>
 
 typedef struct _Py_atomic_address {
     uintptr_t _value;
@@ -316,5 +317,20 @@ _Py_ANNOTATE_MEMORY_ORDER(const volatile void *address, _Py_memory_order order)
 
 #define _Py_atomic_load_relaxed(ATOMIC_VAL) \
     _Py_atomic_load_explicit((ATOMIC_VAL), _Py_memory_order_relaxed)
+
+#define _QORE_PY_REQUIRES_TSS 1
+
+DLLLOCAL static PyThreadState* _qore_PyRuntimeGILState_GetThreadState() {
+    return reinterpret_cast<PyThreadState*>(_Py_atomic_load_relaxed(&_PyRuntime.gilstate.tstate_current));
+}
+
+DLLLOCAL static void _qore_PyGILState_SetThisThreadState(PyThreadState* state) {
+    PyThread_tss_set(&_PyRuntime.gilstate.autoTSSkey, (void*)state);
+}
+
+DLLLOCAL static void _qore_Python_reenable_gil_check() {
+    assert(!_PyRuntime.gilstate.check_enabled);
+    _PyRuntime.gilstate.check_enabled = 1;
+}
 
 #endif

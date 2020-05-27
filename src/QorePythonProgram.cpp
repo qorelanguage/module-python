@@ -31,32 +31,13 @@
 #include <datetime.h>
 
 // from Python internal code
-PyThreadState* _qore_PyRuntimeGILState_GetThreadState(_gilstate_runtime_state& gilstate) {
-    return reinterpret_cast<PyThreadState*>(_Py_atomic_load_relaxed(&gilstate.tstate_current));
-}
-
-PyThreadState* _qore_PyGILState_GetThisThreadState(_gilstate_runtime_state& gilstate) {
-    assert(gilstate.autoInterpreterState);
-    return reinterpret_cast<PyThreadState*>(PyThread_tss_get(&gilstate.autoTSSkey));
-}
-
-void _qore_PyGILState_SetThisThreadState(PyThreadState* state, _gilstate_runtime_state& gilstate) {
-    PyThread_tss_set(&_PyRuntime.gilstate.autoTSSkey, (void*)state);
-}
-
-// from Python internal code
 bool _qore_PyGILState_Check() {
-    _gilstate_runtime_state& gilstate = _PyRuntime.gilstate;
-    if (!PyThread_tss_is_created(&gilstate.autoTSSkey)) {
-        return true;
-    }
-
-    PyThreadState* tstate = _qore_PyRuntimeGILState_GetThreadState(gilstate);
+    PyThreadState* tstate = _qore_PyRuntimeGILState_GetThreadState();
     if (tstate == NULL) {
         return false;
     }
 
-    return (tstate == _qore_PyGILState_GetThisThreadState(gilstate));
+    return (tstate == PyGILState_GetThisThreadState());
 }
 
 #ifdef DEBUG
@@ -64,6 +45,13 @@ bool _qore_PyGILState_Check() {
 static bool _qore_PyThreadState_IsCurrent(PyThreadState* tstate) {
     // Must be the tstate for this thread
     return tstate == _qore_PyRuntimeGILState_GetThreadState();
+}
+#endif
+
+#ifdef NEED_PYTHON_36_TLS_KEY
+DLLLOCAL void _qore_Python_reenable_gil_check() {
+    assert(!_PyGILState_check_enabled);
+    _PyGILState_check_enabled = 1;
 }
 #endif
 
@@ -105,9 +93,8 @@ int QorePythonProgram::createInterpreter(ExceptionSink* xsink) {
     assert(python->gilstate_counter == 1);
     //printd(5, "QorePythonProgram::createInterpreter() created thead state: %p\n", python);
 
-    // NOTE: we have to reenable PyFILState_Check() here
-    assert(!_PyRuntime.gilstate.check_enabled);
-    _PyRuntime.gilstate.check_enabled = 1;
+    // NOTE: we have to reenable PyGILState_Check() here
+    _qore_Python_reenable_gil_check();
 
     _qore_PyGILState_SetThisThreadState(python);
 
@@ -119,16 +106,6 @@ int QorePythonProgram::createInterpreter(ExceptionSink* xsink) {
     py_thr_map[this] = {{tid, python}};
     return 0;
 }
-
-/*
-int QorePythonProgram::createInterpreter(ExceptionSink* xsink) {
-    assert(PyGILState_Check());
-    PyThreadState* tcur = _qore_PyRuntimeGILState_GetThreadState();
-    ON_BLOCK_EXIT(PyThreadState_Swap, tcur);
-
-    return createInterpreterIntern(xsink);
-}
-*/
 
 QorePythonThreadInfo QorePythonProgram::setContext() const {
     if (!valid) {
@@ -165,7 +142,7 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
         g_state = PyGILState_LOCKED;
     } else {
         assert(!_qore_PyRuntimeGILState_GetThreadState());
-        assert(!_qore_PyGILState_GetThisThreadState());
+        assert(!PyGILState_GetThisThreadState());
 
         t_state = nullptr;
         PyEval_RestoreThread(python);
@@ -179,20 +156,6 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
 
     //printd(5, "QorePythonProgram::setContext() old thread context: %p\n", t_state);
 
-    /*
-    if (!oldstate) {
-        assert(!PyGILState_Check());
-        assert(!python->gilstate_counter);
-        // acquire GIL and set this thread state as current
-        PyEval_RestoreThread(python);
-    } else if (oldstate != python) {
-        assert(PyGILState_Check());
-        PyThreadState_Swap(python);
-    } else {
-        assert(PyGILState_Check());
-    }
-    */
-
     ++python->gilstate_counter;
 
     return {t_state, g_state, true};
@@ -202,7 +165,7 @@ void QorePythonProgram::releaseContext(const QorePythonThreadInfo& oldstate) con
     if (!oldstate.valid) {
         return;
     }
-    struct _gilstate_runtime_state* gilstate = &_PyRuntime.gilstate;
+    //struct _gilstate_runtime_state* gilstate = &_PyRuntime.gilstate;
     PyThreadState* python = getThreadState();
     assert(python);
     assert(_qore_PyThreadState_IsCurrent(python));
@@ -220,7 +183,7 @@ void QorePythonProgram::releaseContext(const QorePythonThreadInfo& oldstate) con
             assert(false);
         }
         assert(!PyGILState_Check());
-        PyThreadState* state = _qore_PyGILState_GetThisThreadState();
+        PyThreadState* state = PyGILState_GetThisThreadState();
         if (state) {
             _qore_PyGILState_SetThisThreadState(nullptr);
         }
@@ -783,7 +746,7 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
             if (frame == tb->tb_frame) {
                 loc.set(filename, line, line, nullptr, 0, QORE_PYTHON_LANG_NAME);
             } else {
-                callstack.add(CT_USER, filename, line, line, nullptr, QORE_PYTHON_LANG_NAME);
+                callstack.add(CT_USER, filename, line, line, funcname, QORE_PYTHON_LANG_NAME);
             }
             frame = frame->f_back;
         }
@@ -1230,7 +1193,7 @@ int QorePythonProgram::import(ExceptionSink* xsink, const char* module, const ch
         // find intermediate modules
         while (true) {
             qore_offset_t i = sym.find('.');
-            if (i <= 0 || i == (sym.size() - 1)) {
+            if (i <= 0 || (size_t)i == (sym.size() - 1)) {
                 break;
             }
             QoreString mod_name(&sym, i);
@@ -1344,8 +1307,7 @@ int QorePythonProgram::importSymbol(ExceptionSink* xsink, PyObject* value, QoreN
     }
 
     if (PyType_Check(value)) {
-        PyTypeObject* type = reinterpret_cast<PyTypeObject*>(value);
-        //printd(5, "QorePythonProgram::importSymbol() class sym: '%s' -> '%s' (%p)\n", symbol, type->tp_name, type);
+        //printd(5, "QorePythonProgram::importSymbol() class sym: '%s' -> '%s' (%p)\n", symbol, reinterpret_cast<PyTypeObject*>(value)->tp_name, value);
         QorePythonClass* cls = getCreateQorePythonClassIntern(xsink, reinterpret_cast<PyTypeObject*>(value), ns);
         if (*xsink) {
             assert(!cls);

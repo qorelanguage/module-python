@@ -53,12 +53,20 @@ DLLLOCAL extern qore_classid_t CID_PYTHONBASEOBJECT;
 #define Py_BUILD_CORE
 #include <internal/pycore_pystate.h>
 #else
-#include "python_internals.h"
+#if PY_MAJOR_VERSION >= 3
+#if PY_MINOR_VERSION == 8
+#include "python38_internals.h"
+#elif PY_MINOR_VERSION == 6
+#include "python36_internals.h"
+#else
+#error unknown pyton version
+#endif
+#endif
 #endif
 
-DLLLOCAL PyThreadState* _qore_PyRuntimeGILState_GetThreadState(_gilstate_runtime_state& gilstate = _PyRuntime.gilstate);
-DLLLOCAL PyThreadState* _qore_PyGILState_GetThisThreadState(_gilstate_runtime_state& gilstate = _PyRuntime.gilstate);
-DLLLOCAL void _qore_PyGILState_SetThisThreadState(PyThreadState* state, _gilstate_runtime_state& gilstate = _PyRuntime.gilstate);
+DLLLOCAL PyThreadState* _qore_PyRuntimeGILState_GetThreadState();
+DLLLOCAL void _qore_PyGILState_SetThisThreadState(PyThreadState* state);
+DLLLOCAL void _qore_Python_reenable_gil_check();
 
 //! acquires the GIL and sets the main interpreter thread context
 /** This class is used when a new interpreter context is created.
@@ -73,12 +81,12 @@ public:
     DLLLOCAL QorePythonGilHelper() {
         assert(!PyGILState_Check());
         assert(!_qore_PyRuntimeGILState_GetThreadState());
-        assert(!_qore_PyGILState_GetThisThreadState());
+        assert(!PyGILState_GetThisThreadState());
         PyEval_AcquireThread(mainThreadState);
         assert(PyThreadState_Get() == mainThreadState);
         // set this thread state
         _qore_PyGILState_SetThisThreadState(mainThreadState);
-        assert(_qore_PyGILState_GetThisThreadState() == mainThreadState);
+        assert(PyGILState_GetThisThreadState() == mainThreadState);
         assert(PyGILState_Check());
     }
 
@@ -90,7 +98,7 @@ public:
             --state->gilstate_counter;
             PyThreadState_Swap(mainThreadState);
         }
-        state = _qore_PyGILState_GetThisThreadState();
+        state = PyGILState_GetThisThreadState();
         if (state != mainThreadState) {
             _qore_PyGILState_SetThisThreadState(mainThreadState);
         }

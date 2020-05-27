@@ -60,7 +60,21 @@ static mcmap_t mcmap = {
     {"import", py_mc_import},
 };
 
+#ifdef NEED_PYTHON_36_TLS_KEY
+int autoTLSkey;
+#endif
+
 static QoreStringNode* python_module_init() {
+#ifdef NEED_PYTHON_36_TLS_KEY
+    // Python 3.6 does not expose its thread-local key in the API, but we can determine the value by creating and
+    // destroying a thread-local key before we call Py_Initialize()
+    pthread_key_t k;
+    pthread_key_create(&k, nullptr);
+    //printd(5, "python_module_init() got Python 3.6 thread-local key: %d\n", k);
+    autoTLSkey = k;
+    pthread_key_delete(k);
+#endif
+
     // initialize python library
     Py_Initialize();
 
@@ -70,6 +84,7 @@ static QoreStringNode* python_module_init() {
     PyEval_ReleaseThread(mainThreadState);
     assert(!_qore_PyRuntimeGILState_GetThreadState());
     _qore_PyGILState_SetThisThreadState(nullptr);
+    assert(!PyGILState_GetThisThreadState());
 
     PNS.addSystemClass(initPythonProgramClass(PNS));
 

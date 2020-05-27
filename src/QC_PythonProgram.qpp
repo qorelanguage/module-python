@@ -117,7 +117,7 @@ auto PythonProgram::callMethod(string class_name, string method_name, ...) {
     @see @ref python_exceptions
 */
 auto PythonProgram::callMethodArgs(string class_name, string method_name, *softlist<auto> argv) {
-    return pp->callMethod(xsink, class_name, method_name, args);
+    return pp->callMethod(xsink, class_name, method_name, argv);
 }
 
 //! Parse, compile, and evaluate the given statement and return any result
