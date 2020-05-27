@@ -49,8 +49,12 @@ DLLLOCAL extern qore_classid_t CID_PYTHONBASEOBJECT;
 /** NOTE: depends on Python internals to work around limitations with the GIL and multiple thread states with multiple
           interpreters
 */
+#ifdef HAVE_PYTHON_INTERNAL_INCLUDES
 #define Py_BUILD_CORE
 #include <internal/pycore_pystate.h>
+#else
+#include "python_internals.h"
+#endif
 
 DLLLOCAL PyThreadState* _qore_PyRuntimeGILState_GetThreadState(_gilstate_runtime_state& gilstate = _PyRuntime.gilstate);
 DLLLOCAL PyThreadState* _qore_PyGILState_GetThisThreadState(_gilstate_runtime_state& gilstate = _PyRuntime.gilstate);
