@@ -48,13 +48,6 @@ static bool _qore_PyThreadState_IsCurrent(PyThreadState* tstate) {
 }
 #endif
 
-#ifdef NEED_PYTHON_36_TLS_KEY
-DLLLOCAL void _qore_Python_reenable_gil_check() {
-    assert(!_PyGILState_check_enabled);
-    _PyGILState_check_enabled = 1;
-}
-#endif
-
 // static member declarations
 QorePythonProgram::py_thr_map_t QorePythonProgram::py_thr_map;
 QoreThreadLock QorePythonProgram::py_thr_lck;
@@ -94,7 +87,7 @@ int QorePythonProgram::createInterpreter(ExceptionSink* xsink) {
     //printd(5, "QorePythonProgram::createInterpreter() created thead state: %p\n", python);
 
     // NOTE: we have to reenable PyGILState_Check() here
-    _qore_Python_reenable_gil_check();
+    _QORE_PYTHON_REENABLE_GIL_CHECK
 
     _qore_PyGILState_SetThisThreadState(python);
 
@@ -1188,6 +1181,9 @@ int QorePythonProgram::import(ExceptionSink* xsink, const char* module, const ch
     if (symbol) {
         // returns a borrowed reference
         PyObject* mod_dict = PyModule_GetDict(*mod);
+        if (!mod_dict) {
+            throw QoreStandardException("PYTHON-IMPORT-ERROR", "Python module '%s' has no dictiomary", module);
+        }
 
         QoreString sym(symbol);
         // find intermediate modules

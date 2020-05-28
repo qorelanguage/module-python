@@ -135,7 +135,7 @@ PyThread_set_key_value(int key, void *value)
 }
 
 DLLLOCAL static PyThreadState* _qore_PyRuntimeGILState_GetThreadState() {
-    return ((PyThreadState*)_Py_atomic_load_relaxed(&_PyThreadState_Current));
+    return reinterpret_cast<PyThreadState*>(_Py_atomic_load_relaxed(&_PyThreadState_Current));
 }
 
 #define NEED_PYTHON_36_TLS_KEY
@@ -144,5 +144,7 @@ DLLLOCAL extern int autoTLSkey;
 DLLLOCAL static void _qore_PyGILState_SetThisThreadState(PyThreadState* state) {
     PyThread_set_key_value(autoTLSkey, (void*)state);
 }
+
+#define _QORE_PYTHON_REENABLE_GIL_CHECK { assert(!_PyGILState_check_enabled); _PyGILState_check_enabled = 1; }
 
 #endif

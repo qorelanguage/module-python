@@ -1,6 +1,6 @@
 /* -*- mode: c++; indent-tabs-mode: nil -*- */
 /*
-    python38_internals.h
+    python37_internals.h
 
     Qore Programming Language
 
@@ -24,8 +24,8 @@
 #ifndef _QORE_PYTHON_INTERNALS_H
 #define _QORE_PYTHON_INTERNALS_H
 
+#include <pystate.h>
 #include <dynamic_annotations.h>
-#include <fileobject.h>
 
 typedef struct _Py_atomic_address {
     uintptr_t _value;
@@ -36,7 +36,7 @@ typedef struct _Py_atomic_int {
 } _Py_atomic_int;
 
 struct _pending_calls {
-    int finishing;
+    unsigned long main_thread;
     PyThread_type_lock lock;
     /* Request for running pending calls. */
     _Py_atomic_int calls_to_do;
@@ -51,20 +51,6 @@ struct _pending_calls {
     } calls[NPENDINGCALLS];
     int first;
     int last;
-};
-
-struct _gilstate_runtime_state {
-    int check_enabled;
-    /* Assuming the current thread holds the GIL, this is the
-       PyThreadState for the current thread. */
-    _Py_atomic_address tstate_current;
-    PyThreadFrameGetter getframe;
-    /* The single PyInterpreterState used by this process'
-       GILState implementation
-    */
-    /* TODO: Given interp_main, it may be possible to kill this ref */
-    PyInterpreterState *autoInterpreterState;
-    Py_tss_t autoTSSkey;
 };
 
 #define FORCE_SWITCHING
@@ -110,10 +96,21 @@ struct _ceval_runtime_state {
     /* Request for dropping the GIL */
     _Py_atomic_int gil_drop_request;
     struct _pending_calls pending;
-    /* Request for checking signals. */
-    _Py_atomic_int signals_pending;
     struct _gil_runtime_state gil;
 };
+
+struct _warnings_runtime_state {
+    /* Both 'filters' and 'onceregistry' can be set in warnings.py;
+       get_warnings_attr() will reset these variables accordingly. */
+    PyObject *filters;  /* List */
+    PyObject *once_registry;  /* Dict */
+    PyObject *default_action; /* String */
+    long filters_version;
+};
+
+/* If we change this, we need to change the default value in the
+   signature of gc.collect. */
+#define NUM_GENERATIONS 3
 
 struct gc_generation {
     PyGC_Head head;
@@ -121,8 +118,6 @@ struct gc_generation {
     int count; /* count of allocations or collections of younger
                   generations */
 };
-
-#define NUM_GENERATIONS 3
 
 /* Running stats per generation */
 struct gc_generation_stats {
@@ -168,21 +163,23 @@ struct _gc_runtime_state {
     Py_ssize_t long_lived_pending;
 };
 
+struct _gilstate_runtime_state {
+    int check_enabled;
+    /* Assuming the current thread holds the GIL, this is the
+       PyThreadState for the current thread. */
+    _Py_atomic_address tstate_current;
+    PyThreadFrameGetter getframe;
+    /* The single PyInterpreterState used by this process'
+       GILState implementation
+    */
+    /* TODO: Given interp_main, it may be possible to kill this ref */
+    PyInterpreterState *autoInterpreterState;
+    Py_tss_t autoTSSkey;
+};
+
 typedef struct pyruntimestate {
-    /* Is running Py_PreInitialize()? */
-    int preinitializing;
-
-    /* Is Python preinitialized? Set to 1 by Py_PreInitialize() */
-    int preinitialized;
-
-    /* Is Python core initialized? Set to 1 by _Py_InitializeCore() */
-    int core_initialized;
-
-    /* Is Python fully initialized? Set to 1 by Py_Initialize() */
     int initialized;
-
-    /* Set by Py_FinalizeEx(). Only reset to NULL if Py_Initialize()
-       is called again. */
+    int core_initialized;
     PyThreadState *finalizing;
 
     struct pyinterpreters {
@@ -199,26 +196,15 @@ typedef struct pyruntimestate {
            using a Python int. */
         int64_t next_id;
     } interpreters;
-    // XXX Remove this field once we have a tp_* slot.
-    struct _xidregistry {
-        PyThread_type_lock mutex;
-        struct _xidregitem *head;
-    } xidregistry;
 
-    unsigned long main_thread;
 #define NEXITFUNCS 32
     void (*exitfuncs[NEXITFUNCS])(void);
     int nexitfuncs;
 
     struct _gc_runtime_state gc;
+    struct _warnings_runtime_state warnings;
     struct _ceval_runtime_state ceval;
     struct _gilstate_runtime_state gilstate;
-
-    PyPreConfig preconfig;
-
-    Py_OpenCodeHookFunction open_code_hook;
-    void *open_code_userdata;
-    void *audit_hook_head;
 
     // XXX Consolidate globals found via the check-c-globals script.
 } _PyRuntimeState;

@@ -58,15 +58,16 @@ DLLLOCAL extern qore_classid_t CID_PYTHONBASEOBJECT;
 #include "python38_internals.h"
 #elif PY_MINOR_VERSION == 6
 #include "python36_internals.h"
+#elif PY_MINOR_VERSION == 7
+#include "python37_internals.h"
 #else
-#error unknown pyton version
+#error unsupported python version
 #endif
 #endif
 #endif
 
 DLLLOCAL PyThreadState* _qore_PyRuntimeGILState_GetThreadState();
 DLLLOCAL void _qore_PyGILState_SetThisThreadState(PyThreadState* state);
-DLLLOCAL void _qore_Python_reenable_gil_check();
 
 //! acquires the GIL and sets the main interpreter thread context
 /** This class is used when a new interpreter context is created.
