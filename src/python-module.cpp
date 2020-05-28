@@ -126,8 +126,8 @@ static QoreStringNode* python_module_init() {
     pthread_key_delete(k);
 #endif
 
-    // initialize python library
-    Py_Initialize();
+    // initialize python library; do not register signal handlers
+    Py_InitializeEx(0);
 
     // ensure that runtime version matches compiled version
     check_python_version();
