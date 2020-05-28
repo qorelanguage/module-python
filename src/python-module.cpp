@@ -45,7 +45,10 @@ DLLEXPORT qore_license_t qore_module_license = QL_MIT;
 DLLEXPORT char qore_module_license_str[] = "MIT";
 
 QoreNamespace PNS(QORE_PYTHON_NS_NAME);
-static PyThreadState* mainThreadState = nullptr;
+PyThreadState* mainThreadState = nullptr;
+
+QorePythonClass* QC_PYTHONBASEOBJECT;
+qore_classid_t CID_PYTHONBASEOBJECT;
 
 // module cmd type
 using qore_python_module_cmd_t = void (*) (ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
@@ -57,16 +60,92 @@ static mcmap_t mcmap = {
     {"import", py_mc_import},
 };
 
+#ifdef NEED_PYTHON_36_TLS_KEY
+int autoTLSkey;
+#endif
+
+static void check_python_version() {
+    QorePythonReferenceHolder mod(PyImport_ImportModule("sys"));
+    if (!mod) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "Python could not load module 'sys'");
+    }
+
+    // returns a borrowed reference
+    PyObject* mod_dict = PyModule_GetDict(*mod);
+    if (!mod_dict) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "Python module 'sys' has no dictiomary");
+    }
+
+    // returns a borrowed reference
+    PyObject* value = PyDict_GetItemString(mod_dict, "version_info");
+    if (!value) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "symbol 'sys.version_info' not found; cannot verify the " \
+            "runtime version of the Python library");
+    }
+
+    if (!PyObject_HasAttrString(value, "major")) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "symbol 'sys.version.major' was not found; cannot " \
+            "verify the runtime version of the Python library");
+    }
+
+    QorePythonReferenceHolder py_major(PyObject_GetAttrString(value, "major"));
+    if (!PyLong_Check(*py_major)) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "symbol 'sys.version.major' has type '%s'; expecting " \
+            "'int'; cannot verify the runtime version of the Python library", Py_TYPE(*py_major)->tp_name);
+    }
+
+    long major = PyLong_AsLong(*py_major);
+    if (major != PY_MAJOR_VERSION) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "Python runtime major version is %ld, but the module was " \
+            "compiled with major version %d (%s)", major, PY_MAJOR_VERSION, PY_VERSION);
+    }
+
+    QorePythonReferenceHolder py_minor(PyObject_GetAttrString(value, "minor"));
+    if (!PyLong_Check(*py_minor)) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "symbol 'sys.version.minor' has type '%s'; expecting " \
+            "'int'; cannot verify the runtime version of the Python library", Py_TYPE(*py_minor)->tp_name);
+    }
+
+    long minor = PyLong_AsLong(*py_minor);
+    if (minor != PY_MINOR_VERSION) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "Python runtime version is %ld.%ld, but the module was " \
+            "compiled with version %d.%d (%s)", major, minor, PY_MAJOR_VERSION, PY_MINOR_VERSION, PY_VERSION);
+    }
+
+    //printd(5, "python runtime version OK: %ld.%ld.x =~ '%s'\n", major, minor, PY_VERSION);
+}
+
 static QoreStringNode* python_module_init() {
+#ifdef NEED_PYTHON_36_TLS_KEY
+    // Python 3.6 does not expose its thread-local key in the API, but we can determine the value by creating and
+    // destroying a thread-local key before we call Py_Initialize()
+    pthread_key_t k;
+    pthread_key_create(&k, nullptr);
+    //printd(5, "python_module_init() got Python 3.6 thread-local key: %d\n", k);
+    autoTLSkey = k;
+    pthread_key_delete(k);
+#endif
+
     // initialize python library
     Py_Initialize();
+
+    // ensure that runtime version matches compiled version
+    check_python_version();
 
     QorePythonProgram::staticInit();
 
     mainThreadState = PyThreadState_Get();
-    PyEval_ReleaseLock();
+    PyEval_ReleaseThread(mainThreadState);
+    assert(!_qore_PyRuntimeGILState_GetThreadState());
+    _qore_PyGILState_SetThisThreadState(nullptr);
+    assert(!PyGILState_GetThisThreadState());
 
     PNS.addSystemClass(initPythonProgramClass(PNS));
+
+    tclist.push(QorePythonProgram::pythonThreadCleanup, nullptr);
+
+    QC_PYTHONBASEOBJECT = new QorePythonClass("__qore_base__");
+    CID_PYTHONBASEOBJECT = QC_PYTHONBASEOBJECT->getID();
 
     return nullptr;
 }
@@ -79,11 +158,14 @@ static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns) {
         rns->addNamespace(pyns);
         pgm->setExternalData(QORE_PYTHON_MODULE_NAME, new QorePythonProgram(pgm, pyns));
     }
+
+    assert(!PyGILState_Check());
 }
 
 static void python_module_delete() {
     PyThreadState_Swap(nullptr);
     PyEval_AcquireThread(mainThreadState);
+    _qore_PyGILState_SetThisThreadState(mainThreadState);
     Py_Finalize();
 }
 
@@ -134,6 +216,8 @@ static void py_mc_import(ExceptionSink* xsink, QoreString& arg, QorePythonProgra
     // process import statement
     //printd(5, "python_module_parse_cmd() pypgm: %p arg: %s\n", pypgm, arg.c_str());
 
+    QorePythonHelper qph(pypgm);
+
     // see if there is a dot (.) in the name
     qore_offset_t i = arg.find('.');
     if (i < 0 || i == static_cast<qore_offset_t>(arg.size() - 1)) {
@@ -149,4 +233,11 @@ static void py_mc_import(ExceptionSink* xsink, QoreString& arg, QorePythonProgra
             pypgm->import(xsink, arg.c_str(), symbol);
         }
     }
+}
+
+QorePythonHelper::QorePythonHelper(const QorePythonProgram* pypgm) : pypgm(pypgm), old_state(pypgm->setContext()) {
+}
+
+QorePythonHelper::~QorePythonHelper() {
+    pypgm->releaseContext(old_state);
 }

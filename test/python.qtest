@@ -218,7 +218,7 @@ class test:
             assertThrows("TypeError", \x.__new__());
 
             delete pp;
-            assertThrows("PROGRAM-ERROR", \x.dostatic());
+            assertThrows("PYTHON-ERROR", \x.dostatic());
         }
     }
 

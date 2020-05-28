@@ -1,0 +1,331 @@
+/* -*- mode: c++; indent-tabs-mode: nil -*- */
+/*
+    python38_internals.h
+
+    Qore Programming Language
+
+    Copyright 2020 Qore Technologies, s.r.o.
+
+    This library is free software; you can redistribute it and/or
+    modify it under the terms of the GNU Lesser General Public
+    License as published by the Free Software Foundation; either
+    version 2.1 of the License, or (at your option) any later version.
+
+    This library is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public
+    License along with this library; if not, write to the Free Software
+    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+*/
+
+#ifndef _QORE_PYTHON_INTERNALS_H
+#define _QORE_PYTHON_INTERNALS_H
+
+#include <dynamic_annotations.h>
+#include <fileobject.h>
+
+typedef struct _Py_atomic_address {
+    uintptr_t _value;
+} _Py_atomic_address;
+
+typedef struct _Py_atomic_int {
+    int _value;
+} _Py_atomic_int;
+
+struct _pending_calls {
+    int finishing;
+    PyThread_type_lock lock;
+    /* Request for running pending calls. */
+    _Py_atomic_int calls_to_do;
+    /* Request for looking at the `async_exc` field of the current
+       thread state.
+       Guarded by the GIL. */
+    int async_exc;
+#define NPENDINGCALLS 32
+    struct {
+        int (*func)(void *);
+        void *arg;
+    } calls[NPENDINGCALLS];
+    int first;
+    int last;
+};
+
+struct _gilstate_runtime_state {
+    int check_enabled;
+    /* Assuming the current thread holds the GIL, this is the
+       PyThreadState for the current thread. */
+    _Py_atomic_address tstate_current;
+    PyThreadFrameGetter getframe;
+    /* The single PyInterpreterState used by this process'
+       GILState implementation
+    */
+    /* TODO: Given interp_main, it may be possible to kill this ref */
+    PyInterpreterState *autoInterpreterState;
+    Py_tss_t autoTSSkey;
+};
+
+#define FORCE_SWITCHING
+
+#define PyMUTEX_T pthread_mutex_t
+#define PyCOND_T pthread_cond_t
+
+struct _gil_runtime_state {
+    /* microseconds (the Python API uses seconds, though) */
+    unsigned long interval;
+    /* Last PyThreadState holding / having held the GIL. This helps us
+       know whether anyone else was scheduled after we dropped the GIL. */
+    _Py_atomic_address last_holder;
+    /* Whether the GIL is already taken (-1 if uninitialized). This is
+       atomic because it can be read without any lock taken in ceval.c. */
+    _Py_atomic_int locked;
+    /* Number of GIL switches since the beginning. */
+    unsigned long switch_number;
+    /* This condition variable allows one or several threads to wait
+       until the GIL is released. In addition, the mutex also protects
+       the above variables. */
+    PyCOND_T cond;
+    PyMUTEX_T mutex;
+#ifdef FORCE_SWITCHING
+    /* This condition variable helps the GIL-releasing thread wait for
+       a GIL-awaiting thread to be scheduled and take the GIL. */
+    PyCOND_T switch_cond;
+    PyMUTEX_T switch_mutex;
+#endif
+};
+
+struct _ceval_runtime_state {
+    int recursion_limit;
+    /* Records whether tracing is on for any thread.  Counts the number
+       of threads for which tstate->c_tracefunc is non-NULL, so if the
+       value is 0, we know we don't have to check this thread's
+       c_tracefunc.  This speeds up the if statement in
+       PyEval_EvalFrameEx() after fast_next_opcode. */
+    int tracing_possible;
+    /* This single variable consolidates all requests to break out of
+       the fast path in the eval loop. */
+    _Py_atomic_int eval_breaker;
+    /* Request for dropping the GIL */
+    _Py_atomic_int gil_drop_request;
+    struct _pending_calls pending;
+    /* Request for checking signals. */
+    _Py_atomic_int signals_pending;
+    struct _gil_runtime_state gil;
+};
+
+struct gc_generation {
+    PyGC_Head head;
+    int threshold; /* collection threshold */
+    int count; /* count of allocations or collections of younger
+                  generations */
+};
+
+#define NUM_GENERATIONS 3
+
+/* Running stats per generation */
+struct gc_generation_stats {
+    /* total number of collections */
+    Py_ssize_t collections;
+    /* total number of collected objects */
+    Py_ssize_t collected;
+    /* total number of uncollectable objects (put into gc.garbage) */
+    Py_ssize_t uncollectable;
+};
+
+struct _gc_runtime_state {
+    /* List of objects that still need to be cleaned up, singly linked
+     * via their gc headers' gc_prev pointers.  */
+    PyObject *trash_delete_later;
+    /* Current call-stack depth of tp_dealloc calls. */
+    int trash_delete_nesting;
+
+    int enabled;
+    int debug;
+    /* linked lists of container objects */
+    struct gc_generation generations[NUM_GENERATIONS];
+    PyGC_Head *generation0;
+    /* a permanent generation which won't be collected */
+    struct gc_generation permanent_generation;
+    struct gc_generation_stats generation_stats[NUM_GENERATIONS];
+    /* true if we are currently running the collector */
+    int collecting;
+    /* list of uncollectable objects */
+    PyObject *garbage;
+    /* a list of callbacks to be invoked when collection is performed */
+    PyObject *callbacks;
+    /* This is the number of objects that survived the last full
+       collection. It approximates the number of long lived objects
+       tracked by the GC.
+
+       (by "full collection", we mean a collection of the oldest
+       generation). */
+    Py_ssize_t long_lived_total;
+    /* This is the number of objects that survived all "non-full"
+       collections, and are awaiting to undergo a full collection for
+       the first time. */
+    Py_ssize_t long_lived_pending;
+};
+
+typedef struct pyruntimestate {
+    /* Is running Py_PreInitialize()? */
+    int preinitializing;
+
+    /* Is Python preinitialized? Set to 1 by Py_PreInitialize() */
+    int preinitialized;
+
+    /* Is Python core initialized? Set to 1 by _Py_InitializeCore() */
+    int core_initialized;
+
+    /* Is Python fully initialized? Set to 1 by Py_Initialize() */
+    int initialized;
+
+    /* Set by Py_FinalizeEx(). Only reset to NULL if Py_Initialize()
+       is called again. */
+    PyThreadState *finalizing;
+
+    struct pyinterpreters {
+        PyThread_type_lock mutex;
+        PyInterpreterState *head;
+        PyInterpreterState *main;
+        /* _next_interp_id is an auto-numbered sequence of small
+           integers.  It gets initialized in _PyInterpreterState_Init(),
+           which is called in Py_Initialize(), and used in
+           PyInterpreterState_New().  A negative interpreter ID
+           indicates an error occurred.  The main interpreter will
+           always have an ID of 0.  Overflow results in a RuntimeError.
+           If that becomes a problem later then we can adjust, e.g. by
+           using a Python int. */
+        int64_t next_id;
+    } interpreters;
+    // XXX Remove this field once we have a tp_* slot.
+    struct _xidregistry {
+        PyThread_type_lock mutex;
+        struct _xidregitem *head;
+    } xidregistry;
+
+    unsigned long main_thread;
+#define NEXITFUNCS 32
+    void (*exitfuncs[NEXITFUNCS])(void);
+    int nexitfuncs;
+
+    struct _gc_runtime_state gc;
+    struct _ceval_runtime_state ceval;
+    struct _gilstate_runtime_state gilstate;
+
+    PyPreConfig preconfig;
+
+    Py_OpenCodeHookFunction open_code_hook;
+    void *open_code_userdata;
+    void *audit_hook_head;
+
+    // XXX Consolidate globals found via the check-c-globals script.
+} _PyRuntimeState;
+
+DLLLOCAL extern _PyRuntimeState _PyRuntime;
+
+#if defined(__GNUC__) && (defined(__i386__) || defined(__amd64))
+typedef enum _Py_memory_order {
+    _Py_memory_order_relaxed,
+    _Py_memory_order_acquire,
+    _Py_memory_order_release,
+    _Py_memory_order_acq_rel,
+    _Py_memory_order_seq_cst
+} _Py_memory_order;
+
+static __inline__ void
+_Py_atomic_signal_fence(_Py_memory_order order)
+{
+    if (order != _Py_memory_order_relaxed)
+        __asm__ volatile("":::"memory");
+}
+
+static __inline__ void
+_Py_atomic_thread_fence(_Py_memory_order order)
+{
+    if (order != _Py_memory_order_relaxed)
+        __asm__ volatile("mfence":::"memory");
+}
+
+/* Tell the race checker about this operation's effects. */
+static __inline__ void
+_Py_ANNOTATE_MEMORY_ORDER(const volatile void *address, _Py_memory_order order)
+{
+    (void)address;              /* shut up -Wunused-parameter */
+    switch(order) {
+    case _Py_memory_order_release:
+    case _Py_memory_order_acq_rel:
+    case _Py_memory_order_seq_cst:
+        _Py_ANNOTATE_HAPPENS_BEFORE(address);
+        break;
+    case _Py_memory_order_relaxed:
+    case _Py_memory_order_acquire:
+        break;
+    }
+    switch(order) {
+    case _Py_memory_order_acquire:
+    case _Py_memory_order_acq_rel:
+    case _Py_memory_order_seq_cst:
+        _Py_ANNOTATE_HAPPENS_AFTER(address);
+        break;
+    case _Py_memory_order_relaxed:
+    case _Py_memory_order_release:
+        break;
+    }
+}
+
+#define _Py_atomic_load_explicit(ATOMIC_VAL, ORDER) \
+    __extension__ ({  \
+        __typeof__(ATOMIC_VAL) atomic_val = ATOMIC_VAL; \
+        __typeof__(atomic_val->_value) result; \
+        volatile __typeof__(result) *volatile_data = &atomic_val->_value; \
+        _Py_memory_order order = ORDER; \
+        _Py_ANNOTATE_MEMORY_ORDER(atomic_val, order); \
+        \
+        /* Perform the operation. */ \
+        _Py_ANNOTATE_IGNORE_READS_BEGIN(); \
+        switch(order) { \
+        case _Py_memory_order_release: \
+        case _Py_memory_order_acq_rel: \
+        case _Py_memory_order_seq_cst: \
+            /* Loads on x86 are not releases by default, so need a */ \
+            /* thread fence. */ \
+            _Py_atomic_thread_fence(_Py_memory_order_release); \
+            break; \
+        default: \
+            /* No fence */ \
+            break; \
+        } \
+        result = *volatile_data; \
+        switch(order) { \
+        case _Py_memory_order_acquire: \
+        case _Py_memory_order_acq_rel: \
+        case _Py_memory_order_seq_cst: \
+            /* Loads on x86 are automatically acquire operations so */ \
+            /* can get by with just a compiler fence. */ \
+            _Py_atomic_signal_fence(_Py_memory_order_acquire); \
+            break; \
+        default: \
+            /* No fence */ \
+            break; \
+        } \
+        _Py_ANNOTATE_IGNORE_READS_END(); \
+        result; \
+    })
+#endif
+
+#define _Py_atomic_load_relaxed(ATOMIC_VAL) \
+    _Py_atomic_load_explicit((ATOMIC_VAL), _Py_memory_order_relaxed)
+
+DLLLOCAL static PyThreadState* _qore_PyRuntimeGILState_GetThreadState() {
+    return reinterpret_cast<PyThreadState*>(_Py_atomic_load_relaxed(&_PyRuntime.gilstate.tstate_current));
+}
+
+DLLLOCAL static void _qore_PyGILState_SetThisThreadState(PyThreadState* state) {
+    PyThread_tss_set(&_PyRuntime.gilstate.autoTSSkey, (void*)state);
+}
+
+#define _QORE_PYTHON_REENABLE_GIL_CHECK { assert(!_PyRuntime.gilstate.check_enabled); _PyRuntime.gilstate.check_enabled = 1; }
+
+#endif
