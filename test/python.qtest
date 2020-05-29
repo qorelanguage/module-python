@@ -246,7 +246,7 @@ auto sub get(auto arg) {
     return math::sin(arg);
 }", "import.q");
 
-            assertEq("math", p.getExpression("__name__", "test").eval());
+            assertEq("math", p.getExpression("math::__name__", "test").eval());
             assertEq(Type::String, p.getExpression("__doc__", "test").eval().type());
             assertEq(Type::String, p.getExpression("__package__", "test").eval().type());
             #__file__ not present in staticly-linked C modules
