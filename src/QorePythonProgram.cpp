@@ -52,6 +52,24 @@ static bool _qore_PyThreadState_IsCurrent(PyThreadState* tstate) {
 QorePythonProgram::py_thr_map_t QorePythonProgram::py_thr_map;
 QoreThreadLock QorePythonProgram::py_thr_lck;
 
+QorePythonProgram::QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns) : qpgm(qpgm), pyns(pyns) {
+    //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
+    QorePythonGilHelper qpgh;
+
+    //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
+    if (createInterpreter(nullptr)) {
+        valid = false;
+    }
+
+    // ensure that the __main__ module is created
+    // returns a borrowed reference
+    PyImport_AddModule("__main__");
+
+    ExceptionSink xsink;
+    import(&xsink, "builtins");
+    assert(!xsink);
+}
+
 void QorePythonProgram::staticInit() {
     PyDateTime_IMPORT;
 }
@@ -600,7 +618,8 @@ QoreValue QorePythonProgram::callFunction(ExceptionSink* xsink, const QoreString
     return callInternal(xsink, py_func, args, arg_offset);
 }
 
-QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const QoreString& class_name, const QoreString& method_name, const QoreListNode* args, size_t arg_offset) {
+QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const QoreString& class_name,
+    const QoreString& method_name, const QoreListNode* args, size_t arg_offset) {
     TempEncodingHelper cname(class_name, QCS_UTF8, xsink);
     if (*xsink) {
         xsink->appendLastDescription(" (while processing the \"class_name\" argument)");
@@ -623,9 +642,13 @@ QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const char* cname,
         return QoreValue();
     }
 
+    assert(module_dict);
+    assert(builtin_dict);
+
     // returns a borrowed reference
     PyObject* py_class = PyDict_GetItemString(module_dict, cname);
     if (!py_class || !PyType_Check(py_class)) {
+        // returns a borrowed reference
         py_class = PyDict_GetItemString(builtin_dict, cname);
         if (!py_class || !PyType_Check(py_class)) {
             xsink->raiseException("NO-CLASS", "cannot find class '%s'", cname);
@@ -693,6 +716,11 @@ QoreValue QorePythonProgram::callFunctionObject(ExceptionSink* xsink, PyObject* 
         return QoreValue();
     }
     return getQoreValue(xsink, return_value.release());
+}
+
+void QorePythonProgram::clearPythonException() {
+    QorePythonReferenceHolder ex_type, ex_value, traceback;
+    PyErr_Fetch(ex_type.getRef(), ex_value.getRef(), traceback.getRef());
 }
 
 int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
@@ -815,8 +843,64 @@ QorePythonClass* QorePythonProgram::getCreateQorePythonClass(ExceptionSink* xsin
     return getCreateQorePythonClassIntern(xsink, type);
 }
 
-QorePythonClass* QorePythonProgram::getCreateQorePythonClassIntern(ExceptionSink* xsink, PyTypeObject* type,
-    QoreNamespace* parent_ns, const char* cname) {
+#if 0
+static void show_dict(PyObject* globals) {
+    if (!globals) {
+        return;
+    }
+    PyObject* key, * value;
+    Py_ssize_t pos = 0;
+    // first import classes and modules
+    while (PyDict_Next(globals, &pos, &key, &value)) {
+        if (PyUnicode_Check(value)) {
+            printd(0, "+ %s => type %s\n", PyUnicode_AsUTF8(key), PyUnicode_AsUTF8(value));
+        } else {
+            printd(0, "+ %s => type %s\n", PyUnicode_AsUTF8(key), Py_TYPE(value)->tp_name);
+        }
+    }
+}
+#endif
+
+QoreNamespace* QorePythonProgram::getNamespaceForObject(PyObject* obj) {
+    //printd(5, "QorePythonProgram::getNamespaceForObject() obj: %p (%s)\n", obj, Py_TYPE(obj)->tp_name);
+    QoreString ns_path;
+
+    // use the __name__ attribute to derive the namespace path if possible
+    if (PyObject_HasAttrString(obj, "__name__")) {
+        QorePythonReferenceHolder name(PyObject_GetAttrString(obj, "__name__"));
+        const char* name_str = PyUnicode_AsUTF8(*name);
+        //printd(5, "QorePythonProgram::getNamespaceForObject() obj %p __name__ '%s'\n", obj, name_str);
+        const char* p = strrchr(name_str, '.');
+        if (p) {
+            ns_path = name_str;
+            ns_path.terminate(p - name_str);
+            ns_path.replaceAll(".", "::");
+        }
+    }
+
+    // otherwise use "module_context", if not available, use the __module__ attribute, if available
+    if (!module_context && ns_path.empty() && PyObject_HasAttrString(obj, "__module__")) {
+        QorePythonReferenceHolder mod(PyObject_GetAttrString(obj, "__module__"));
+        if (PyUnicode_Check(*mod)) {
+            const char* mod_str = PyUnicode_AsUTF8(*mod);
+            //printd(5, "QorePythonProgram::getNamespaceForObject() obj %p __module__ '%s'\n", obj, mod_str);
+            ns_path = mod_str;
+            ns_path.replaceAll(".", "::");
+        }
+    }
+
+    if (ns_path.empty()) {
+        //printd(0, "QorePythonProgram::getNamespaceForObject() obj %p (%s) -> ns: Python\n", obj, Py_TYPE(obj)->tp_name);
+        if (!module_context) {
+            return pyns;
+        }
+        ns_path = module_context;
+    }
+    //printd(5, "QorePythonProgram::getNamespaceForObject() obj %p (%s) -> ns: Python::%s\n", obj, Py_TYPE(obj)->tp_name, ns_path.c_str());
+    return pyns->findCreateNamespacePathAll(ns_path.c_str());
+}
+
+QorePythonClass* QorePythonProgram::getCreateQorePythonClassIntern(ExceptionSink* xsink, PyTypeObject* type, const char* cname) {
     //printd(5, "QorePythonProgram::getCreateQorePythonClassIntern() class: '%s'\n", type->tp_name);
 
     clmap_t::iterator i = clmap.lower_bound(type);
@@ -824,38 +908,31 @@ QorePythonClass* QorePythonProgram::getCreateQorePythonClassIntern(ExceptionSink
         return i->second;
     }
 
-    if (!parent_ns) {
-        parent_ns = pyns;
-    }
-
     // get relative path to class and class name
     std::string rpath_str;
-    const char* rpath;
-    {
+    if (!cname) {
         const char* p = strrchr(type->tp_name, '.');
         if (p) {
             rpath_str = std::string(type->tp_name, p - type->tp_name);
-            rpath = rpath_str.c_str();
-            if (!cname) {
-                cname = p + 1;
-            }
+            cname = p + 1;
         } else {
-            rpath = nullptr;
-            if (!cname) {
-                cname = type->tp_name;
-            }
+            cname = type->tp_name;
         }
     }
 
     // create new QorePythonClass
-    QoreNamespace* ns;
-    if (!rpath) {
-        ns = parent_ns;
-    } else {
-        QoreString rel_ns_path(rpath);
-        rel_ns_path.replaceAll(".", "::");
-        ns = parent_ns->findCreateNamespacePathAll(rel_ns_path.c_str());
+    QoreNamespace* ns = getNamespaceForObject(reinterpret_cast<PyObject*>(type));
+
+    // get a unique name for the class
+    QoreString cname_str = cname;
+    {
+        int base = 0;
+        while (ns->findLocalClass(cname_str.c_str())) {
+            cname_str.clear();
+            cname_str.sprintf("%s_base_%d", cname, base++);
+        }
     }
+    cname = cname_str.c_str();
 
     // create new class
     std::unique_ptr<QorePythonClass> cls(new QorePythonClass(this, cname));
@@ -863,7 +940,7 @@ QorePythonClass* QorePythonProgram::getCreateQorePythonClassIntern(ExceptionSink
     // insert into map
     clmap.insert(i, clmap_t::value_type(type, cls.get()));
 
-    //printd(5, "QorePythonProgram::getCreateQorePythonClassIntern() parent ns: '%s' ns: '%s' cls: '%s' (%s)\n", parent_ns->getName(), ns->getName(), cls->getName(), type->tp_name);
+    //printd(5, "QorePythonProgram::getCreateQorePythonClassIntern() ns: '%s' cls: '%s' (%s)\n", ns->getName(), cls->getName(), type->tp_name);
 
     cls->addConstructor((void*)type, (q_external_constructor_t)execPythonConstructor, Public,
             QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API);
@@ -876,6 +953,8 @@ QorePythonClass* QorePythonProgram::getCreateQorePythonClassIntern(ExceptionSink
         for (Py_ssize_t i = 0, end = PyTuple_GET_SIZE(type->tp_bases); i < end; ++i) {
             PyTypeObject* b = reinterpret_cast<PyTypeObject*>(PyTuple_GET_ITEM(type->tp_bases, i));
             assert(PyType_Check(b));
+
+            //printd(5, "QorePythonProgram::getCreateQorePythonClassIntern() %s (%p) parent: %s (%p)\n", type->tp_name, type, b->tp_name, b);
 
             QorePythonClass* bclass = getCreateQorePythonClassIntern(xsink, b);
             if (!bclass) {
@@ -1168,6 +1247,8 @@ QoreValue QorePythonProgram::callClassMethodDescriptorMethod(ExceptionSink* xsin
 }
 
 int QorePythonProgram::import(ExceptionSink* xsink, const char* module, const char* symbol) {
+    // make sure we don't already have this symbol
+    // returns a borrowed reference
     QorePythonReferenceHolder mod(PyImport_ImportModule(module));
     if (!mod) {
         if (!checkPythonException(xsink)) {
@@ -1176,15 +1257,13 @@ int QorePythonProgram::import(ExceptionSink* xsink, const char* module, const ch
         return -1;
     }
 
+    // https://docs.python.org/3/reference/import.html:
+    // any module that contains a __path__ attribute is considered a package
+    //bool is_package = PyObject_HasAttrString(*mod, "__path__");
+
     QoreString ns_path(module);
 
     if (symbol) {
-        // returns a borrowed reference
-        PyObject* mod_dict = PyModule_GetDict(*mod);
-        if (!mod_dict) {
-            throw QoreStandardException("PYTHON-IMPORT-ERROR", "Python module '%s' has no dictiomary", module);
-        }
-
         QoreString sym(symbol);
         // find intermediate modules
         while (true) {
@@ -1194,21 +1273,21 @@ int QorePythonProgram::import(ExceptionSink* xsink, const char* module, const ch
             }
             QoreString mod_name(&sym, i);
 
-            // returns a borrowed reference
-            PyObject* mod_val = PyDict_GetItemString(mod_dict, mod_name.c_str());
-            if (!mod_val) {
-                throw QoreStandardException("PYTHON-IMPORT-ERROR", "submodule '%s' was not found in module " \
-                    "\"%s\"'s dictionary", mod_name.c_str(), module);
+            if (!PyObject_HasAttrString(*mod, mod_name.c_str())) {
+                throw QoreStandardException("PYTHON-IMPORT-ERROR", "submodule '%s' is not an attribute of '%s'",
+                    mod_name.c_str(), module);
             }
-            if (!PyModule_Check(mod_val)) {
+            QorePythonReferenceHolder mod_val(PyObject_GetAttrString(*mod, mod_name.c_str()));
+            assert(mod_val);
+            if (!PyModule_Check(*mod_val)) {
                 throw QoreStandardException("PYTHON-IMPORT-ERROR", "'%s' is not a submodule but rather has " \
-                    "type '%s'", mod_name.c_str(), Py_TYPE(mod_val)->tp_name);
+                    "type '%s'", mod_name.c_str(), Py_TYPE(*mod_val)->tp_name);
             }
+
+            mod = mod_val.release();
 
             ns_path.sprintf("::%s", mod_name.c_str());
 
-            // returns a borrowed reference
-            mod_dict = PyModule_GetDict(mod_val);
             sym.splice(0, i + 1, xsink);
             if (*xsink) {
                 return -1;
@@ -1216,95 +1295,160 @@ int QorePythonProgram::import(ExceptionSink* xsink, const char* module, const ch
             symbol = sym.c_str();
         }
 
-        // returns a borrowed reference
-        PyObject* value = PyDict_GetItemString(mod_dict, symbol);
-        if (!value) {
-            throw QoreStandardException("PYTHON-IMPORT-ERROR", "symbol '%s' was not found in module \"%s\"'s " \
-                "dictionary", symbol, module);
+        // if the module has already been imported, then ignore
+        if (mod_set.find(*mod) != mod_set.end()) {
+            return 0;
         }
 
-        QoreNamespace* ns = pyns->findCreateNamespacePathAll(ns_path.c_str());
-        pyobj_set_t mod_set;
-        return importSymbol(xsink, value, ns, module, symbol, IF_ALL, mod_set);
+        PythonModuleContextHelper mch(this, ns_path.c_str());
+        return checkImportSymbol(xsink, sym.c_str(), *mod, PyObject_HasAttrString(*mod, "__path__"), symbol, IF_ALL,
+            false);
     }
 
+    return importModule(xsink, *mod, nullptr, module, IF_ALL);
+
+    /*
     // first import all classes
-    {
-        pyobj_set_t mod_set;
-        if (importModule(xsink, *mod, module, IF_CLASS, mod_set)) {
-            assert(*xsink);
-            return -1;
-        }
+    if (importModule(xsink, *mod, nullptr, module, IF_CLASS)) {
+        assert(*xsink);
+        return -1;
     }
 
-    pyobj_set_t mod_set;
-    return importModule(xsink, *mod, module, IF_OTHER, mod_set);
+    return importModule(xsink, *mod, nullptr, module, IF_OTHER);
+    */
 }
 
-int QorePythonProgram::importModule(ExceptionSink* xsink, PyObject* mod, const char* module, int filter,
-    pyobj_set_t& mod_set) {
+int QorePythonProgram::importModule(ExceptionSink* xsink, PyObject* mod, PyObject* globals, const char* module,
+    int filter) {
     PythonModuleContextHelper mch(this, module);
 
+    // if the module has already been imported, then ignore
     if (mod_set.find(mod) != mod_set.end()) {
         return 0;
     }
     mod_set.insert(mod);
 
-    //printd(5, "QorePythonProgram::importModule() '%s' mod: %p (%d)\n", module, mod, filter);
+    PyObject* main = PyImport_AddModule("__main__");
+    PyObject_SetAttrString(main, module, mod);
 
     // returns a borrowed reference
     PyObject* mod_dict = PyModule_GetDict(mod);
+    if (!mod_dict) {
+        // no dictionary; cannot import module
+        return 0;
+    }
+    // https://docs.python.org/3/reference/import.html:
+    // any module that contains a __path__ attribute is considered a package
+    bool is_package = (bool)PyDict_GetItemString(mod_dict, "__path__");
 
-    QoreNamespace* ns = pyns->findCreateNamespacePathAll(module);
+    //printd(5, "QorePythonProgram::importModule() '%s' mod: %p (%d) pkg: %d (def: %p)\n", module, mod, filter, is_package, PyModule_GetDef(mod));
 
-    PyObject* key, * value;
-    Py_ssize_t pos = 0;
-    // first import classes and modules
-    while (PyDict_Next(mod_dict, &pos, &key, &value)) {
-        bool is_class = PyType_Check(value);
-        if (is_class) {
-            if (!(filter & IF_CLASS)) {
-                continue;
+    // check the dictionary for __all__, giving a list of strings as public symbols
+    // returns a borrowed reference
+    {
+        PyObject* all = PyDict_GetItemString(mod_dict, "__all__");
+        if (all && PyTuple_Check(all)) {
+            Py_ssize_t len = PyTuple_Size(all);
+            for (Py_ssize_t i = 0; i < len; ++i) {
+                // returns a borrowed reference
+                PyObject* sv = PyTuple_GetItem(all, i);
+                if (!sv || !PyUnicode_Check(sv)) {
+                    throw QoreStandardException("PYTHON-IMPORT-ERROR", "module '%s' __all__ has an invalid " \
+                        "element with type '%s'; expecting 'str'", module, sv ? Py_TYPE(sv)->tp_name : "null");
+                }
+                if (checkImportSymbol(xsink, module, mod, is_package, PyUnicode_AsUTF8(sv), filter, true)) {
+                    return -1;
+                }
             }
-        } else if (!PyModule_Check(value) && !(filter & IF_OTHER)) {
-            continue;
-        }
-
-        assert(Py_TYPE(key) == &PyUnicode_Type);
-        const char* keystr = PyUnicode_AsUTF8(key);
-        if (importSymbol(xsink, value, ns, module, keystr, filter, mod_set)) {
-            return -1;
+            printd(5, "QorePythonProgram::importModule() '%s' mod: %p (%d) pkg: %d imported __all__: %d\n", module, mod, filter, is_package, len);
+            return 0;
         }
     }
 
+    if (PyObject_HasAttrString(mod, "reduce_sum")) {
+        // get UTC offset for time
+        QorePythonReferenceHolder tv(PyObject_GetAttrString(mod, "reduce_sum"));
+        printd(5, "QorePythonProgram::importModule() '%s' mod: %p reduce_sum: %p (%s) filt: %d\n", module, mod, *tv, Py_TYPE(*tv)->tp_name, filter);
+    }
+
+    QorePythonReferenceHolder dir(PyObject_Dir(mod));
+    if (dir && PyList_Check(*dir)) {
+        Py_ssize_t len = PyList_Size(*dir);
+        for (Py_ssize_t i = 0; i < len; ++i) {
+            // returns a borrowed reference
+            PyObject* sv = PyList_GetItem(*dir, i);
+            if (!sv || !PyUnicode_Check(sv)) {
+                throw QoreStandardException("PYTHON-IMPORT-ERROR", "module '%s' __all__ has an invalid " \
+                    "element with type '%s'; expecting 'str'", module, sv ? Py_TYPE(sv)->tp_name : "null");
+            }
+
+            if (checkImportSymbol(xsink, module, mod, is_package, PyUnicode_AsUTF8(sv), filter, true)) {
+                return -1;
+            }
+        }
+        printd(5, "QorePythonProgram::importModule() '%s' mod: %p (%d) pkg: %d imported dir: %d\n", module, mod, filter, is_package, len);
+        return 0;
+    }
+
+    throw QoreStandardException("PYTHON-IMPORT-ERROR", "module '%s' has no symbol directory", module);
+}
+
+int QorePythonProgram::checkImportSymbol(ExceptionSink* xsink, const char* module, PyObject* mod, bool is_package,
+    const char* symbol, int filter, bool ignore_missing) {
+    if (!PyObject_HasAttrString(mod, symbol)) {
+        if (ignore_missing) {
+            return 0;
+        }
+        throw QoreStandardException("PYTHON-IMPORT-ERROR", "module '%s' references unknown symbol '%s'", module,
+            symbol);
+    }
+    QorePythonReferenceHolder value(PyObject_GetAttrString(mod, symbol));
+    assert(value);
+
+    bool is_class = PyType_Check(*value);
+    if (is_class) {
+        if (!(filter & IF_CLASS)) {
+            return 0;
+        }
+    } else {
+        bool is_module = PyModule_Check(*value);
+        if (is_module) {
+            if (!is_package) {
+                return 0;
+            }
+        } else if (!(filter & IF_OTHER)) {
+            return 0;
+        }
+    }
+
+    return importSymbol(xsink, *value, module, symbol, filter);
+}
+
+int QorePythonProgram::findCreateQoreFunction(PyObject* value, const char* symbol, q_external_func_t func) {
+    QoreNamespace* ns = getNamespaceForObject(value);
+    if (!ns->findLocalFunction(symbol)) {
+        // do not need to save reference here
+        ns->addBuiltinVariant((void*)value, symbol, func, QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API, autoTypeInfo);
+        printd(5, "QorePythonProgram::findCreateQoreFunction() added function %s::%s() (%s)\n", ns->getName(), symbol, Py_TYPE(value)->tp_name);
+    }
     return 0;
 }
 
-int QorePythonProgram::importSymbol(ExceptionSink* xsink, PyObject* value, QoreNamespace* ns, const char* module,
-    const char* symbol, int filter, pyobj_set_t& mod_set) {
+int QorePythonProgram::importSymbol(ExceptionSink* xsink, PyObject* value, const char* module,
+    const char* symbol, int filter) {
+    printd(5, "QorePythonProgram::importSymbol() %s.%s (type %s)\n", module, symbol, Py_TYPE(value)->tp_name);
     // check for builtin functions -> static method
     if (PyCFunction_Check(value)) {
-        // do not need to save reference here
-        ns->addBuiltinVariant((void*)value, symbol,
-            (q_external_func_t)QorePythonProgram::execPythonCFunction, QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API,
-            autoTypeInfo);
-        printd(5, "QorePythonProgram::importSymbol() added C function method %s::%s() (%s) (x: %d %s)\n", module, symbol,
-            Py_TYPE(value)->tp_name, owns_qore_program_ref, ns->getName());
-        return 0;
+        return findCreateQoreFunction(value, symbol, (q_external_func_t)QorePythonProgram::execPythonCFunction);
     }
 
     if (PyFunction_Check(value)) {
-        ns->addBuiltinVariant((void*)value, symbol,
-            (q_external_func_t)QorePythonProgram::execPythonFunction, QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API,
-            autoTypeInfo);
-
-        //printd(5, "QorePythonProgram::importSymbol() added function %s::%s() (%s) (x: %d %s)\n", module, symbol, Py_TYPE(value)->tp_name, owns_qore_program_ref, ns->getName());
-        return 0;
+        return findCreateQoreFunction(value, symbol, (q_external_func_t)QorePythonProgram::execPythonFunction);
     }
 
     if (PyType_Check(value)) {
         //printd(5, "QorePythonProgram::importSymbol() class sym: '%s' -> '%s' (%p)\n", symbol, reinterpret_cast<PyTypeObject*>(value)->tp_name, value);
-        QorePythonClass* cls = getCreateQorePythonClassIntern(xsink, reinterpret_cast<PyTypeObject*>(value), ns);
+        QorePythonClass* cls = getCreateQorePythonClassIntern(xsink, reinterpret_cast<PyTypeObject*>(value));
         if (*xsink) {
             assert(!cls);
             return -1;
@@ -1316,7 +1460,7 @@ int QorePythonProgram::importSymbol(ExceptionSink* xsink, PyObject* value, QoreN
 
     if (PyModule_Check(value)) {
         QoreStringMaker sub_module("%s::%s", module, symbol);
-        return importModule(xsink, value, sub_module.c_str(), filter, mod_set);
+        return importModule(xsink, value, nullptr, sub_module.c_str(), filter);
     }
 
     //printd(5, "QorePythonProgram::importSymbol() adding const %s.%s = '%s'\n", module, symbol, Py_TYPE(value)->tp_name);
@@ -1324,9 +1468,15 @@ int QorePythonProgram::importSymbol(ExceptionSink* xsink, PyObject* value, QoreN
     if (*xsink) {
         return -1;
     }
+    // skip empty values
+    if (!v) {
+        return 0;
+    }
     const QoreTypeInfo* typeInfo = v->getFullTypeInfo();
 
-    //printd(5, "QorePythonProgram::importSymbol() adding const %s.%s = '%s'\n", module, symbol, qore_type_get_name(typeInfo));
+    QoreNamespace* ns = pyns->findCreateNamespacePathAll(module_context);
+
+    printd(5, "QorePythonProgram::importSymbol() adding const %s.%s = '%s'\n", module_context, symbol, qore_type_get_name(typeInfo));
     ns->addConstant(symbol, v.release(), typeInfo);
     return 0;
 }

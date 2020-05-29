@@ -54,15 +54,7 @@ class QorePythonProgram : public AbstractPrivateData, public AbstractQoreProgram
     friend class PythonModuleContextHelper;
 public:
     //! Default Qore Python context; does not own the QoreProgram reference
-    DLLLOCAL QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns) : qpgm(qpgm), pyns(pyns) {
-        //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
-        QorePythonGilHelper qpgh;
-
-        //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
-        if (createInterpreter(nullptr)) {
-            valid = false;
-        }
-    }
+    DLLLOCAL QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns);
 
     //! New Qore Python context; does not own the QoreProgram reference
     DLLLOCAL QorePythonProgram(const QorePythonProgram& old, QoreProgram* qpgm) : QorePythonProgram(qpgm,
@@ -151,6 +143,7 @@ public:
         if (checkValid(xsink)) {
             return QoreValue();
         }
+        assert(module_dict);
         QorePythonReferenceHolder return_value(PyEval_EvalCode(*python_code, module_dict, module_dict));
 
         // check for Python exceptions
@@ -204,6 +197,7 @@ public:
 
         {
             //QorePythonHelper qph(this);
+            // returns a borrowed reference
             PyObject* main = PyImport_AddModule("__main__");
             PyObject* main_dict = PyModule_GetDict(main);
             return_value = PyEval_EvalCode(*python_code, main_dict, main_dict);
@@ -260,6 +254,9 @@ public:
 
     //! Checks for a Python exception and creates a Qore exception from it
     DLLLOCAL int checkPythonException(ExceptionSink* xsink);
+
+    //! Clears any Python
+    DLLLOCAL void clearPythonException();
 
     //! Calls a Python method and returns the result as a %Qore value
     DLLLOCAL QoreValue callPythonMethod(ExceptionSink* xsink, PyObject* attr, PyObject* obj, const QoreListNode* args,
@@ -432,6 +429,7 @@ protected:
 
     //! ensures modulea are only imported once
     typedef std::set<PyObject*> pyobj_set_t;
+    pyobj_set_t mod_set;
 
     //! mutex for thread state map
     static QoreThreadLock py_thr_lck;
@@ -441,9 +439,11 @@ protected:
     typedef std::map<const QorePythonProgram*, py_tid_map_t> py_thr_map_t;
     DLLLOCAL static py_thr_map_t py_thr_map;
 
+    DLLLOCAL QoreNamespace* getNamespaceForObject(PyObject* type);
+
     DLLLOCAL QorePythonClass* getCreateQorePythonClass(ExceptionSink* xsink, PyTypeObject* type);
     DLLLOCAL QorePythonClass* getCreateQorePythonClassIntern(ExceptionSink* xsink, PyTypeObject* type,
-        QoreNamespace* parent_ns = nullptr, const char* cls_name = nullptr);
+        const char* cls_name = nullptr);
 
     //! Call a method and and return the result
     DLLLOCAL QoreValue callCFunctionMethod(ExceptionSink* xsink, PyObject* func, const QoreListNode* args,
@@ -459,12 +459,18 @@ protected:
     DLLLOCAL QoreValue callClassMethodDescriptorMethod(ExceptionSink* xsink, PyObject* self, PyObject* obj,
         const QoreListNode* args, size_t arg_offset = 0);
 
+    //! Retrieve and import the given symbol
+    DLLLOCAL int checkImportSymbol(ExceptionSink* xsink, const char* module, PyObject* mod, bool is_package,
+        const char* symbol, int filter, bool ignore_missing);
+
     //! Import the given symbol into the Qore program object
-    DLLLOCAL int importSymbol(ExceptionSink* xsink, PyObject* value, QoreNamespace* ns, const char* module,
-        const char* symbol, int filter, pyobj_set_t& mod_set);
+    DLLLOCAL int importSymbol(ExceptionSink* xsink, PyObject* value, const char* module, const char* symbol,
+        int filter);
 
     //! Imports the given module
-    DLLLOCAL int importModule(ExceptionSink* xsink, PyObject* mod, const char* module, int filter, pyobj_set_t& mod_set);
+    DLLLOCAL int importModule(ExceptionSink* xsink, PyObject* mod, PyObject* globals, const char* module, int filter);
+
+    DLLLOCAL int findCreateQoreFunction(PyObject* value, const char* symbol, q_external_func_t func);
 
     //! Returns a Qore value for the given Python value; does not dereference val
     DLLLOCAL QoreValue getQoreValue(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset);
