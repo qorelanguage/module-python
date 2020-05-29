@@ -1475,8 +1475,12 @@ int QorePythonProgram::importSymbol(ExceptionSink* xsink, PyObject* value, const
     const QoreTypeInfo* typeInfo = v->getFullTypeInfo();
 
     QoreNamespace* ns = pyns->findCreateNamespacePathAll(module_context);
+    if (ns->findLocalConstant(symbol)) {
+        return 0;
+    }
 
-    printd(5, "QorePythonProgram::importSymbol() adding const %s.%s = '%s'\n", module_context, symbol, qore_type_get_name(typeInfo));
+    //std::string path = ns->getPath();
+    //printd(5, "QorePythonProgram::importSymbol() adding const %s.%s = '%s' (ns: %s)\n", module_context, symbol, qore_type_get_name(typeInfo), path.c_str());
     ns->addConstant(symbol, v.release(), typeInfo);
     return 0;
 }
