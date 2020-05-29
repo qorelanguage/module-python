@@ -31,7 +31,8 @@ qclass PythonProgram [arg=QorePythonProgram* pp; ns=Python; dom=EMBEDDED_LOGIC];
 
 //! Creates the object and parses the given source code
 /** @param source_code the Python source to parse and compile
-    @param source_label the label or file name of the source
+    @param source_label the label or file name of the source; this is used as the module name for the compiled Python
+    code as well
 
     @note Exceptions parsing or compiling the Python code are thrown according to @ref python_exceptions
 */
