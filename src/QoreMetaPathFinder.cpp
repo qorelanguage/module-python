@@ -19,22 +19,7 @@
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#include "python-module.h"
-
-class QoreMetaPathFinder {
-public:
-    //PyObject_HEAD
-
-    static void dealloc(PyObject* self) {
-        //PyObject_GC_UnTrack(self);
-        Py_TYPE(self)->tp_free(self);
-    }
-
-    static PyObject* repr(PyObject* obj) {
-        QoreStringMaker str("QoreMetaPathFinder object %p", obj);
-        return PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, str.c_str(), str.size());
-    }
-};
+#include "QoreMetaPathFinder.h"
 
 PyDoc_STRVAR(QoreMetaPathFinder_doc,
 "QoreMetaPathFinder()\n\
@@ -42,13 +27,14 @@ PyDoc_STRVAR(QoreMetaPathFinder_doc,
 Creates Python wrappers for Qore code.");
 
 static PyMethodDef QoreMetaPathFinder_methods[] = {
+    { "copy", QoreMetaPathFinder::find_spec, METH_VARARGS, "Qore MetaPathFinder.find_spec() implementation"},
     {NULL, NULL}
 };
 
 PyTypeObject QoreMetaPathFinder_Type = {
     PyVarObject_HEAD_INIT(nullptr, 0)
     "QoreMetaPathFinder",         // tp_name
-    sizeof(QoreMetaPathFinder),   // tp_basicsize
+    0,                            // tp_basicsize
     0,                            // tp_itemsize
     // Slots
     (destructor)QoreMetaPathFinder::dealloc,  // tp_dealloc
@@ -83,7 +69,44 @@ PyTypeObject QoreMetaPathFinder_Type = {
     0,                            // tp_descr_set
     0,                            // tp_dictoffset
     0,                            // tp_init
-    0,                            // tp_alloc
-    0,                            // tp_new
+    PyType_GenericAlloc,          // tp_alloc
+    PyType_GenericNew,            // tp_new
     PyObject_Del,                 // tp_free
 };
+
+void QoreMetaPathFinder::init() {
+    if (PyType_Ready(&QoreMetaPathFinder_Type) < 0) {
+        printd(0, "QoreMetaPathFinder::init() type initialization failed\n");
+        return;
+    }
+
+    QorePythonReferenceHolder mpf(PyObject_CallObject((PyObject*)&QoreMetaPathFinder_Type, nullptr));
+
+    printd(0, "QoreMetaPathFinder::init() created finder %p\n", *mpf);
+}
+
+void QoreMetaPathFinder::dealloc(PyObject* self) {
+    //PyObject_GC_UnTrack(self);
+    Py_TYPE(self)->tp_free(self);
+}
+
+PyObject* QoreMetaPathFinder::repr(PyObject* obj) {
+    QoreStringMaker str("QoreMetaPathFinder object %p", obj);
+    return PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, str.c_str(), str.size());
+}
+
+PyObject* QoreMetaPathFinder::tp_new(PyTypeObject* type, PyObject* args, PyObject* kwds) {
+    return type->tp_alloc(type, 0);
+}
+
+// class method functions
+PyObject* QoreMetaPathFinder::find_spec(PyObject* self, PyObject* args) {
+    Py_ssize_t len = PyTuple_Size(args);
+    printd(0, "QoreMetaPathFinder::find_spec() called with %d arg\n", (int)len);
+
+    for (Py_ssize_t i = 0; i < len; ++i) {
+        // returns a borrowed reference
+        PyObject* arg = PyTuple_GetItem(args, i);
+        printd(0, "+ %d/%d: %s\n", (int)i, (int)len, Py_TYPE(arg)->tp_name);
+    }
+}

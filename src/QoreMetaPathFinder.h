@@ -19,38 +19,26 @@
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
+#ifndef _QORE_PYTHON_QOREMETAPATHFINDER_H
+
+#define _QORE_PYTHON_QOREMETAPATHFINDER_H
+
 #include "python-module.h"
-#include "QoreMetaPathFinder.h"
 
-PyDoc_STRVAR(module_doc, "This module provides dynamic access to Qore APIs.");
+class QoreMetaPathFinder {
+public:
+    //PyObject_HEAD
 
-static PyMethodDef qore_methods[] = {};
+    //! initializer function
+    DLLLOCAL static void init();
 
-static int slot_qore_exec(PyObject* m);
+    //! type functions
+    DLLLOCAL static void dealloc(PyObject* self);
+    DLLLOCAL static PyObject* repr(PyObject* obj);
+    DLLLOCAL static PyObject* tp_new(PyTypeObject* type, PyObject* args, PyObject* kwds);
 
-static struct PyModuleDef_Slot qore_slots[] = {
-    {Py_mod_exec, reinterpret_cast<void*>(slot_qore_exec)},
-    {0, nullptr},
+    //! class methods
+    DLLLOCAL static PyObject* find_spec(PyObject* self, PyObject* args);
 };
 
-static struct PyModuleDef qoremodule = {
-    PyModuleDef_HEAD_INIT,
-    "qore",
-    module_doc,
-    0,
-    qore_methods,
-    qore_slots,
-    nullptr,
-    nullptr,
-    nullptr
-};
-
-static int slot_qore_exec(PyObject *m) {
-    printf("slot_qore_exec()\n");
-    QoreMetaPathFinder::init();
-    return 0;
-}
-
-PyMODINIT_FUNC PyInit_qore(void) {
-    return PyModuleDef_Init(&qoremodule);
-}
+#endif
