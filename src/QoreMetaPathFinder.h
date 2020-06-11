@@ -30,7 +30,7 @@ public:
     //PyObject_HEAD
 
     //! initializer function
-    DLLLOCAL static void init();
+    DLLLOCAL static int init();
 
     //! type functions
     DLLLOCAL static void dealloc(PyObject* self);

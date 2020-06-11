@@ -24,33 +24,35 @@
 
 PyDoc_STRVAR(module_doc, "This module provides dynamic access to Qore APIs.");
 
-static PyMethodDef qore_methods[] = {};
+static PyMethodDef qoreloader_methods[] = {};
 
-static int slot_qore_exec(PyObject* m);
+static int slot_qoreloader_exec(PyObject* m);
 
-static struct PyModuleDef_Slot qore_slots[] = {
-    {Py_mod_exec, reinterpret_cast<void*>(slot_qore_exec)},
+static struct PyModuleDef_Slot qoreloader_slots[] = {
+    {Py_mod_exec, reinterpret_cast<void*>(slot_qoreloader_exec)},
     {0, nullptr},
 };
 
-static struct PyModuleDef qoremodule = {
+static struct PyModuleDef qoreloadermodule = {
     PyModuleDef_HEAD_INIT,
-    "qore",
+    "qoreloader",
     module_doc,
     0,
-    qore_methods,
-    qore_slots,
+    qoreloader_methods,
+    qoreloader_slots,
     nullptr,
     nullptr,
     nullptr
 };
 
-static int slot_qore_exec(PyObject *m) {
-    printf("slot_qore_exec()\n");
-    QoreMetaPathFinder::init();
+static int slot_qoreloader_exec(PyObject *m) {
+    printf("slot_qoreloader_exec()\n");
+    if (QoreMetaPathFinder::init()) {
+        return -1;
+    }
     return 0;
 }
 
-PyMODINIT_FUNC PyInit_qore(void) {
-    return PyModuleDef_Init(&qoremodule);
+PyMODINIT_FUNC PyInit_qoreloader(void) {
+    return PyModuleDef_Init(&qoreloadermodule);
 }

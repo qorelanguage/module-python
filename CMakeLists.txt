@@ -42,8 +42,8 @@ set(CPP_SRC
     src/python-module.cpp
     src/QorePythonProgram.cpp
     src/QorePythonClass.cpp
-    # qore module for Python
-    src/qoremodule.cpp
+    # qoreloader module for Python
+    src/qoreloadermodule.cpp
     src/QoreMetaPathFinder.cpp
 )
 

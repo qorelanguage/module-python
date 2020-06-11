@@ -27,7 +27,7 @@ PyDoc_STRVAR(QoreMetaPathFinder_doc,
 Creates Python wrappers for Qore code.");
 
 static PyMethodDef QoreMetaPathFinder_methods[] = {
-    { "copy", QoreMetaPathFinder::find_spec, METH_VARARGS, "Qore MetaPathFinder.find_spec() implementation"},
+    { "find_spec", QoreMetaPathFinder::find_spec, METH_VARARGS, "QoreMetaPathFinder.find_spec() implementation"},
     {NULL, NULL}
 };
 
@@ -74,15 +74,37 @@ PyTypeObject QoreMetaPathFinder_Type = {
     PyObject_Del,                 // tp_free
 };
 
-void QoreMetaPathFinder::init() {
+int QoreMetaPathFinder::init() {
     if (PyType_Ready(&QoreMetaPathFinder_Type) < 0) {
         printd(0, "QoreMetaPathFinder::init() type initialization failed\n");
-        return;
+        return -1;
     }
 
     QorePythonReferenceHolder mpf(PyObject_CallObject((PyObject*)&QoreMetaPathFinder_Type, nullptr));
-
     printd(0, "QoreMetaPathFinder::init() created finder %p\n", *mpf);
+
+    // get sys module
+    QorePythonReferenceHolder mod(PyImport_ImportModule("sys"));
+
+    if (!PyObject_HasAttrString(*mod, "meta_path")) {
+        printd(0, "QoreMetaPathFinder::init() ERROR: no sys.meta_path\n");
+        return -1;
+    }
+
+    QorePythonReferenceHolder meta_path(PyObject_GetAttrString(*mod, "meta_path"));
+    printd(0, "meta_path: %p %s\n", *meta_path, Py_TYPE(*meta_path)->tp_name);
+    if (!PyList_Check(*meta_path)) {
+        printd(0, "QoreMetaPathFinder::init() ERROR: sys.meta_path is not a list\n");
+        return -1;
+    }
+
+    // insert object
+    if (PyList_Append(*meta_path, *mpf)) {
+        printd(0, "QoreMetaPathFinder::init() ERROR: failed to append finder to sys.meta_path\n");
+        return -1;
+    }
+
+    return 0;
 }
 
 void QoreMetaPathFinder::dealloc(PyObject* self) {
@@ -107,6 +129,13 @@ PyObject* QoreMetaPathFinder::find_spec(PyObject* self, PyObject* args) {
     for (Py_ssize_t i = 0; i < len; ++i) {
         // returns a borrowed reference
         PyObject* arg = PyTuple_GetItem(args, i);
-        printd(0, "+ %d/%d: %s\n", (int)i, (int)len, Py_TYPE(arg)->tp_name);
+        if (PyUnicode_Check(arg)) {
+            printd(0, "+ arg %d/%d: '%s'\n", (int)i, (int)len, PyUnicode_AsUTF8(arg));
+        } else {
+            printd(0, "+ arg %d/%d: type %s\n", (int)i, (int)len, Py_TYPE(arg)->tp_name);
+        }
     }
+
+    Py_INCREF(Py_None);
+    return Py_None;
 }
