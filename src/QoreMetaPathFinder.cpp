@@ -137,7 +137,7 @@ int QoreMetaPathFinder::createQoreContext() {
 }
 
 void QoreMetaPathFinder::del() {
-    qore_package.purge();
+    qore_package.release();
 
     if (python_pgm) {
         ExceptionSink xsink;
@@ -249,6 +249,8 @@ PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& mname) {
             return i->second;
         }
     }
+
+    printd(0, "QoreMetaPathFinder::tryLoadModule() load '%s'\n", mname.c_str());
 
     return nullptr;
 }

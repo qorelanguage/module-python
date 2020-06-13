@@ -115,6 +115,7 @@ int QorePythonProgram::createInterpreter(ExceptionSink* xsink) {
     AutoLocker al(py_thr_lck);
     assert(py_thr_map.find(this) == py_thr_map.end());
     py_thr_map[this] = {{tid, python}};
+    //printd(5, "QorePythonProgram::createInterpreter() this: %p\n", this);
     return 0;
 }
 
@@ -127,9 +128,9 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
     // create new thread state if necessary
     if (!python) {
         python = PyThreadState_New(interpreter);
-        //printd(5, "QorePythonProgram::setContext() created new thread context: %p\n", python);
+        //printd(5, "QorePythonProgram::setContext() created new thread context: %p (dm %p py_thr_map %p size: %d)\n", python, &dm, &py_thr_map, (int)py_thr_map.size());
         assert(python);
-        assert(!python->gilstate_counter);
+        //assert(!python->gilstate_counter);
         // the thread state will be deleted when the thread terminates or the interpreter is deleted
         AutoLocker al(py_thr_lck);
         py_thr_map_t::iterator i = py_thr_map.find(this);
@@ -139,6 +140,7 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
             assert(i->second.find(gettid()) == i->second.end());
             i->second[gettid()] = python;
         }
+        //printd(5, "QorePythonProgram::setContext() this: %p\n", this);
     }
 
     //printd(5, "QorePythonProgram::setContext() got thread context: %p (GIL: %d) refs: %d\n", python, PyGILState_Check(), python->gilstate_counter);

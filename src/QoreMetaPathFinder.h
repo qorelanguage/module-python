@@ -61,6 +61,7 @@ private:
 class PythonThreadStateHelper {
 public:
     DLLLOCAL PythonThreadStateHelper() : thisThreadState(PyThreadState_Get()) {
+        assert(PyGILState_Check());
     }
 
     DLLLOCAL ~PythonThreadStateHelper() {
@@ -72,5 +73,28 @@ public:
 private:
     PyThreadState* thisThreadState;
 };
+
+/*
+class PythonShutdownHelper {
+public:
+    DLLLOCAL PythonShutdownHelper() : thisThreadState(PyThreadState_Get()) {
+        assert(PyGILState_Check());
+        // release the current thread state / GIL
+        PyEval_ReleaseThread(mainThreadState);
+        assert(!_qore_PyRuntimeGILState_GetThreadState());
+        _qore_PyGILState_SetThisThreadState(nullptr);
+        assert(!PyGILState_GetThisThreadState());
+    }
+
+    DLLLOCAL ~PythonShutdownHelper() {
+        PyThreadState_Swap(nullptr);
+        PyEval_AcquireThread(thisThreadState);
+        _qore_PyGILState_SetThisThreadState(thisThreadState);
+    }
+
+private:
+    PyThreadState* thisThreadState;
+};
+*/
 
 #endif

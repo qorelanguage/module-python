@@ -31,12 +31,11 @@ static int slot_qoreloader_exec(PyObject* m);
 static bool qore_needs_shutdown = false;
 
 void qoreloader_free(void* obj) {
-    //printd(5, "qoreloader_free()\n");
+    printd(0, "qoreloader_free() obj: %p qore_needs_shutdown: %d\n", obj, qore_needs_shutdown);
     QoreMetaPathFinder::del();
 
     if (qore_needs_shutdown) {
         qore_cleanup();
-        printd(0, "PyInit_qoreloader() Qore library shut down\n");
     }
 }
 

@@ -28,21 +28,22 @@ static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns);
 static void python_module_delete();
 static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink);
 
-// qore module symbols
-DLLEXPORT char qore_module_name[] = QORE_PYTHON_MODULE_NAME;
-DLLEXPORT char qore_module_version[] = PACKAGE_VERSION;
-DLLEXPORT char qore_module_description[] = "python module";
-DLLEXPORT char qore_module_author[] = "David Nichols";
-DLLEXPORT char qore_module_url[] = "http://qore.org";
-DLLEXPORT int qore_module_api_major = QORE_MODULE_API_MAJOR;
-DLLEXPORT int qore_module_api_minor = QORE_MODULE_API_MINOR;
-DLLEXPORT qore_module_init_t qore_module_init = python_module_init;
-DLLEXPORT qore_module_ns_init_t qore_module_ns_init = python_module_ns_init;
-DLLEXPORT qore_module_delete_t qore_module_delete = python_module_delete;
-DLLEXPORT qore_module_parse_cmd_t qore_module_parse_cmd = python_module_parse_cmd;
-
-DLLEXPORT qore_license_t qore_module_license = QL_MIT;
-DLLEXPORT char qore_module_license_str[] = "MIT";
+// module declaration for Qore 0.9.5+
+DLLEXPORT extern "C" void python_qore_module_desc(QoreModuleInfo& mod_info) {
+    mod_info.name = QORE_PYTHON_MODULE_NAME;
+    mod_info.version = PACKAGE_VERSION;
+    mod_info.desc = "python module";
+    mod_info.author = "David Nichols";
+    mod_info.url = "http://qore.org";
+    mod_info.api_major = QORE_MODULE_API_MAJOR;
+    mod_info.api_minor = QORE_MODULE_API_MINOR;
+    mod_info.init = python_module_init;
+    mod_info.ns_init = python_module_ns_init;
+    mod_info.del = python_module_delete;
+    mod_info.parse_cmd = python_module_parse_cmd;
+    mod_info.license = QL_MIT;
+    mod_info.license_str = "MIT";
+}
 
 QoreNamespace PNS(QORE_PYTHON_NS_NAME);
 PyThreadState* mainThreadState = nullptr;

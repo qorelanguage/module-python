@@ -516,6 +516,7 @@ protected:
     }
 
     DLLLOCAL void deleteIntern() {
+        //printd(5, "QorePythonProgram::deleteIntern() this: %p\n", this);
         // remove all thread states; the objects will be deleted by Python when the interpreter is destroyed
         {
             AutoLocker al(py_thr_lck);
@@ -547,17 +548,6 @@ protected:
             valid = false;
         }
 
-        /*
-        if (python) {
-            QorePythonHelper qph(this);
-            assert(valid);
-            valid = false;
-
-            Py_EndInterpreter(python);
-            python = nullptr;
-        }
-        */
-
         if (save_object_callback) {
             save_object_callback->deref(nullptr);
             save_object_callback = nullptr;
@@ -578,6 +568,7 @@ protected:
         }
         int tid = gettid();
         py_tid_map_t::iterator ti = i->second.find(tid);
+        //printd(5, "QorePythonProgram::getThreadState() this: %p found TID %d: %p\n", this, gettid(), ti == i->second.end() ? nullptr : ti->second);
         return ti == i->second.end() ? nullptr : ti->second;
     }
 };
