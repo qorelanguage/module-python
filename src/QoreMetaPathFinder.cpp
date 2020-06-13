@@ -20,6 +20,15 @@
 */
 
 #include "QoreMetaPathFinder.h"
+#include "QoreThreadAttachHelper.h"
+
+QoreThreadLock QoreMetaPathFinder::m;
+QorePythonReferenceHolder QoreMetaPathFinder::qore_package;
+QoreMetaPathFinder::mod_map_t QoreMetaPathFinder::mod_map;
+
+QoreProgram* QoreMetaPathFinder::python_pgm = nullptr;
+
+thread_local QoreThreadAttacher qoreThreadAttacher;
 
 PyDoc_STRVAR(QoreMetaPathFinder_doc,
 "QoreMetaPathFinder()\n\
@@ -75,6 +84,11 @@ PyTypeObject QoreMetaPathFinder_Type = {
 };
 
 int QoreMetaPathFinder::init() {
+    // first create Qore program container for Python code
+    if (createQoreContext()) {
+        return -1;
+    }
+
     if (PyType_Ready(&QoreMetaPathFinder_Type) < 0) {
         printd(0, "QoreMetaPathFinder::init() type initialization failed\n");
         return -1;
@@ -107,6 +121,31 @@ int QoreMetaPathFinder::init() {
     return 0;
 }
 
+int QoreMetaPathFinder::createQoreContext() {
+    assert(!python_pgm);
+
+    // save and restore the Python thread state while initializing the Qore python module
+    PythonThreadStateHelper ptsh;
+
+    QoreThreadAttachHelper attach_helper;
+    attach_helper.attach();
+    python_pgm = new QoreProgram;
+    // ensure that the jni module symbols are loaded into the new Program object
+    ExceptionSink xsink;
+    MM.runTimeLoadModule("python", python_pgm, &xsink);
+    return xsink ? -1 : 0;
+}
+
+void QoreMetaPathFinder::del() {
+    qore_package.purge();
+
+    if (python_pgm) {
+        ExceptionSink xsink;
+        python_pgm->waitForTerminationAndDeref(&xsink);
+        python_pgm = nullptr;
+    }
+}
+
 void QoreMetaPathFinder::dealloc(PyObject* self) {
     //PyObject_GC_UnTrack(self);
     Py_TYPE(self)->tp_free(self);
@@ -124,18 +163,92 @@ PyObject* QoreMetaPathFinder::tp_new(PyTypeObject* type, PyObject* args, PyObjec
 // class method functions
 PyObject* QoreMetaPathFinder::find_spec(PyObject* self, PyObject* args) {
     Py_ssize_t len = PyTuple_Size(args);
-    printd(0, "QoreMetaPathFinder::find_spec() called with %d arg\n", (int)len);
+    printd(0, "QoreMetaPathFinder::find_spec() called with %d args\n", (int)len);
 
-    for (Py_ssize_t i = 0; i < len; ++i) {
-        // returns a borrowed reference
-        PyObject* arg = PyTuple_GetItem(args, i);
-        if (PyUnicode_Check(arg)) {
-            printd(0, "+ arg %d/%d: '%s'\n", (int)i, (int)len, PyUnicode_AsUTF8(arg));
-        } else {
-            printd(0, "+ arg %d/%d: type %s\n", (int)i, (int)len, Py_TYPE(arg)->tp_name);
+    // returns a borrowed reference
+    PyObject* fullname = PyTuple_GetItem(args, 0);
+    assert(PyUnicode_Check(fullname));
+    const char* fname = PyUnicode_AsUTF8(fullname);
+    PyObject* path = PyTuple_GetItem(args, 1);
+
+    // return qore top-level package module spec
+    if (path == Py_None) {
+        if (!strcmp(fname, "qore")) {
+            PyObject* rv = getQorePackageModuleSpec();
+            if (rv) {
+                return rv;
+            }
+        }
+    } else {
+        QoreString mname(fname);
+        if (mname.size() > 5 && mname.equalPartial("qore.")) {
+            mname.replace(0, 5, (const char*)nullptr);
+            PyObject* rv = tryLoadModule(mname);
+            if (rv) {
+                return rv;
+            }
         }
     }
 
+    // show args
+    QorePythonReferenceHolder argstr(PyObject_Repr(args));
+    assert(PyUnicode_Check(*argstr));
+    printd(0, "args: %s\n", PyUnicode_AsUTF8(*argstr));
+
     Py_INCREF(Py_None);
     return Py_None;
+}
+
+PyObject* QoreMetaPathFinder::getQorePackageModuleSpec() {
+    AutoLocker al(m);
+
+    if (!qore_package) {
+        // create qore package
+        // get importlib.machinery.ModuleSpec class
+        QorePythonReferenceHolder mod(PyImport_ImportModule("importlib.machinery"));
+        if (!*mod) {
+            printd(0, "QoreMetaPathFinder::getQorePackageModuleSpec() ERROR: no importlib.machinery module\n");
+            return nullptr;
+        }
+
+        if (!PyObject_HasAttrString(*mod, "ModuleSpec")) {
+            printd(0, "QoreMetaPathFinder::getQorePackageModuleSpec() ERROR: no ModuleSpec class in importlib.machinery\n");
+            return nullptr;
+        }
+
+        QorePythonReferenceHolder mod_spec_cls(PyObject_GetAttrString(*mod, "ModuleSpec"));
+
+        printd(0, "mod_spec_cls: %p %s\n", *mod_spec_cls, Py_TYPE(*mod_spec_cls)->tp_name);
+
+        // create args for ModuleSpec constructor
+        QorePythonReferenceHolder args(PyTuple_New(2));
+        PyTuple_SET_ITEM(*args, 0, PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, "qore", 4));
+
+        Py_INCREF(Py_None);
+        PyTuple_SET_ITEM(*args, 1, Py_None);
+
+        qore_package = PyObject_CallObject((PyObject*)*mod_spec_cls, *args);
+
+        QorePythonReferenceHolder search_locations(PyList_New(0));
+        //PyList_SET_ITEM(*search_locations, 0, PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, "test", 4));
+        PyObject_SetAttrString(*qore_package, "submodule_search_locations", *search_locations);
+    }
+
+    qore_package.py_ref();
+    //printd(5, "QoreMetaPathFinder::getQorePackageModuleSpec() returning existing qore_package: %p\n", *qore_package);
+    return *qore_package;
+}
+
+PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& mname) {
+    AutoLocker al(m);
+
+    {
+        mod_map_t::iterator i = mod_map.find(mname.c_str());
+        if (i != mod_map.end()) {
+            Py_INCREF(i->second);
+            return i->second;
+        }
+    }
+
+    return nullptr;
 }

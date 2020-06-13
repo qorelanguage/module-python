@@ -28,6 +28,18 @@ static PyMethodDef qoreloader_methods[] = {};
 
 static int slot_qoreloader_exec(PyObject* m);
 
+static bool qore_needs_shutdown = false;
+
+void qoreloader_free(void* obj) {
+    //printd(5, "qoreloader_free()\n");
+    QoreMetaPathFinder::del();
+
+    if (qore_needs_shutdown) {
+        qore_cleanup();
+        printd(0, "PyInit_qoreloader() Qore library shut down\n");
+    }
+}
+
 static struct PyModuleDef_Slot qoreloader_slots[] = {
     {Py_mod_exec, reinterpret_cast<void*>(slot_qoreloader_exec)},
     {0, nullptr},
@@ -40,13 +52,20 @@ static struct PyModuleDef qoreloadermodule = {
     0,
     qoreloader_methods,
     qoreloader_slots,
-    nullptr,
-    nullptr,
-    nullptr
+    nullptr,             // traverse
+    nullptr,             // clear
+    qoreloader_free,     // free
 };
 
 static int slot_qoreloader_exec(PyObject *m) {
-    printf("slot_qoreloader_exec()\n");
+    printd(0, "slot_qoreloader_exec()\n");
+    // initialize qore library if necessary
+    if (!q_libqore_initalized()) {
+        qore_init(QL_MIT);
+        qore_needs_shutdown = true;
+        printd(0, "PyInit_qoreloader() Qore library initialized\n");
+    }
+
     if (QoreMetaPathFinder::init()) {
         return -1;
     }

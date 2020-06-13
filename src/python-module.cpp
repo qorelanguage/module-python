@@ -60,6 +60,8 @@ static mcmap_t mcmap = {
     {"import", py_mc_import},
 };
 
+static bool python_needs_shutdown = false;
+
 #ifdef NEED_PYTHON_36_TLS_KEY
 #ifndef __linux__
 #error Python TLS key prediction required when linking with Python 3.6 only works on Linux
@@ -130,7 +132,15 @@ static QoreStringNode* python_module_init() {
 #endif
 
     // initialize python library; do not register signal handlers
-    Py_InitializeEx(0);
+    if (!Py_IsInitialized()) {
+        Py_InitializeEx(0);
+        python_needs_shutdown = true;
+    } else {
+#ifdef NEED_PYTHON_36_TLS_KEY
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "cannot use the \"python\" module when liked with Python " \
+            "3.6 when not initialized by Qore");
+#endif
+    }
 
     // ensure that runtime version matches compiled version
     check_python_version();
@@ -138,6 +148,7 @@ static QoreStringNode* python_module_init() {
     QorePythonProgram::staticInit();
 
     mainThreadState = PyThreadState_Get();
+    // release the current thread state after initialization
     PyEval_ReleaseThread(mainThreadState);
     assert(!_qore_PyRuntimeGILState_GetThreadState());
     _qore_PyGILState_SetThisThreadState(nullptr);
@@ -166,10 +177,12 @@ static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns) {
 }
 
 static void python_module_delete() {
-    PyThreadState_Swap(nullptr);
-    PyEval_AcquireThread(mainThreadState);
-    _qore_PyGILState_SetThisThreadState(mainThreadState);
-    Py_Finalize();
+    if (python_needs_shutdown) {
+        PyThreadState_Swap(nullptr);
+        PyEval_AcquireThread(mainThreadState);
+        _qore_PyGILState_SetThisThreadState(mainThreadState);
+        Py_Finalize();
+    }
 }
 
 static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink) {

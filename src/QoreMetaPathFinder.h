@@ -25,12 +25,15 @@
 
 #include "python-module.h"
 
+#include <map>
+
 class QoreMetaPathFinder {
 public:
-    //PyObject_HEAD
-
     //! initializer function
     DLLLOCAL static int init();
+
+    //! destructor function
+    DLLLOCAL static void del();
 
     //! type functions
     DLLLOCAL static void dealloc(PyObject* self);
@@ -39,6 +42,35 @@ public:
 
     //! class methods
     DLLLOCAL static PyObject* find_spec(PyObject* self, PyObject* args);
+
+private:
+    DLLLOCAL static QoreThreadLock m;
+    DLLLOCAL static QorePythonReferenceHolder qore_package;
+
+    typedef std::map<const char*, PyObject*> mod_map_t;
+    DLLLOCAL static mod_map_t mod_map;
+
+    DLLLOCAL static QoreProgram* python_pgm;
+
+    DLLLOCAL static PyObject* getQorePackageModuleSpec();
+    DLLLOCAL static PyObject* tryLoadModule(const QoreString& mname);
+    DLLLOCAL static int createQoreContext();
+};
+
+//! save and restore the Python thread state
+class PythonThreadStateHelper {
+public:
+    DLLLOCAL PythonThreadStateHelper() : thisThreadState(PyThreadState_Get()) {
+    }
+
+    DLLLOCAL ~PythonThreadStateHelper() {
+        PyThreadState_Swap(nullptr);
+        PyEval_AcquireThread(thisThreadState);
+        _qore_PyGILState_SetThisThreadState(thisThreadState);
+    }
+
+private:
+    PyThreadState* thisThreadState;
 };
 
 #endif

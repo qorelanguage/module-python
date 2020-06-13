@@ -147,14 +147,14 @@ public:
 
     DLLLOCAL void purge() {
         if (obj) {
-            Py_DECREF(obj);
+            py_deref();
             obj = nullptr;
         }
     }
 
     DLLLOCAL QorePythonReferenceHolder& operator=(PyObject* obj) {
         if (this->obj) {
-            Py_DECREF(this->obj);
+            py_deref();
         }
         this->obj = obj;
         return *this;
@@ -176,6 +176,16 @@ public:
 
     DLLLOCAL operator bool() const {
         return (bool)obj;
+    }
+
+    DLLLOCAL void py_ref() {
+        assert(obj);
+        Py_INCREF(obj);
+    }
+
+    DLLLOCAL void py_deref() {
+        assert(obj);
+        Py_DECREF(obj);
     }
 
 protected:
