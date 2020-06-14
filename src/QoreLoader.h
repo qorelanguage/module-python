@@ -19,56 +19,32 @@
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _QORE_PYTHON_QOREMETAPATHFINDER_H
+#ifndef _QORE_PYTHON_QORELOADER_H
 
-#define _QORE_PYTHON_QOREMETAPATHFINDER_H
+#define _QORE_PYTHON_QORELOADER_H
 
 #include "python-module.h"
 
 #include <map>
 
-class QoreMetaPathFinder {
+class QoreLoader {
 public:
     //! initializer function
     DLLLOCAL static int init();
 
-    //! destructor function
     DLLLOCAL static void del();
 
     //! type functions
     DLLLOCAL static void dealloc(PyObject* self);
     DLLLOCAL static PyObject* repr(PyObject* obj);
+    DLLLOCAL static PyObject* tp_new(PyTypeObject* type, PyObject* args, PyObject* kwds);
 
     //! class methods
-    DLLLOCAL static PyObject* find_spec(PyObject* self, PyObject* args);
+    DLLLOCAL static PyObject* create_module(PyObject* self, PyObject* args);
+    DLLLOCAL static PyObject* exec_module(PyObject* self, PyObject* args);
 
 private:
-    DLLLOCAL static QoreThreadLock m;
-    DLLLOCAL static QorePythonReferenceHolder qore_package;
-    DLLLOCAL static QorePythonReferenceHolder mod_spec_cls;
-
-    typedef std::map<const char*, PyObject*> mod_spec_map_t;
-    DLLLOCAL static mod_spec_map_t mod_spec_map;
-
-    DLLLOCAL static PyObject* getQorePackageModuleSpec();
-    DLLLOCAL static PyObject* tryLoadModule(const QoreString& mname);
-};
-
-//! save and restore the Python thread state
-class PythonThreadStateHelper {
-public:
-    DLLLOCAL PythonThreadStateHelper() : thisThreadState(PyThreadState_Get()) {
-        assert(PyGILState_Check());
-    }
-
-    DLLLOCAL ~PythonThreadStateHelper() {
-        PyThreadState_Swap(nullptr);
-        PyEval_AcquireThread(thisThreadState);
-        _qore_PyGILState_SetThisThreadState(thisThreadState);
-    }
-
-private:
-    PyThreadState* thisThreadState;
+    DLLLOCAL static QorePythonReferenceHolder loader_cls;
 };
 
 #endif

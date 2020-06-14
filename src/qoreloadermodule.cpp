@@ -20,7 +20,11 @@
 */
 
 #include "python-module.h"
+#include "QoreThreadAttachHelper.h"
+#include "QoreLoader.h"
 #include "QoreMetaPathFinder.h"
+
+QoreProgram* python_pgm = nullptr;
 
 PyDoc_STRVAR(module_doc, "This module provides dynamic access to Qore APIs.");
 
@@ -30,9 +34,19 @@ static int slot_qoreloader_exec(PyObject* m);
 
 static bool qore_needs_shutdown = false;
 
+thread_local QoreThreadAttacher qoreThreadAttacher;
+
 void qoreloader_free(void* obj) {
     printd(0, "qoreloader_free() obj: %p qore_needs_shutdown: %d\n", obj, qore_needs_shutdown);
+
+    if (python_pgm) {
+        ExceptionSink xsink;
+        python_pgm->waitForTerminationAndDeref(&xsink);
+        python_pgm = nullptr;
+    }
+
     QoreMetaPathFinder::del();
+    QoreLoader::del();
 
     if (qore_needs_shutdown) {
         qore_cleanup();
@@ -46,14 +60,14 @@ static struct PyModuleDef_Slot qoreloader_slots[] = {
 
 static struct PyModuleDef qoreloadermodule = {
     PyModuleDef_HEAD_INIT,
-    "qoreloader",
-    module_doc,
-    0,
-    qoreloader_methods,
-    qoreloader_slots,
-    nullptr,             // traverse
-    nullptr,             // clear
-    qoreloader_free,     // free
+    "qoreloader",        // m_name
+    module_doc,          // m_doc
+    0,                   // m_size
+    qoreloader_methods,  // m_methods
+    qoreloader_slots,    // m_slots
+    nullptr,             // m_traverse
+    nullptr,             // m_clear
+    qoreloader_free,     // m_free
 };
 
 static int slot_qoreloader_exec(PyObject *m) {
@@ -63,6 +77,26 @@ static int slot_qoreloader_exec(PyObject *m) {
         qore_init(QL_MIT);
         qore_needs_shutdown = true;
         printd(0, "PyInit_qoreloader() Qore library initialized\n");
+    }
+
+    {
+        assert(!python_pgm);
+        // save and restore the Python thread state while initializing the Qore python module
+        PythonThreadStateHelper ptsh;
+
+        QoreThreadAttachHelper attach_helper;
+        attach_helper.attach();
+        python_pgm = new QoreProgram;
+        // ensure that the jni module symbols are loaded into the new Program object
+        ExceptionSink xsink;
+        MM.runTimeLoadModule("python", python_pgm, &xsink);
+        if (xsink) {
+            return -1;
+        }
+    }
+
+    if (QoreLoader::init()) {
+        return -1;
     }
 
     if (QoreMetaPathFinder::init()) {

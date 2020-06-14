@@ -254,6 +254,9 @@ protected:
     _node* node;
 };
 
+// Qore container for Qore modules imported into Python
+DLLLOCAL extern QoreProgram* python_pgm;
+
 class QorePythonProgram;
 DLLLOCAL extern QoreNamespace PNS;
 
