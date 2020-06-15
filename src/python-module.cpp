@@ -29,7 +29,7 @@ static void python_module_delete();
 static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink);
 
 // module declaration for Qore 0.9.5+
-DLLEXPORT extern "C" void python_qore_module_desc(QoreModuleInfo& mod_info) {
+void python_qore_module_desc(QoreModuleInfo& mod_info) {
     mod_info.name = QORE_PYTHON_MODULE_NAME;
     mod_info.version = PACKAGE_VERSION;
     mod_info.desc = "python module";

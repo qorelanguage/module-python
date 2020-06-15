@@ -87,9 +87,9 @@ static int slot_qoreloader_exec(PyObject *m) {
         QoreThreadAttachHelper attach_helper;
         attach_helper.attach();
         python_pgm = new QoreProgram;
-        // ensure that the jni module symbols are loaded into the new Program object
+        // ensure that python module symbols are loaded into the new Program object
         ExceptionSink xsink;
-        MM.runTimeLoadModule("python", python_pgm, &xsink);
+        MM.runTimeLoadModule(&xsink, "python", python_pgm, python_qore_module_desc);
         if (xsink) {
             return -1;
         }

@@ -257,6 +257,9 @@ protected:
 // Qore container for Qore modules imported into Python
 DLLLOCAL extern QoreProgram* python_pgm;
 
+// module registration function
+DLLEXPORT extern "C" void python_qore_module_desc(QoreModuleInfo& mod_info);
+
 class QorePythonProgram;
 DLLLOCAL extern QoreNamespace PNS;
 

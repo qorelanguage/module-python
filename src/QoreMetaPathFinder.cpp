@@ -20,12 +20,12 @@
 */
 
 #include "QoreMetaPathFinder.h"
-#include "QorePyModuleDef.h"
+#include "QoreLoader.h"
 
 QoreThreadLock QoreMetaPathFinder::m;
 QorePythonReferenceHolder QoreMetaPathFinder::qore_package;
 QorePythonReferenceHolder QoreMetaPathFinder::mod_spec_cls;
-QoreMetaPathFinder::mod_spec_map_t QoreMetaPathFinder::mod_spec_map;
+QoreMetaPathFinder::mod_map_t QoreMetaPathFinder::mod_map;
 
 PyDoc_STRVAR(QoreMetaPathFinder_doc,
 "QoreMetaPathFinder()\n\
@@ -136,10 +136,18 @@ void QoreMetaPathFinder::del() {
     qore_package.release();
     mod_spec_cls.purge();
 
-    for (auto& i : mod_spec_map) {
-        Py_DECREF(i.second);
+    ExceptionSink xsink;
+    for (auto& i : mod_map) {
+        Py_DECREF(i.second.spec);
+        i.second.pgm->deref(&xsink);
     }
-    mod_spec_map.clear();
+    mod_map.clear();
+}
+
+QoreProgram* QoreMetaPathFinder::getProgram(const char* mod) {
+    mod_map_t::iterator i = mod_map.find(mod);
+    assert(i != mod_map.end());
+    return i->second.pgm;
 }
 
 void QoreMetaPathFinder::dealloc(PyObject* self) {
@@ -155,7 +163,12 @@ PyObject* QoreMetaPathFinder::repr(PyObject* obj) {
 // class method functions
 PyObject* QoreMetaPathFinder::find_spec(PyObject* self, PyObject* args) {
     Py_ssize_t len = PyTuple_Size(args);
-    printd(0, "QoreMetaPathFinder::find_spec() called with %d args\n", (int)len);
+    {
+        // show args
+        QorePythonReferenceHolder argstr(PyObject_Repr(args));
+        assert(PyUnicode_Check(*argstr));
+        printd(0, "QoreMetaPathFinder::find_spec() args: %s\n", PyUnicode_AsUTF8(*argstr));
+    }
 
     // returns a borrowed reference
     PyObject* fullname = PyTuple_GetItem(args, 0);
@@ -181,11 +194,6 @@ PyObject* QoreMetaPathFinder::find_spec(PyObject* self, PyObject* args) {
             }
         }
     }
-
-    // show args
-    QorePythonReferenceHolder argstr(PyObject_Repr(args));
-    assert(PyUnicode_Check(*argstr));
-    printd(0, "args: %s\n", PyUnicode_AsUTF8(*argstr));
 
     Py_INCREF(Py_None);
     return Py_None;
@@ -219,28 +227,30 @@ PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& mname) {
     AutoLocker al(m);
 
     {
-        mod_spec_map_t::iterator i = mod_spec_map.find(mname.c_str());
-        if (i != mod_spec_map.end()) {
-            Py_INCREF(i->second);
-            return i->second;
+        mod_map_t::iterator i = mod_map.find(mname.c_str());
+        if (i != mod_map.end()) {
+            Py_INCREF(i->second.spec);
+            return i->second.spec;
         }
     }
 
     printd(0, "QoreMetaPathFinder::tryLoadModule() load '%s'\n", mname.c_str());
     ExceptionSink xsink;
-    if (ModuleManager::runTimeLoadModule(mname.c_str(), python_pgm, &xsink)) {
+
+    ReferenceHolder<QoreProgram> pgm(new QoreProgram, &xsink);
+    if (ModuleManager::runTimeLoadModule(mname.c_str(), *pgm, &xsink)) {
         return nullptr;
     }
 
     // create args for ModuleSpec constructor
     QorePythonReferenceHolder args(PyTuple_New(2));
-    PyTuple_SET_ITEM(*args, 0, PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, mname.c_str(), 4));
-
-    Py_INCREF(Py_None);
-    PyTuple_SET_ITEM(*args, 1, Py_None);
+    // module name
+    PyTuple_SET_ITEM(*args, 0, PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, mname.c_str(), mname.size()));
+    // loader
+    PyTuple_SET_ITEM(*args, 1, QoreLoader::getLoaderRef());
 
     QorePythonReferenceHolder spec(PyObject_CallObject((PyObject*)*mod_spec_cls, *args));
-    mod_spec_map[mname.c_str()] = *spec;
+    mod_map[mname.c_str()] = {*spec, pgm.release()};
 
     spec.py_ref();
     return spec.release();

@@ -27,6 +27,11 @@
 
 #include <map>
 
+struct ModInfo {
+    PyObject* spec;
+    QoreProgram* pgm;
+};
+
 class QoreMetaPathFinder {
 public:
     //! initializer function
@@ -34,6 +39,8 @@ public:
 
     //! destructor function
     DLLLOCAL static void del();
+
+    DLLLOCAL static QoreProgram* getProgram(const char* mod);
 
     //! type functions
     DLLLOCAL static void dealloc(PyObject* self);
@@ -47,8 +54,8 @@ private:
     DLLLOCAL static QorePythonReferenceHolder qore_package;
     DLLLOCAL static QorePythonReferenceHolder mod_spec_cls;
 
-    typedef std::map<const char*, PyObject*> mod_spec_map_t;
-    DLLLOCAL static mod_spec_map_t mod_spec_map;
+    typedef std::map<std::string, ModInfo> mod_map_t;
+    DLLLOCAL static mod_map_t mod_map;
 
     DLLLOCAL static PyObject* getQorePackageModuleSpec();
     DLLLOCAL static PyObject* tryLoadModule(const QoreString& mname);

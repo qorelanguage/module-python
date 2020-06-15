@@ -34,6 +34,9 @@ public:
 
     DLLLOCAL static void del();
 
+    //! returns the loader object with the reference count incremented
+    DLLLOCAL static PyObject* getLoaderRef();
+
     //! type functions
     DLLLOCAL static void dealloc(PyObject* self);
     DLLLOCAL static PyObject* repr(PyObject* obj);
@@ -45,6 +48,7 @@ public:
 
 private:
     DLLLOCAL static QorePythonReferenceHolder loader_cls;
+    DLLLOCAL static QorePythonReferenceHolder loader;
 };
 
 #endif

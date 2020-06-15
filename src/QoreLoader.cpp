@@ -20,8 +20,10 @@
 */
 
 #include "QoreLoader.h"
+#include "QoreMetaPathFinder.h"
 
 QorePythonReferenceHolder QoreLoader::loader_cls;
+QorePythonReferenceHolder QoreLoader::loader;
 
 static PyMethodDef QoreLoader_methods[] = {
     {"create_module", QoreLoader::create_module, METH_VARARGS, "QoreLoader.create_module() implementation"},
@@ -78,6 +80,7 @@ PyTypeObject QoreLoader_Type = {
 };
 
 int QoreLoader::init() {
+    /*
     // get importlib.abc.Loader class
     QorePythonReferenceHolder mod(PyImport_ImportModule("importlib.abc"));
     if (!*mod) {
@@ -92,12 +95,29 @@ int QoreLoader::init() {
 
     loader_cls = PyObject_GetAttrString(*mod, "Loader");
     printd(0, "loader_cls: %p %s\n", *loader_cls, Py_TYPE(*loader_cls)->tp_name);
+    */
+
+    if (PyType_Ready(&QoreLoader_Type) < 0) {
+        printd(0, "QoreLoader::init() type initialization failed\n");
+        return -1;
+    }
+
+    QorePythonReferenceHolder args(PyTuple_New(0));
+    loader = PyObject_CallObject((PyObject*)&QoreLoader_Type, *args);
+    //loader = PyObject_CallObject((PyObject*)*loader_cls, *args);
 
     return 0;
 }
 
 void QoreLoader::del() {
+    loader.purge();
     loader_cls.purge();
+}
+
+PyObject* QoreLoader::getLoaderRef() {
+    assert(*loader);
+    Py_INCREF(*loader);
+    return *loader;
 }
 
 void QoreLoader::dealloc(PyObject* self) {
@@ -112,9 +132,32 @@ PyObject* QoreLoader::repr(PyObject* obj) {
 
 // class method functions
 PyObject* QoreLoader::create_module(PyObject* self, PyObject* args) {
-    return nullptr;
+    Py_INCREF(Py_None);
+    return Py_None;
 }
 
 PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
-    return nullptr;
+    QorePythonReferenceHolder argstr(PyObject_Repr(args));
+    assert(PyUnicode_Check(*argstr));
+    printd(0, "QoreLoader::exec_module() self: %p args: %s\n", self, PyUnicode_AsUTF8(*argstr));
+
+    assert(PyTuple_Check(args));
+
+    // get module
+    // returns a borrowed reference
+    PyObject* mod = PyTuple_GetItem(args, 0);
+    assert(PyModule_Check(mod));
+
+    // get module name
+    assert(PyObject_HasAttrString(mod, "__name__"));
+    QorePythonReferenceHolder name(PyObject_GetAttrString(mod, "__name__"));
+    assert(PyUnicode_Check(*name));
+    const char* name_str = PyUnicode_AsUTF8(*name);
+
+    printd(0, "QoreLoader::exec_module() mod: '%s'\n", name_str);
+    QoreProgram* mod_pgm = QoreMetaPathFinder::getProgram(name_str);
+    printd(0, "QoreLoader::exec_module() mod pgm: %p\n", mod_pgm);
+
+    Py_INCREF(Py_None);
+    return Py_None;
 }
