@@ -158,6 +158,78 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
     QoreProgram* mod_pgm = QoreMetaPathFinder::getProgram(name_str);
     printd(0, "QoreLoader::exec_module() mod pgm: %p\n", mod_pgm);
 
+    // get root namespace
+    const QoreNamespace* ns = getModuleRootNs(name_str, mod_pgm->findNamespace("::"));
+    printd(0, "QoreLoader::exec_module() found root NS %p: %s\n", ns, ns->getName());
+
+    if (ns) {
+        importQoreToPython(mod, *ns);
+    }
+
     Py_INCREF(Py_None);
     return Py_None;
+}
+
+const QoreNamespace* QoreLoader::getModuleRootNs(const char* name, const QoreNamespace* root_ns) {
+    QoreNamespaceConstIterator i(*root_ns);
+    while (i.next()) {
+        const QoreNamespace* ns = &i.get();
+        const char* mod = ns->getModuleName();
+        if (mod && !strcmp(mod, name)) {
+            // try to find parent ns
+            while (true) {
+                const QoreNamespace* parent = ns->getParent();
+                mod = parent->getModuleName();
+                if (!mod || strcmp(mod, name)) {
+                    break;
+                }
+                ns = parent;
+            }
+            return ns;
+        }
+    }
+    return nullptr;
+}
+
+// import Qore definitions to Python
+void QoreLoader::importQoreToPython(PyObject* mod, const QoreNamespace& ns) {
+    // import all functions
+    QoreNamespaceFunctionIterator fi(ns);
+    while (fi.next()) {
+        importQoreFunctionToPython(mod, fi.get());
+    }
+
+    // import all constants
+    QoreNamespaceConstantIterator consti(ns);
+    while (consti.next()) {
+        importQoreConstantToPython(mod, consti.get());
+    }
+
+    // import all classes
+    QoreNamespaceClassIterator clsi(ns);
+    while (clsi.next()) {
+        importQoreClassToPython(mod, clsi.get());
+    }
+
+    // import all subnamespaces as modules
+    QoreNamespaceNamespaceIterator ni(ns);
+    while (ni.next()) {
+        importQoreNamespaceToPython(mod, ni.get());
+    }
+}
+
+void QoreLoader::importQoreFunctionToPython(PyObject* mod, const QoreExternalFunction& func) {
+    printd(0, "QoreLoader::importQoreFunctionToPython() %s()\n", func.getName());
+}
+
+void QoreLoader::importQoreConstantToPython(PyObject* mod, const QoreExternalConstant& constant) {
+    printd(0, "QoreLoader::importQoreConstantToPython() %s()\n", constant.getName());
+}
+
+void QoreLoader::importQoreClassToPython(PyObject* mod, const QoreClass& cls) {
+    printd(0, "QoreLoader::importQoreClassToPython() %s()\n", cls.getName());
+}
+
+void QoreLoader::importQoreNamespaceToPython(PyObject* mod, const QoreNamespace& ns) {
+    printd(0, "QoreLoader::importQoreNamespaceToPython() %s()\n", ns.getName());
 }
