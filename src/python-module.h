@@ -254,8 +254,8 @@ protected:
     _node* node;
 };
 
-// Qore container for Qore modules imported into Python
-DLLLOCAL extern QoreProgram* python_pgm;
+// Python program control for Qore interfacing
+DLLLOCAL extern QorePythonProgram* qore_python_pgm;
 
 // module registration function
 DLLEXPORT extern "C" void python_qore_module_desc(QoreModuleInfo& mod_info);

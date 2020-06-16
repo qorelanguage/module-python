@@ -21,9 +21,13 @@
 
 #include "QoreLoader.h"
 #include "QoreMetaPathFinder.h"
+#include "QorePythonProgram.h"
+
+#include <memory>
 
 QorePythonReferenceHolder QoreLoader::loader_cls;
 QorePythonReferenceHolder QoreLoader::loader;
+QoreLoader::meth_vec_t QoreLoader::meth_vec;
 
 static PyMethodDef QoreLoader_methods[] = {
     {"create_module", QoreLoader::create_module, METH_VARARGS, "QoreLoader.create_module() implementation"},
@@ -155,7 +159,8 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
     const char* name_str = PyUnicode_AsUTF8(*name);
 
     printd(0, "QoreLoader::exec_module() mod: '%s'\n", name_str);
-    QoreProgram* mod_pgm = QoreMetaPathFinder::getProgram(name_str);
+    //QoreProgram* mod_pgm = QoreMetaPathFinder::getProgram(name_str);
+    QoreProgram* mod_pgm = qore_python_pgm->getQoreProgram();
     printd(0, "QoreLoader::exec_module() mod pgm: %p\n", mod_pgm);
 
     // get root namespace
@@ -163,6 +168,7 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
     printd(0, "QoreLoader::exec_module() found root NS %p: %s\n", ns, ns->getName());
 
     if (ns) {
+        QoreProgramContextHelper pch(qore_python_pgm->getQoreProgram());
         importQoreToPython(mod, *ns);
     }
 
@@ -193,10 +199,19 @@ const QoreNamespace* QoreLoader::getModuleRootNs(const char* name, const QoreNam
 
 // import Qore definitions to Python
 void QoreLoader::importQoreToPython(PyObject* mod, const QoreNamespace& ns) {
+    // get module dict
+    // returns a borrowed reference
+    PyObject* mod_dict = PyModule_GetDict(mod);
+
     // import all functions
     QoreNamespaceFunctionIterator fi(ns);
     while (fi.next()) {
-        importQoreFunctionToPython(mod, fi.get());
+        const QoreExternalFunction& func = fi.get();
+        // do not import deprecated functions
+        if (func.getCodeFlags() & QCF_DEPRECATED) {
+            continue;
+        }
+        importQoreFunctionToPython(mod, mod_dict, func);
     }
 
     // import all constants
@@ -218,8 +233,22 @@ void QoreLoader::importQoreToPython(PyObject* mod, const QoreNamespace& ns) {
     }
 }
 
-void QoreLoader::importQoreFunctionToPython(PyObject* mod, const QoreExternalFunction& func) {
+void QoreLoader::importQoreFunctionToPython(PyObject* mod, PyObject* mod_dict, const QoreExternalFunction& func) {
     printd(0, "QoreLoader::importQoreFunctionToPython() %s()\n", func.getName());
+
+    QorePythonReferenceHolder capsule(PyCapsule_New((void*)&func, nullptr, nullptr));
+
+    std::unique_ptr<PyMethodDef> funcdef(new PyMethodDef);
+    funcdef->ml_name = func.getName();
+    funcdef->ml_meth = QoreLoader::callQoreFunction;
+    funcdef->ml_flags = METH_VARARGS;
+    funcdef->ml_doc = nullptr;
+
+    meth_vec.push_back(funcdef.get());
+
+    QorePythonReferenceHolder pyfunc(PyCFunction_New(funcdef.release(), *capsule));
+    PyDict_SetItemString(mod_dict, func.getName(), *pyfunc);
+    //PyObject_SetAttrString(mod, func.getName(), pyfunc.release());
 }
 
 void QoreLoader::importQoreConstantToPython(PyObject* mod, const QoreExternalConstant& constant) {
@@ -232,4 +261,31 @@ void QoreLoader::importQoreClassToPython(PyObject* mod, const QoreClass& cls) {
 
 void QoreLoader::importQoreNamespaceToPython(PyObject* mod, const QoreNamespace& ns) {
     printd(0, "QoreLoader::importQoreNamespaceToPython() %s()\n", ns.getName());
+}
+
+// Python integration
+PyObject* QoreLoader::callQoreFunction(PyObject* self, PyObject* args) {
+    QorePythonReferenceHolder selfstr(PyObject_Repr(self));
+    assert(PyUnicode_Check(*selfstr));
+    QorePythonReferenceHolder argstr(PyObject_Repr(args));
+    assert(PyUnicode_Check(*argstr));
+    printd(0, "QoreLoader::callQoreFunction() self: %p (%s) args: %s\n", self, PyUnicode_AsUTF8(*selfstr), PyUnicode_AsUTF8(*argstr));
+
+    assert(PyCapsule_CheckExact(self));
+    const QoreExternalFunction* func = reinterpret_cast<QoreExternalFunction*>(PyCapsule_GetPointer(self, nullptr));
+    assert(func);
+
+    // get Qore arguments
+    ExceptionSink xsink;
+    assert(PyTuple_Check(args));
+    ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args), &xsink);
+    if (!xsink) {
+        ValueHolder rv(func->evalFunction(nullptr, *qargs, qore_python_pgm->getQoreProgram(), &xsink), &xsink);
+        if (!xsink) {
+            return qore_python_pgm->getPythonValue(*rv, &xsink);
+        }
+    }
+
+    Py_INCREF(Py_None);
+    return Py_None;
 }

@@ -23,8 +23,9 @@
 #include "QoreThreadAttachHelper.h"
 #include "QoreLoader.h"
 #include "QoreMetaPathFinder.h"
+#include "QorePythonProgram.h"
 
-QoreProgram* python_pgm = nullptr;
+QorePythonProgram* qore_python_pgm = nullptr;
 
 PyDoc_STRVAR(module_doc, "This module provides dynamic access to Qore APIs.");
 
@@ -39,10 +40,10 @@ thread_local QoreThreadAttacher qoreThreadAttacher;
 void qoreloader_free(void* obj) {
     printd(0, "qoreloader_free() obj: %p qore_needs_shutdown: %d\n", obj, qore_needs_shutdown);
 
-    if (python_pgm) {
+    if (qore_python_pgm) {
         ExceptionSink xsink;
-        python_pgm->waitForTerminationAndDeref(&xsink);
-        python_pgm = nullptr;
+        qore_python_pgm->deref(&xsink);
+        qore_python_pgm = nullptr;
     }
 
     QoreMetaPathFinder::del();
@@ -80,16 +81,16 @@ static int slot_qoreloader_exec(PyObject *m) {
     }
 
     {
-        assert(!python_pgm);
+        assert(!qore_python_pgm);
         // save and restore the Python thread state while initializing the Qore python module
         PythonThreadStateHelper ptsh;
 
         QoreThreadAttachHelper attach_helper;
         attach_helper.attach();
-        python_pgm = new QoreProgram;
-        // ensure that python module symbols are loaded into the new Program object
+        qore_python_pgm = new QorePythonProgram;
+        // ensure that the Qore python module is registered as a Qore module
         ExceptionSink xsink;
-        MM.runTimeLoadModule(&xsink, "python", python_pgm, python_qore_module_desc);
+        MM.runTimeLoadModule(&xsink, "python", nullptr, python_qore_module_desc);
         if (xsink) {
             return -1;
         }

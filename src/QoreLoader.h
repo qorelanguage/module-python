@@ -25,7 +25,7 @@
 
 #include "python-module.h"
 
-#include <map>
+#include <vector>
 
 class QoreLoader {
 public:
@@ -46,12 +46,18 @@ public:
     DLLLOCAL static PyObject* create_module(PyObject* self, PyObject* args);
     DLLLOCAL static PyObject* exec_module(PyObject* self, PyObject* args);
 
+    // Python integration
+    DLLLOCAL static PyObject* callQoreFunction(PyObject* self, PyObject* args);
+
 private:
+    typedef std::vector<PyMethodDef*> meth_vec_t;
+    static meth_vec_t meth_vec;
+
     DLLLOCAL static QorePythonReferenceHolder loader_cls;
     DLLLOCAL static QorePythonReferenceHolder loader;
 
     DLLLOCAL static void importQoreToPython(PyObject* mod, const QoreNamespace& ns);
-    DLLLOCAL static void importQoreFunctionToPython(PyObject* mod, const QoreExternalFunction& func);
+    DLLLOCAL static void importQoreFunctionToPython(PyObject* mod, PyObject* mod_dict, const QoreExternalFunction& func);
     DLLLOCAL static void importQoreConstantToPython(PyObject* mod, const QoreExternalConstant& constant);
     DLLLOCAL static void importQoreClassToPython(PyObject* mod, const QoreClass& cls);
     DLLLOCAL static void importQoreNamespaceToPython(PyObject* mod, const QoreNamespace& ns);

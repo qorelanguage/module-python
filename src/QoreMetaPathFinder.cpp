@@ -21,11 +21,12 @@
 
 #include "QoreMetaPathFinder.h"
 #include "QoreLoader.h"
+#include "QorePythonProgram.h"
 
 QoreThreadLock QoreMetaPathFinder::m;
 QorePythonReferenceHolder QoreMetaPathFinder::qore_package;
 QorePythonReferenceHolder QoreMetaPathFinder::mod_spec_cls;
-QoreMetaPathFinder::mod_map_t QoreMetaPathFinder::mod_map;
+//QoreMetaPathFinder::mod_map_t QoreMetaPathFinder::mod_map;
 
 PyDoc_STRVAR(QoreMetaPathFinder_doc,
 "QoreMetaPathFinder()\n\
@@ -136,19 +137,23 @@ void QoreMetaPathFinder::del() {
     qore_package.release();
     mod_spec_cls.purge();
 
+    /*
     ExceptionSink xsink;
     for (auto& i : mod_map) {
         Py_DECREF(i.second.spec);
         i.second.pgm->deref(&xsink);
     }
     mod_map.clear();
+    */
 }
 
+/*
 QoreProgram* QoreMetaPathFinder::getProgram(const char* mod) {
     mod_map_t::iterator i = mod_map.find(mod);
     assert(i != mod_map.end());
     return i->second.pgm;
 }
+*/
 
 void QoreMetaPathFinder::dealloc(PyObject* self) {
     //PyObject_GC_UnTrack(self);
@@ -224,6 +229,7 @@ PyObject* QoreMetaPathFinder::getQorePackageModuleSpec() {
 }
 
 PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& mname) {
+    /*
     AutoLocker al(m);
 
     {
@@ -233,12 +239,18 @@ PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& mname) {
             return i->second.spec;
         }
     }
+    */
 
     printd(0, "QoreMetaPathFinder::tryLoadModule() load '%s'\n", mname.c_str());
     ExceptionSink xsink;
 
+    /*
     ReferenceHolder<QoreProgram> pgm(new QoreProgram, &xsink);
     if (ModuleManager::runTimeLoadModule(mname.c_str(), *pgm, &xsink)) {
+        return nullptr;
+    }
+    */
+    if (ModuleManager::runTimeLoadModule(mname.c_str(), qore_python_pgm->getQoreProgram(), &xsink)) {
         return nullptr;
     }
 
@@ -250,8 +262,8 @@ PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& mname) {
     PyTuple_SET_ITEM(*args, 1, QoreLoader::getLoaderRef());
 
     QorePythonReferenceHolder spec(PyObject_CallObject((PyObject*)*mod_spec_cls, *args));
-    mod_map[mname.c_str()] = {*spec, pgm.release()};
+    //mod_map[mname.c_str()] = {*spec, pgm.release()};
 
-    spec.py_ref();
+    //spec.py_ref();
     return spec.release();
 }

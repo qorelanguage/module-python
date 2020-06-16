@@ -50,9 +50,17 @@ class QorePythonProgram;
 #define IF_OTHER (1 << 1)
 #define IF_ALL   (IF_CLASS | IF_OTHER)
 
+struct QorePythonThreadStateInfo {
+    PyThreadState* state;
+    bool owns_state;
+};
+
 class QorePythonProgram : public AbstractPrivateData, public AbstractQoreProgramExternalData {
     friend class PythonModuleContextHelper;
 public:
+    //! Python context using the main interpreter
+    DLLLOCAL QorePythonProgram();
+
     //! Default Qore Python context; does not own the QoreProgram reference
     DLLLOCAL QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns);
 
@@ -116,13 +124,7 @@ public:
         assert(builtin_dict);
 
         // create Qore program object with the same restrictions as the parent
-        QoreProgram* pgm = getProgram();
-        int64 parse_options = pgm ? pgm->getParseOptions64() : 0;
-        qpgm = new QoreProgram(parse_options);
-        owns_qore_program_ref = true;
-        pyns = PNS.copy();
-        qpgm->getRootNS()->addNamespace(pyns);
-        qpgm->setExternalData(QORE_PYTHON_MODULE_NAME, this);
+        createQoreProgram();
     }
 
     DLLLOCAL virtual AbstractQoreProgramExternalData* copy(QoreProgram* pgm) const {
@@ -316,6 +318,11 @@ public:
         return 0;
     }
 
+    //! Returns the Qore program
+    DLLLOCAL QoreProgram* getQoreProgram() const {
+        return qpgm;
+    }
+
     //! Returns a Qore binary from a Python Bytes object
     DLLLOCAL static BinaryNode* getQoreBinaryFromBytes(PyObject* val);
 
@@ -423,6 +430,9 @@ protected:
     //! true if the object is valid
     bool valid = true;
 
+    //! if we should destroy the interpreter state
+    bool owns_interpreter = false;
+
     //! maps types to classes
     typedef std::map<PyTypeObject*, QorePythonClass*> clmap_t;
     clmap_t clmap;
@@ -434,7 +444,7 @@ protected:
     //! mutex for thread state map
     static QoreThreadLock py_thr_lck;
     //! map of TIDs to the thread state
-    typedef std::map<int, PyThreadState*> py_tid_map_t;
+    typedef std::map<int, QorePythonThreadStateInfo> py_tid_map_t;
     //! map of QorePythonProgram objects to thread states for the current thread
     typedef std::map<const QorePythonProgram*, py_tid_map_t> py_thr_map_t;
     DLLLOCAL static py_thr_map_t py_thr_map;
@@ -520,8 +530,20 @@ protected:
         // remove all thread states; the objects will be deleted by Python when the interpreter is destroyed
         {
             AutoLocker al(py_thr_lck);
+
+            // delete thread state
+            QorePythonGilHelper pgh;
+
             py_thr_map_t::iterator i = py_thr_map.find(this);
             assert(i != py_thr_map.end());
+            // delete all thread states
+            for (auto& ti : i->second) {
+                if (ti.second.owns_state) {
+                    PyThreadState_Clear(ti.second.state);
+                    PyThreadState_Delete(ti.second.state);
+                }
+            }
+
             py_thr_map.erase(i);
         }
 
@@ -531,14 +553,14 @@ protected:
             qpgm->deref(nullptr);
         }
 
-        if (interpreter || module || python_code) {
+        if ((interpreter && owns_interpreter) || module || python_code) {
             QorePythonGilHelper qpgh;
 
             for (auto& i : obj_sink) {
                 Py_DECREF(i);
             }
 
-            if (interpreter) {
+            if (interpreter && owns_interpreter) {
                 PyInterpreterState_Clear(interpreter);
                 PyInterpreterState_Delete(interpreter);
             }
@@ -569,8 +591,11 @@ protected:
         int tid = gettid();
         py_tid_map_t::iterator ti = i->second.find(tid);
         //printd(5, "QorePythonProgram::getThreadState() this: %p found TID %d: %p\n", this, gettid(), ti == i->second.end() ? nullptr : ti->second);
-        return ti == i->second.end() ? nullptr : ti->second;
+        return ti == i->second.end() ? nullptr : ti->second.state;
     }
+
+    //! Creates a QoreProgram object owned by this object
+    DLLLOCAL void createQoreProgram();
 };
 
 class PythonModuleContextHelper {
