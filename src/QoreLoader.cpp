@@ -84,23 +84,6 @@ PyTypeObject QoreLoader_Type = {
 };
 
 int QoreLoader::init() {
-    /*
-    // get importlib.abc.Loader class
-    QorePythonReferenceHolder mod(PyImport_ImportModule("importlib.abc"));
-    if (!*mod) {
-        printd(0, "QoreLoader::init() ERROR: no importlib.abc module\n");
-        return -1;
-    }
-
-    if (!PyObject_HasAttrString(*mod, "Loader")) {
-        printd(0, "QoreLoader::init() ERROR: no Loader class in importlib.abc\n");
-        return -1;
-    }
-
-    loader_cls = PyObject_GetAttrString(*mod, "Loader");
-    printd(0, "loader_cls: %p %s\n", *loader_cls, Py_TYPE(*loader_cls)->tp_name);
-    */
-
     if (PyType_Ready(&QoreLoader_Type) < 0) {
         printd(0, "QoreLoader::init() type initialization failed\n");
         return -1;
@@ -116,6 +99,11 @@ int QoreLoader::init() {
 void QoreLoader::del() {
     loader.purge();
     loader_cls.purge();
+
+    for (auto& i : meth_vec) {
+        delete i;
+    }
+    meth_vec.clear();
 }
 
 PyObject* QoreLoader::getLoaderRef() {
@@ -199,10 +187,6 @@ const QoreNamespace* QoreLoader::getModuleRootNs(const char* name, const QoreNam
 
 // import Qore definitions to Python
 void QoreLoader::importQoreToPython(PyObject* mod, const QoreNamespace& ns) {
-    // get module dict
-    // returns a borrowed reference
-    PyObject* mod_dict = PyModule_GetDict(mod);
-
     // import all functions
     QoreNamespaceFunctionIterator fi(ns);
     while (fi.next()) {
@@ -211,7 +195,7 @@ void QoreLoader::importQoreToPython(PyObject* mod, const QoreNamespace& ns) {
         if (func.getCodeFlags() & QCF_DEPRECATED) {
             continue;
         }
-        importQoreFunctionToPython(mod, mod_dict, func);
+        importQoreFunctionToPython(mod, func);
     }
 
     // import all constants
@@ -233,7 +217,7 @@ void QoreLoader::importQoreToPython(PyObject* mod, const QoreNamespace& ns) {
     }
 }
 
-void QoreLoader::importQoreFunctionToPython(PyObject* mod, PyObject* mod_dict, const QoreExternalFunction& func) {
+void QoreLoader::importQoreFunctionToPython(PyObject* mod, const QoreExternalFunction& func) {
     printd(0, "QoreLoader::importQoreFunctionToPython() %s()\n", func.getName());
 
     QorePythonReferenceHolder capsule(PyCapsule_New((void*)&func, nullptr, nullptr));
@@ -247,12 +231,18 @@ void QoreLoader::importQoreFunctionToPython(PyObject* mod, PyObject* mod_dict, c
     meth_vec.push_back(funcdef.get());
 
     QorePythonReferenceHolder pyfunc(PyCFunction_New(funcdef.release(), *capsule));
-    PyDict_SetItemString(mod_dict, func.getName(), *pyfunc);
-    //PyObject_SetAttrString(mod, func.getName(), pyfunc.release());
+    PyObject_SetAttrString(mod, func.getName(), pyfunc.release());
 }
 
 void QoreLoader::importQoreConstantToPython(PyObject* mod, const QoreExternalConstant& constant) {
     printd(0, "QoreLoader::importQoreConstantToPython() %s()\n", constant.getName());
+
+    ExceptionSink xsink;
+    ValueHolder qoreval(constant.getReferencedValue(), &xsink);
+    QorePythonReferenceHolder val(qore_python_pgm->getPythonValue(*qoreval, &xsink));
+    if (!xsink) {
+        PyObject_SetAttrString(mod, constant.getName(), val.release());
+    }
 }
 
 void QoreLoader::importQoreClassToPython(PyObject* mod, const QoreClass& cls) {
@@ -261,6 +251,11 @@ void QoreLoader::importQoreClassToPython(PyObject* mod, const QoreClass& cls) {
 
 void QoreLoader::importQoreNamespaceToPython(PyObject* mod, const QoreNamespace& ns) {
     printd(0, "QoreLoader::importQoreNamespaceToPython() %s()\n", ns.getName());
+
+    // create a submodule
+    QorePythonReferenceHolder new_mod(PyModule_New(ns.getName()));
+    importQoreToPython(*new_mod, ns);
+    PyObject_SetAttrString(mod, ns.getName(), new_mod.release());
 }
 
 // Python integration

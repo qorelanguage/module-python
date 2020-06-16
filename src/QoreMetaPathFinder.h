@@ -42,8 +42,6 @@ public:
     //! destructor function
     DLLLOCAL static void del();
 
-    //DLLLOCAL static QoreProgram* getProgram(const char* mod);
-
     //! type functions
     DLLLOCAL static void dealloc(PyObject* self);
     DLLLOCAL static PyObject* repr(PyObject* obj);
@@ -55,11 +53,6 @@ private:
     DLLLOCAL static QoreThreadLock m;
     DLLLOCAL static QorePythonReferenceHolder qore_package;
     DLLLOCAL static QorePythonReferenceHolder mod_spec_cls;
-
-    /*
-    typedef std::map<std::string, ModInfo> mod_map_t;
-    DLLLOCAL static mod_map_t mod_map;
-    */
 
     DLLLOCAL static PyObject* getQorePackageModuleSpec();
     DLLLOCAL static PyObject* tryLoadModule(const QoreString& mname);

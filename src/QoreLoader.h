@@ -57,7 +57,7 @@ private:
     DLLLOCAL static QorePythonReferenceHolder loader;
 
     DLLLOCAL static void importQoreToPython(PyObject* mod, const QoreNamespace& ns);
-    DLLLOCAL static void importQoreFunctionToPython(PyObject* mod, PyObject* mod_dict, const QoreExternalFunction& func);
+    DLLLOCAL static void importQoreFunctionToPython(PyObject* mod, const QoreExternalFunction& func);
     DLLLOCAL static void importQoreConstantToPython(PyObject* mod, const QoreExternalConstant& constant);
     DLLLOCAL static void importQoreClassToPython(PyObject* mod, const QoreClass& cls);
     DLLLOCAL static void importQoreNamespaceToPython(PyObject* mod, const QoreNamespace& ns);
