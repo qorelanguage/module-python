@@ -46,6 +46,7 @@ set(CPP_SRC
     src/qoreloadermodule.cpp
     src/QoreMetaPathFinder.cpp
     src/QoreLoader.cpp
+    src/PythonQoreClass.cpp
 )
 
 qore_wrap_qpp_value(QPP_SOURCES ${QPP_SRC})

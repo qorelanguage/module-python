@@ -22,12 +22,14 @@
 #include "QoreLoader.h"
 #include "QoreMetaPathFinder.h"
 #include "QorePythonProgram.h"
+#include "PythonQoreClass.h"
 
 #include <memory>
 
 QorePythonReferenceHolder QoreLoader::loader_cls;
 QorePythonReferenceHolder QoreLoader::loader;
 QoreLoader::meth_vec_t QoreLoader::meth_vec;
+QoreLoader::py_cls_vec_t QoreLoader::py_cls_vec;
 
 static PyMethodDef QoreLoader_methods[] = {
     {"create_module", QoreLoader::create_module, METH_VARARGS, "QoreLoader.create_module() implementation"},
@@ -55,8 +57,8 @@ PyTypeObject QoreLoader_Type = {
     0,                            // tp_as_number
     0,                            // tp_as_sequence
     0,                            // tp_as_mapping
-    0,                            // tp_hash*/
-    0,                            // tp_call*/
+    0,                            // tp_hash
+    0,                            // tp_call
     0,                            // tp_str
     PyObject_GenericGetAttr,      // tp_getattro
     0,                            // tp_setattro
@@ -104,6 +106,15 @@ void QoreLoader::del() {
         delete i;
     }
     meth_vec.clear();
+
+    for (auto& i: py_cls_vec) {
+        delete i;
+    }
+    py_cls_vec.clear();
+}
+
+void QoreLoader::registerPythonClass(PythonQoreClass* py_cls) {
+    py_cls_vec.push_back(py_cls);
 }
 
 PyObject* QoreLoader::getLoaderRef() {
@@ -157,7 +168,7 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
 
     if (ns) {
         QoreProgramContextHelper pch(qore_python_pgm->getQoreProgram());
-        importQoreToPython(mod, *ns);
+        importQoreToPython(mod, *ns, name_str);
     }
 
     Py_INCREF(Py_None);
@@ -186,7 +197,7 @@ const QoreNamespace* QoreLoader::getModuleRootNs(const char* name, const QoreNam
 }
 
 // import Qore definitions to Python
-void QoreLoader::importQoreToPython(PyObject* mod, const QoreNamespace& ns) {
+void QoreLoader::importQoreToPython(PyObject* mod, const QoreNamespace& ns, const char* mod_name) {
     // import all functions
     QoreNamespaceFunctionIterator fi(ns);
     while (fi.next()) {
@@ -207,7 +218,7 @@ void QoreLoader::importQoreToPython(PyObject* mod, const QoreNamespace& ns) {
     // import all classes
     QoreNamespaceClassIterator clsi(ns);
     while (clsi.next()) {
-        importQoreClassToPython(mod, clsi.get());
+        importQoreClassToPython(mod, clsi.get(), mod_name);
     }
 
     // import all subnamespaces as modules
@@ -245,8 +256,16 @@ void QoreLoader::importQoreConstantToPython(PyObject* mod, const QoreExternalCon
     }
 }
 
-void QoreLoader::importQoreClassToPython(PyObject* mod, const QoreClass& cls) {
-    printd(0, "QoreLoader::importQoreClassToPython() %s()\n", cls.getName());
+void QoreLoader::importQoreClassToPython(PyObject* mod, const QoreClass& cls, const char* mod_name) {
+    printd(0, "QoreLoader::importQoreClassToPython() %s.%s\n", mod_name, cls.getName());
+
+    std::unique_ptr<PythonQoreClass> py_cls(new PythonQoreClass(mod_name, cls));
+
+    PyTypeObject* t = py_cls->getType();
+    printd(0, "QoreLoader::importQoreClassToPython() %s type: %p (%s)\n", cls.getName(), t, t->tp_name);
+
+    PyObject_SetAttrString(mod, cls.getName(), (PyObject*)py_cls->getType());
+    registerPythonClass(py_cls.release());
 }
 
 void QoreLoader::importQoreNamespaceToPython(PyObject* mod, const QoreNamespace& ns) {
@@ -254,7 +273,7 @@ void QoreLoader::importQoreNamespaceToPython(PyObject* mod, const QoreNamespace&
 
     // create a submodule
     QorePythonReferenceHolder new_mod(PyModule_New(ns.getName()));
-    importQoreToPython(*new_mod, ns);
+    importQoreToPython(*new_mod, ns, ns.getName());
     PyObject_SetAttrString(mod, ns.getName(), new_mod.release());
 }
 

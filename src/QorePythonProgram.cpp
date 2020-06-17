@@ -1395,12 +1395,6 @@ int QorePythonProgram::importModule(ExceptionSink* xsink, PyObject* mod, PyObjec
         }
     }
 
-    if (PyObject_HasAttrString(mod, "reduce_sum")) {
-        // get UTC offset for time
-        QorePythonReferenceHolder tv(PyObject_GetAttrString(mod, "reduce_sum"));
-        printd(5, "QorePythonProgram::importModule() '%s' mod: %p reduce_sum: %p (%s) filt: %d\n", module, mod, *tv, Py_TYPE(*tv)->tp_name, filter);
-    }
-
     QorePythonReferenceHolder dir(PyObject_Dir(mod));
     if (dir && PyList_Check(*dir)) {
         Py_ssize_t len = PyList_Size(*dir);

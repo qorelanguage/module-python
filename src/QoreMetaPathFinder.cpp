@@ -52,8 +52,8 @@ PyTypeObject QoreMetaPathFinder_Type = {
     0,                            // tp_as_number
     0,                            // tp_as_sequence
     0,                            // tp_as_mapping
-    0,                            // tp_hash*/
-    0,                            // tp_call*/
+    0,                            // tp_hash
+    0,                            // tp_call
     0,                            // tp_str
     PyObject_GenericGetAttr,      // tp_getattro
     0,                            // tp_setattro
