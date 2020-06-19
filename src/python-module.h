@@ -152,6 +152,10 @@ public:
     DLLLOCAL QorePythonReferenceHolder(PyObject* obj) : obj(obj) {
     }
 
+    QorePythonReferenceHolder(QorePythonReferenceHolder&& old) : obj(old.obj) {
+        old.obj = nullptr;
+    }
+
     DLLLOCAL ~QorePythonReferenceHolder() {
         purge();
     }
@@ -253,6 +257,9 @@ public:
 protected:
     _node* node;
 };
+
+// Base type for Qore objects in Python
+DLLLOCAL extern PyTypeObject PythonQoreObjectBase_Type;
 
 // Python program control for Qore interfacing
 DLLLOCAL extern QorePythonProgram* qore_python_pgm;

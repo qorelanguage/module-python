@@ -50,7 +50,7 @@ PythonProgram::constructor(string source_code, string source_label) {
 */
 PythonProgram::destructor() {
     //printd(5, "Qore PythonProgram::destructor() this: %p\n", pp);
-    pp->destructor();
+    pp->destructor(xsink);
 }
 
 //! Runs the program

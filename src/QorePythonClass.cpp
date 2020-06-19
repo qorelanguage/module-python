@@ -59,7 +59,6 @@ QoreValue QorePythonClass::methodGate(const QoreMethod& meth, void* m, QoreObjec
     }
 
     const QorePythonClass* cls = static_cast<const QorePythonClass*>(meth.getClass());
-
     return cls->callPythonMethod(xsink, pypgm, mname->c_str(), args, pd, 2);
 }
 

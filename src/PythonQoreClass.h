@@ -46,6 +46,11 @@ public:
         return &py_type;
     }
 
+    //! wraps a Qore object as a Python object of this class
+    /** obj will be referenced for the assignment
+    */
+    DLLLOCAL PyObject* wrap(QoreObject* obj);
+
     // Python type methods
     DLLLOCAL static PyObject* py_new(QorePyTypeObject* type, PyObject* args, PyObject* kw);
     DLLLOCAL static void py_dealloc(PyQoreObject* self);
@@ -56,17 +61,28 @@ private:
     QoreString doc;
 
     typedef std::vector<PyMethodDef> py_meth_vec_t;
-    py_meth_vec_t py_meth_vec;
+    py_meth_vec_t py_normal_meth_vec;
+    py_meth_vec_t py_static_meth_vec;
     typedef std::vector<QoreString> strvec_t;
     strvec_t strvec;
+    typedef std::vector<QorePythonReferenceHolder> py_obj_vec_t;
+    py_obj_vec_t py_normal_meth_obj_vec;
+    py_obj_vec_t py_static_meth_obj_vec;
+    typedef std::set<const char*, ltstr> cstrset_t;
 
     QorePyTypeObject py_type;
 
     static PyTypeObject static_py_type;
 
+    DLLLOCAL void populateClass(const QoreClass& qcls, cstrset_t& meth_set);
+
+    DLLLOCAL static PyObject* exec_qore_static_method(const QoreMethod& m, PyObject* args);
+
     // class methods
-    DLLLOCAL static PyObject* exec_qore_method(PyObject* self, PyObject* args);
-    DLLLOCAL static PyObject* exec_qore_static_method(PyObject* self, PyObject* args);
+    DLLLOCAL static PyObject* exec_qore_method(PyObject* method_capsule, PyObject* args);
+    DLLLOCAL static PyObject* exec_qore_static_method(PyObject* method_capsule, PyObject* args);
 };
+
+DLLLOCAL extern PyTypeObject PythonQoreException_Type;
 
 #endif

@@ -25,6 +25,8 @@
 #include "QC_PythonProgram.h"
 #include "QorePythonPrivateData.h"
 #include "QorePythonClass.h"
+#include "QoreLoader.h"
+#include "PythonQoreClass.h"
 
 #include <structmember.h>
 #include <frameobject.h>
@@ -98,6 +100,62 @@ void QorePythonProgram::createQoreProgram() {
 
 void QorePythonProgram::staticInit() {
     PyDateTime_IMPORT;
+}
+
+void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
+    //printd(5, "QorePythonProgram::deleteIntern() this: %p\n", this);
+    // remove all thread states; the objects will be deleted by Python when the interpreter is destroyed
+    {
+        AutoLocker al(py_thr_lck);
+
+        // delete thread state
+        QorePythonGilHelper pgh;
+
+        py_thr_map_t::iterator i = py_thr_map.find(this);
+        assert(i != py_thr_map.end());
+        // delete all thread states
+        for (auto& ti : i->second) {
+            if (ti.second.owns_state) {
+                PyThreadState_Clear(ti.second.state);
+                PyThreadState_Delete(ti.second.state);
+            }
+        }
+
+        py_thr_map.erase(i);
+    }
+
+    if (qpgm && owns_qore_program_ref) {
+        // remove the external data before dereferencing
+        qpgm->removeExternalData(QORE_PYTHON_MODULE_NAME);
+        qpgm->waitForTerminationAndDeref(xsink);
+    }
+    qpgm = nullptr;
+
+    if ((interpreter && owns_interpreter) || module || python_code) {
+        QorePythonGilHelper qpgh;
+
+        for (auto& i : obj_sink) {
+            Py_DECREF(i);
+        }
+
+        if (interpreter && owns_interpreter) {
+            PyInterpreterState_Clear(interpreter);
+            PyInterpreterState_Delete(interpreter);
+            interpreter = nullptr;
+            owns_interpreter = false;
+        }
+        module.purge();
+        python_code.purge();
+
+        valid = false;
+    }
+
+    if (save_object_callback) {
+        save_object_callback->deref(nullptr);
+        save_object_callback = nullptr;
+    }
+
+    //printd(5, "QorePythonProgram::deleteIntern() this: %p\n", this);
 }
 
 void QorePythonProgram::pythonThreadCleanup(void*) {
@@ -257,16 +315,16 @@ QoreListNode* QorePythonProgram::getQoreListFromList(ExceptionSink* xsink, PyObj
     return rv.release();
 }
 
-QoreListNode* QorePythonProgram::getQoreListFromTuple(ExceptionSink* xsink, PyObject* val) {
+QoreListNode* QorePythonProgram::getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, size_t offset) {
     pyobj_set_t rset;
-    return getQoreListFromTuple(xsink, val, rset);
+    return getQoreListFromTuple(xsink, val, rset, offset);
 }
 
-QoreListNode* QorePythonProgram::getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset) {
+QoreListNode* QorePythonProgram::getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset, size_t offset) {
     assert(PyTuple_Check(val));
     ReferenceHolder<QoreListNode> rv(new QoreListNode(autoTypeInfo), xsink);
     Py_ssize_t len = PyTuple_Size(val);
-    for (Py_ssize_t i = 0; i < len; ++i) {
+    for (Py_ssize_t i = offset; i < len; ++i) {
         ValueHolder qval(getQoreValue(xsink, PyTuple_GetItem(val, i), rset), xsink);
         if (*xsink || checkPythonException(xsink)) {
             return nullptr;
@@ -618,12 +676,19 @@ PyObject* QorePythonProgram::getPythonValue(QoreValue val, ExceptionSink* xsink)
                 Py_XINCREF(rv);
                 return rv;
             }
+
+            PythonQoreClass* py_cls = QoreLoader::findCreatePythonClass(*o->getClass(), "qore");
+            return py_cls->wrap(o);
         }
     }
 
+    Py_INCREF(Py_None);
+    return Py_None;
+    /*
     xsink->raiseException("PYTHON-VALUE-ERROR", "don't know how to convert a value of Qore type '%s' to Python",
         val.getFullTypeName());
     return nullptr;
+    */
 }
 
 QoreValue QorePythonProgram::callFunction(ExceptionSink* xsink, const QoreString& func_name, const QoreListNode* args, size_t arg_offset) {
@@ -873,24 +938,6 @@ QorePythonClass* QorePythonProgram::getCreateQorePythonClass(ExceptionSink* xsin
     return getCreateQorePythonClassIntern(xsink, type);
 }
 
-#if 0
-static void show_dict(PyObject* globals) {
-    if (!globals) {
-        return;
-    }
-    PyObject* key, * value;
-    Py_ssize_t pos = 0;
-    // first import classes and modules
-    while (PyDict_Next(globals, &pos, &key, &value)) {
-        if (PyUnicode_Check(value)) {
-            printd(0, "+ %s => type %s\n", PyUnicode_AsUTF8(key), PyUnicode_AsUTF8(value));
-        } else {
-            printd(0, "+ %s => type %s\n", PyUnicode_AsUTF8(key), Py_TYPE(value)->tp_name);
-        }
-    }
-}
-#endif
-
 QoreNamespace* QorePythonProgram::getNamespaceForObject(PyObject* obj) {
     //printd(5, "QorePythonProgram::getNamespaceForObject() obj: %p (%s)\n", obj, Py_TYPE(obj)->tp_name);
     QoreString ns_path;
@@ -920,7 +967,7 @@ QoreNamespace* QorePythonProgram::getNamespaceForObject(PyObject* obj) {
     }
 
     if (ns_path.empty()) {
-        //printd(0, "QorePythonProgram::getNamespaceForObject() obj %p (%s) -> ns: Python\n", obj, Py_TYPE(obj)->tp_name);
+        //printd(5, "QorePythonProgram::getNamespaceForObject() obj %p (%s) -> ns: Python\n", obj, Py_TYPE(obj)->tp_name);
         if (!module_context) {
             return pyns;
         }
@@ -1028,7 +1075,8 @@ QorePythonClass* QorePythonProgram::getCreateQorePythonClassIntern(ExceptionSink
             }
             // check for wrapper descriptors -> normal method
             if (var_type == &PyWrapperDescr_Type) {
-                // do not need to save reference here
+                Py_INCREF(value);
+                cls->addObj(value);
                 if (!strcmp(keystr, "copy")) {
                     keystr = "_copy";
                 }
@@ -1042,7 +1090,8 @@ QorePythonClass* QorePythonProgram::getCreateQorePythonClassIntern(ExceptionSink
             }
             // check for method descriptors -> normal method
             if (var_type == &PyMethodDescr_Type) {
-                // do not need to save reference here
+                Py_INCREF(value);
+                cls->addObj(value);
                 if (!strcmp(keystr, "copy")) {
                     keystr = "_copy";
                 }
@@ -1239,6 +1288,12 @@ QoreValue QorePythonProgram::callMethodDescriptorMethod(ExceptionSink* xsink, Py
     if (*xsink) {
         return QoreValue();
     }
+
+    ///*
+    // XXX DEBUG DELETEME
+    QorePythonReferenceHolder objstr(PyObject_Repr(obj));
+    printd(5, "QorePythonProgram::callMethodDescriptorMethod() obj: %s (%s)\n", PyUnicode_AsUTF8(*objstr), Py_TYPE(obj)->tp_name);
+    //*/
 
     //printd(5, "QorePythonProgram::callMethodDescriptorMethod(): calling '%s' argcount: %d\n", fname->c_str(), (args && args->size() > arg_offset) ? args->size() - arg_offset : 0);
     QorePythonReferenceHolder return_value(PyMethodDescr_Type.tp_call(obj, *py_args, nullptr));

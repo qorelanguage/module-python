@@ -84,48 +84,48 @@ int QoreMetaPathFinder::init() {
     // get importlib.machinery.ModuleSpec class
     QorePythonReferenceHolder mod(PyImport_ImportModule("importlib.machinery"));
     if (!*mod) {
-        printd(0, "QoreMetaPathFinder::init() ERROR: no importlib.machinery module\n");
+        printd(5, "QoreMetaPathFinder::init() ERROR: no importlib.machinery module\n");
         return -1;
     }
 
     if (!PyObject_HasAttrString(*mod, "ModuleSpec")) {
-        printd(0, "QoreMetaPathFinder::init() ERROR: no ModuleSpec class in importlib.machinery\n");
+        printd(5, "QoreMetaPathFinder::init() ERROR: no ModuleSpec class in importlib.machinery\n");
         return -1;
     }
 
     mod_spec_cls = PyObject_GetAttrString(*mod, "ModuleSpec");
-    printd(0, "mod_spec_cls: %p %s\n", *mod_spec_cls, Py_TYPE(*mod_spec_cls)->tp_name);
+    printd(5, "mod_spec_cls: %p %s\n", *mod_spec_cls, Py_TYPE(*mod_spec_cls)->tp_name);
 
     if (PyType_Ready(&QoreMetaPathFinder_Type) < 0) {
-        printd(0, "QoreMetaPathFinder::init() type initialization failed\n");
+        printd(5, "QoreMetaPathFinder::init() type initialization failed\n");
         return -1;
     }
 
     QorePythonReferenceHolder mpf(PyObject_CallObject((PyObject*)&QoreMetaPathFinder_Type, nullptr));
-    printd(0, "QoreMetaPathFinder::init() created finder %p\n", *mpf);
+    printd(5, "QoreMetaPathFinder::init() created finder %p\n", *mpf);
 
     // get sys module
     mod = PyImport_ImportModule("sys");
     if (!*mod) {
-        printd(0, "QoreMetaPathFinder::init() ERROR: no sys module\n");
+        printd(5, "QoreMetaPathFinder::init() ERROR: no sys module\n");
         return -1;
     }
 
     if (!PyObject_HasAttrString(*mod, "meta_path")) {
-        printd(0, "QoreMetaPathFinder::init() ERROR: no sys.meta_path\n");
+        printd(5, "QoreMetaPathFinder::init() ERROR: no sys.meta_path\n");
         return -1;
     }
 
     QorePythonReferenceHolder meta_path(PyObject_GetAttrString(*mod, "meta_path"));
-    printd(0, "meta_path: %p %s\n", *meta_path, Py_TYPE(*meta_path)->tp_name);
+    printd(5, "meta_path: %p %s\n", *meta_path, Py_TYPE(*meta_path)->tp_name);
     if (!PyList_Check(*meta_path)) {
-        printd(0, "QoreMetaPathFinder::init() ERROR: sys.meta_path is not a list\n");
+        printd(5, "QoreMetaPathFinder::init() ERROR: sys.meta_path is not a list\n");
         return -1;
     }
 
     // insert object
     if (PyList_Append(*meta_path, *mpf)) {
-        printd(0, "QoreMetaPathFinder::init() ERROR: failed to append finder to sys.meta_path\n");
+        printd(5, "QoreMetaPathFinder::init() ERROR: failed to append finder to sys.meta_path\n");
         return -1;
     }
 
@@ -154,7 +154,7 @@ PyObject* QoreMetaPathFinder::find_spec(PyObject* self, PyObject* args) {
         // show args
         QorePythonReferenceHolder argstr(PyObject_Repr(args));
         assert(PyUnicode_Check(*argstr));
-        printd(0, "QoreMetaPathFinder::find_spec() args: %s\n", PyUnicode_AsUTF8(*argstr));
+        printd(5, "QoreMetaPathFinder::find_spec() args: %s\n", PyUnicode_AsUTF8(*argstr));
     }
 
     // returns a borrowed reference
@@ -211,7 +211,7 @@ PyObject* QoreMetaPathFinder::getQorePackageModuleSpec() {
 }
 
 PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& mname) {
-    printd(0, "QoreMetaPathFinder::tryLoadModule() load '%s'\n", mname.c_str());
+    printd(5, "QoreMetaPathFinder::tryLoadModule() load '%s'\n", mname.c_str());
     ExceptionSink xsink;
 
     if (ModuleManager::runTimeLoadModule(mname.c_str(), qore_python_pgm->getQoreProgram(), &xsink)) {

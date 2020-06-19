@@ -132,11 +132,15 @@ public:
     }
 
     DLLLOCAL virtual void doDeref() {
-        deref();
+        ExceptionSink xsink;
+        deref(&xsink);
+        if (xsink) {
+            throw QoreXSinkException(xsink);
+        }
     }
 
-    DLLLOCAL void destructor() {
-        deleteIntern();
+    DLLLOCAL void destructor(ExceptionSink* xsink) {
+        deleteIntern(xsink);
     }
 
     DLLLOCAL QoreValue run(ExceptionSink* xsink) {
@@ -290,7 +294,7 @@ public:
     //! Returns a Qore list from a Python tuple
     /** must already have the Python thread context set
     */
-    DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val);
+    DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, size_t offset = 0);
 
     //! Returns a Qore hash from a Python dict
     /** must already have the Python thread context set
@@ -321,6 +325,14 @@ public:
     //! Returns the Qore program
     DLLLOCAL QoreProgram* getQoreProgram() const {
         return qpgm;
+    }
+
+    using AbstractPrivateData::deref;
+    DLLLOCAL virtual void deref(ExceptionSink* xsink) {
+        if (ROdereference()) {
+            deleteIntern(xsink);
+            delete this;
+        }
     }
 
     //! Returns a Qore binary from a Python Bytes object
@@ -491,7 +503,8 @@ protected:
     //! Returns a Qore list from a Python list
     DLLLOCAL QoreListNode* getQoreListFromList(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset);
     //! Returns a Qore list from a Python tuple
-    DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset);
+    DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset,
+        size_t offset = 0);
 
     DLLLOCAL static void execPythonConstructor(const QoreMethod& meth, PyObject* pycls, QoreObject* self,
         const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
@@ -522,61 +535,10 @@ protected:
         ExceptionSink* xsink);
 
     DLLLOCAL virtual ~QorePythonProgram() {
-        deleteIntern();
+        assert(!qpgm);
     }
 
-    DLLLOCAL void deleteIntern() {
-        //printd(5, "QorePythonProgram::deleteIntern() this: %p\n", this);
-        // remove all thread states; the objects will be deleted by Python when the interpreter is destroyed
-        {
-            AutoLocker al(py_thr_lck);
-
-            // delete thread state
-            QorePythonGilHelper pgh;
-
-            py_thr_map_t::iterator i = py_thr_map.find(this);
-            assert(i != py_thr_map.end());
-            // delete all thread states
-            for (auto& ti : i->second) {
-                if (ti.second.owns_state) {
-                    PyThreadState_Clear(ti.second.state);
-                    PyThreadState_Delete(ti.second.state);
-                }
-            }
-
-            py_thr_map.erase(i);
-        }
-
-        if (qpgm && owns_qore_program_ref) {
-            // remove the external data before dereferencing
-            qpgm->removeExternalData(QORE_PYTHON_MODULE_NAME);
-            qpgm->deref(nullptr);
-        }
-
-        if ((interpreter && owns_interpreter) || module || python_code) {
-            QorePythonGilHelper qpgh;
-
-            for (auto& i : obj_sink) {
-                Py_DECREF(i);
-            }
-
-            if (interpreter && owns_interpreter) {
-                PyInterpreterState_Clear(interpreter);
-                PyInterpreterState_Delete(interpreter);
-            }
-            module.purge();
-            python_code.purge();
-
-            valid = false;
-        }
-
-        if (save_object_callback) {
-            save_object_callback->deref(nullptr);
-            save_object_callback = nullptr;
-        }
-
-        //printd(5, "QorePythonProgram::deleteIntern() this: %p\n", this);
-    }
+    DLLLOCAL void deleteIntern(ExceptionSink* xsink);
 
     //! the GIL must be held when this function is called
     DLLLOCAL int createInterpreter(ExceptionSink* xsink);

@@ -37,8 +37,13 @@ static bool qore_needs_shutdown = false;
 
 thread_local QoreThreadAttacher qoreThreadAttacher;
 
+PyTypeObject PythonQoreObjectBase_Type = {
+    PyVarObject_HEAD_INIT(nullptr, 0)
+    .tp_name = "PythonQoreObjectBase",
+};
+
 void qoreloader_free(void* obj) {
-    printd(0, "qoreloader_free() obj: %p qore_needs_shutdown: %d\n", obj, qore_needs_shutdown);
+    printd(5, "qoreloader_free() obj: %p qore_needs_shutdown: %d\n", obj, qore_needs_shutdown);
 
     if (qore_python_pgm) {
         ExceptionSink xsink;
@@ -72,12 +77,12 @@ static struct PyModuleDef qoreloadermodule = {
 };
 
 static int slot_qoreloader_exec(PyObject *m) {
-    printd(0, "slot_qoreloader_exec()\n");
+    printd(5, "slot_qoreloader_exec()\n");
     // initialize qore library if necessary
     if (!q_libqore_initalized()) {
         qore_init(QL_MIT);
         qore_needs_shutdown = true;
-        printd(0, "PyInit_qoreloader() Qore library initialized\n");
+        printd(5, "PyInit_qoreloader() Qore library initialized\n");
     }
 
     {
@@ -94,6 +99,10 @@ static int slot_qoreloader_exec(PyObject *m) {
         if (xsink) {
             return -1;
         }
+    }
+
+    if (PyType_Ready(&PythonQoreObjectBase_Type) < 0) {
+        return -1;
     }
 
     if (QoreLoader::init()) {
