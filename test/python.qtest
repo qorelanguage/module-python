@@ -60,8 +60,9 @@ def test():
         };
         p.setSaveObjectCallback(callback);
         p.callFunction("test");
-        printf("object_cache: %N\n", object_cache);
+        #printf("object_cache: %N\n", object_cache);
         assertEq(1, object_cache.size());
+        assertEq("XmlRpcClient", object_cache.firstValue().className());
     }
 
     basicTest() {

@@ -193,7 +193,7 @@ PyObject* PythonQoreClass::wrap(QoreObject* obj) {
     QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
     qore_python_pgm->saveQoreObjectFromPython(obj, xsink);
     if (xsink) {
-        QoreLoader::raisePythonException(xsink);
+        qore_python_pgm->raisePythonException(xsink);
     }
     return (PyObject*)self;
 }
@@ -246,7 +246,7 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
         return py_rv.release();
     }
 
-    QoreLoader::raisePythonException(xsink);
+    qore_python_pgm->raisePythonException(xsink);
     return nullptr;
 }
 
@@ -273,7 +273,7 @@ PyObject* PythonQoreClass::exec_qore_static_method(const QoreMethod& m, PyObject
         return py_rv.release();
     }
 
-    QoreLoader::raisePythonException(xsink);
+    qore_python_pgm->raisePythonException(xsink);
     return nullptr;
 }
 
@@ -299,21 +299,14 @@ PyObject* PythonQoreClass::py_new(QorePyTypeObject* type, PyObject* args, PyObje
         }
     }
 
-    QoreLoader::raisePythonException(xsink);
+    qore_python_pgm->raisePythonException(xsink);
     return nullptr;
 }
 
 void PythonQoreClass::py_dealloc(PyQoreObject* self) {
     if (self->qobj) {
-        QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
-        if (qore_python_pgm) {
-            ExceptionSink xsink;
-            QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
-            self->qobj->tDeref();
-            self->qobj = nullptr;
-        } else {
-            printd(5, "PythonQoreClass::py_dealloc() ERROR leaking object %p (%s)\n", self->qobj, self->qobj->getClassName());
-        }
+        self->qobj->tDeref();
+        self->qobj = nullptr;
     }
     Py_TYPE(self)->tp_free(self);
 }

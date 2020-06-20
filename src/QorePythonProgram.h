@@ -45,6 +45,7 @@
 
 // forward reference
 class QorePythonProgram;
+class PythonQoreClass;
 
 #define IF_CLASS (1 << 0)
 #define IF_OTHER (1 << 1)
@@ -350,6 +351,34 @@ public:
     //! Saves Qore objects in thread-local data or using a callback
     DLLLOCAL int saveQoreObjectFromPython(const QoreValue& rv, ExceptionSink& xsink);
 
+    //! returns a registered PythonQoreClass for the given Qore class
+    DLLLOCAL PythonQoreClass* findCreatePythonClass(const QoreClass& cls, const char* mod_name);
+
+    //! Imports a Qore namespace into a Python module
+    DLLLOCAL void importQoreToPython(PyObject* mod, const QoreNamespace& ns, const char* mod_name);
+
+    //! Imports a Qore constant into a Python module
+    DLLLOCAL void importQoreConstantToPython(PyObject* mod, const QoreExternalConstant& constant);
+
+    //! imports a Qore function into a Python module
+    DLLLOCAL void importQoreFunctionToPython(PyObject* mod, const QoreExternalFunction& func);
+
+    //! Imports a Qore class into a Python module
+    DLLLOCAL void importQoreClassToPython(PyObject* mod, const QoreClass& cls, const char* mod_name);
+
+    //! Raise a Python exception from a Qore exception; consumes the Qore exception
+    DLLLOCAL void raisePythonException(ExceptionSink& xsink);
+
+    //! Returns a Python list for the given Qore list
+    DLLLOCAL PyObject* getPythonList(ExceptionSink* xsink, const QoreListNode* l);
+
+    //! Returns a Python tuple for the given Qore list
+    DLLLOCAL PyObject* getPythonTupleValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset = 0,
+        PyObject* first = nullptr);
+
+    //! Returns a Python dict for the given Qore hash
+    DLLLOCAL PyObject* getPythonDict(ExceptionSink* xsink, const QoreHashNode* h);
+
     //! Returns a Qore binary from a Python Bytes object
     DLLLOCAL static BinaryNode* getQoreBinaryFromBytes(PyObject* val);
 
@@ -367,16 +396,6 @@ public:
 
     //! Returns a Qore absolute date time value from a Python Time object
     DLLLOCAL static DateTimeNode* getQoreDateTimeFromTime(PyObject* val);
-
-    //! Returns a Python list for the given Qore list
-    DLLLOCAL PyObject* getPythonList(ExceptionSink* xsink, const QoreListNode* l);
-
-    //! Returns a Python tuple for the given Qore list
-    DLLLOCAL PyObject* getPythonTupleValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset = 0,
-        PyObject* first = nullptr);
-
-    //! Returns a Python dict for the given Qore hash
-    DLLLOCAL PyObject* getPythonDict(ExceptionSink* xsink, const QoreHashNode* h);
 
     //! Returns a Python string for the given Qore string
     DLLLOCAL static PyObject* getPythonString(ExceptionSink* xsink, const QoreString* str);
@@ -476,8 +495,17 @@ protected:
     // call reference for saving object references
     mutable ReferenceHolder<ResolvedCallReferenceNode> save_object_callback;
 
+    //! Map of Qore classes to Python classes
+    typedef std::map<const QoreClass*, PythonQoreClass*> py_cls_map_t;
+    py_cls_map_t py_cls_map;
+
+    typedef std::vector<PyMethodDef*> meth_vec_t;
+    meth_vec_t meth_vec;
+
     //! Saves Qore objects in thread-local data
     DLLLOCAL int saveQoreObjectFromPythonDefault(const QoreValue& rv, ExceptionSink& xsink);
+
+    DLLLOCAL void importQoreNamespaceToPython(PyObject* mod, const QoreNamespace& ns);
 
     DLLLOCAL QoreNamespace* getNamespaceForObject(PyObject* type);
 
@@ -551,6 +579,9 @@ protected:
         ExceptionSink* xsink);
     DLLLOCAL static QoreValue execPythonFunction(PyObject* func, const QoreListNode* args, q_rt_flags_t rtflags,
         ExceptionSink* xsink);
+
+    //! Python integration
+    DLLLOCAL static PyObject* callQoreFunction(PyObject* self, PyObject* args);
 
     DLLLOCAL virtual ~QorePythonProgram() {
         assert(!qpgm);

@@ -49,30 +49,9 @@ public:
     DLLLOCAL static PyObject* create_module(PyObject* self, PyObject* args);
     DLLLOCAL static PyObject* exec_module(PyObject* self, PyObject* args);
 
-    //! Python integration
-    DLLLOCAL static PyObject* callQoreFunction(PyObject* self, PyObject* args);
-
-    //! returns a registered PythonQoreClass for the given Qore class
-    DLLLOCAL static PythonQoreClass* findCreatePythonClass(const QoreClass& cls, const char* mod_name);
-
-    //! Raise a Python exception from a Qore exception; consumes the Qore exception
-    DLLLOCAL static void raisePythonException(ExceptionSink& xsink);
-
 private:
-    typedef std::vector<PyMethodDef*> meth_vec_t;
-    static meth_vec_t meth_vec;
-
-    typedef std::map<const QoreClass*, PythonQoreClass*> py_cls_map_t;
-    static py_cls_map_t py_cls_map;
-
     DLLLOCAL static QorePythonReferenceHolder loader_cls;
     DLLLOCAL static QorePythonReferenceHolder loader;
-
-    DLLLOCAL static void importQoreToPython(PyObject* mod, const QoreNamespace& ns, const char* mod_name);
-    DLLLOCAL static void importQoreFunctionToPython(PyObject* mod, const QoreExternalFunction& func);
-    DLLLOCAL static void importQoreConstantToPython(PyObject* mod, const QoreExternalConstant& constant);
-    DLLLOCAL static void importQoreClassToPython(PyObject* mod, const QoreClass& cls, const char* mod_name);
-    DLLLOCAL static void importQoreNamespaceToPython(PyObject* mod, const QoreNamespace& ns);
 
     DLLLOCAL static const QoreNamespace* getModuleRootNs(const char* name, const QoreNamespace* root_ns);
 };
