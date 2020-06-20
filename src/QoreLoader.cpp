@@ -151,7 +151,13 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
     printd(5, "QoreLoader::exec_module() mod pgm: %p\n", mod_pgm);
 
     // get root namespace
-    const QoreNamespace* ns = getModuleRootNs(name_str, mod_pgm->findNamespace("::"));
+    const QoreNamespace* ns;
+    bool is_qore;
+    if (!strcmp(name_str, "qore")) {
+        ns = mod_pgm->getQoreNS();
+    } else {
+        ns = getModuleRootNs(name_str, mod_pgm->findNamespace("::"));
+    }
     assert(ns);
     printd(5, "QoreLoader::exec_module() found root NS %p: %s\n", ns, ns->getName());
 

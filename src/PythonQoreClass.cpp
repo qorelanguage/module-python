@@ -243,7 +243,9 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
     if (!xsink) {
         ValueHolder rv(obj->evalMethod(*m, *qargs, &xsink), &xsink);
         QorePythonReferenceHolder py_rv(qore_python_pgm->getPythonValue(*rv, &xsink));
-        return py_rv.release();
+        if (!xsink) {
+            return py_rv.release();
+        }
     }
 
     qore_python_pgm->raisePythonException(xsink);
@@ -270,7 +272,9 @@ PyObject* PythonQoreClass::exec_qore_static_method(const QoreMethod& m, PyObject
     if (!xsink) {
         ValueHolder rv(QoreObject::evalStaticMethod(m, m.getClass(), *qargs, &xsink), &xsink);
         QorePythonReferenceHolder py_rv(qore_python_pgm->getPythonValue(*rv, &xsink));
-        return py_rv.release();
+        if (!xsink) {
+            return py_rv.release();
+        }
     }
 
     qore_python_pgm->raisePythonException(xsink);

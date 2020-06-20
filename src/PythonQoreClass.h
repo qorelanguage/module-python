@@ -83,6 +83,25 @@ private:
     DLLLOCAL static PyObject* exec_qore_static_method(PyObject* method_capsule, PyObject* args);
 };
 
+/*
+//! Holds a Python exception and restores it on exit
+class PythonExceptionHolder {
+public:
+    DLLLOCAL PythonExceptionHolder() {
+        PyErr_Fetch(&error_type, &error_value, &error_traceback);
+    }
+
+    DLLLOCAL ~PythonExceptionHolder() {
+        PyErr_Restore(error_type, error_value, error_traceback);
+    }
+
+protected:
+    PyObject* error_type,
+        * error_value,
+        * error_traceback;
+};
+*/
+
 DLLLOCAL extern PyTypeObject PythonQoreException_Type;
 
 #endif

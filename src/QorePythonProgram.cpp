@@ -420,14 +420,36 @@ void QorePythonProgram::raisePythonException(ExceptionSink& xsink) {
     QoreValue desc(xsink.getExceptionDesc());
     QoreValue arg(xsink.getExceptionArg());
 
+    ExceptionSink xsink2;
     QorePythonReferenceHolder tuple(PyTuple_New(arg ? 3 : 2));
-    PyTuple_SET_ITEM(*tuple, 0, getPythonValue(err, &xsink));
-    PyTuple_SET_ITEM(*tuple, 1, getPythonValue(desc, &xsink));
-    if (arg) {
-        PyTuple_SET_ITEM(*tuple, 2, getPythonValue(arg, &xsink));
+    QorePythonReferenceHolder ex_arg(getPythonValue(err, &xsink2));
+    if (ex_arg) {
+        PyTuple_SET_ITEM(*tuple, 0, ex_arg.release());
+    } else {
+        Py_INCREF(Py_None);
+        PyTuple_SET_ITEM(*tuple, 0, Py_None);
     }
+    ex_arg = getPythonValue(desc, &xsink2);
+    if (ex_arg) {
+        PyTuple_SET_ITEM(*tuple, 1, ex_arg.release());
+    } else {
+        Py_INCREF(Py_None);
+        PyTuple_SET_ITEM(*tuple, 1, Py_None);
+    }
+    if (arg) {
+        ex_arg = getPythonValue(arg, &xsink2);
+        if (ex_arg) {
+            PyTuple_SET_ITEM(*tuple, 2, ex_arg.release());
+        } else {
+            Py_INCREF(Py_None);
+            PyTuple_SET_ITEM(*tuple, 2, Py_None);
+        }
+    }
+    xsink.clear();
 
-    PyErr_SetObject(nullptr, PyObject_CallObject((PyObject*)&PythonQoreException_Type, *tuple));
+    ex_arg = PyObject_CallObject((PyObject*)&PythonQoreException_Type, *tuple);
+    //printd(5, "QorePythonProgram::raisePythonException() py_ex: %p %s\n", *ex_arg, Py_TYPE(*ex_arg)->tp_name);
+    PyErr_SetObject((PyObject*)&PythonQoreException_Type, *ex_arg);
 }
 
 // import Qore definitions to Python
