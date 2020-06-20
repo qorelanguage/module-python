@@ -49,11 +49,14 @@ public:
     DLLLOCAL static PyObject* create_module(PyObject* self, PyObject* args);
     DLLLOCAL static PyObject* exec_module(PyObject* self, PyObject* args);
 
-    // Python integration
+    //! Python integration
     DLLLOCAL static PyObject* callQoreFunction(PyObject* self, PyObject* args);
 
-    // returns a registered PythonQoreClass for the given Qore class
+    //! returns a registered PythonQoreClass for the given Qore class
     DLLLOCAL static PythonQoreClass* findCreatePythonClass(const QoreClass& cls, const char* mod_name);
+
+    //! Raise a Python exception from a Qore exception; consumes the Qore exception
+    DLLLOCAL static void raisePythonException(ExceptionSink& xsink);
 
 private:
     typedef std::vector<PyMethodDef*> meth_vec_t;

@@ -176,6 +176,21 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
     return Py_None;
 }
 
+void QoreLoader::raisePythonException(ExceptionSink& xsink) {
+    QoreValue err(xsink.getExceptionErr());
+    QoreValue desc(xsink.getExceptionDesc());
+    QoreValue arg(xsink.getExceptionArg());
+
+    QorePythonReferenceHolder tuple(PyTuple_New(arg ? 3 : 2));
+    PyTuple_SET_ITEM(*tuple, 0, qore_python_pgm->getPythonValue(err, &xsink));
+    PyTuple_SET_ITEM(*tuple, 1, qore_python_pgm->getPythonValue(desc, &xsink));
+    if (arg) {
+        PyTuple_SET_ITEM(*tuple, 2, qore_python_pgm->getPythonValue(arg, &xsink));
+    }
+
+    PyErr_SetObject(nullptr, PyObject_CallObject((PyObject*)&PythonQoreException_Type, *tuple));
+}
+
 const QoreNamespace* QoreLoader::getModuleRootNs(const char* name, const QoreNamespace* root_ns) {
     QoreNamespaceConstIterator i(*root_ns);
     while (i.next()) {
@@ -251,10 +266,14 @@ void QoreLoader::importQoreConstantToPython(PyObject* mod, const QoreExternalCon
 
     ExceptionSink xsink;
     ValueHolder qoreval(constant.getReferencedValue(), &xsink);
-    QorePythonReferenceHolder val(qore_python_pgm->getPythonValue(*qoreval, &xsink));
     if (!xsink) {
-        PyObject_SetAttrString(mod, constant.getName(), val.release());
+        QorePythonReferenceHolder val(qore_python_pgm->getPythonValue(*qoreval, &xsink));
+        if (!xsink) {
+            PyObject_SetAttrString(mod, constant.getName(), val.release());
+            return;
+        }
     }
+    QoreLoader::raisePythonException(xsink);
 }
 
 PythonQoreClass* QoreLoader::findCreatePythonClass(const QoreClass& cls, const char* mod_name) {
@@ -309,6 +328,6 @@ PyObject* QoreLoader::callQoreFunction(PyObject* self, PyObject* args) {
         }
     }
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    QoreLoader::raisePythonException(xsink);
+    return nullptr;
 }

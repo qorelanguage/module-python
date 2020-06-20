@@ -41,10 +41,27 @@ class PythonTest inherits Test {
     }
 
     constructor() : Test("python test", "1.0") {
+        addTestCase("object lifecycle", \objectLifecycleTest());
         addTestCase("basic test", \basicTest());
         addTestCase("import test", \importTest());
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
+    }
+
+    objectLifecycleTest() {
+        PythonProgram p("import qore.xml
+
+def test():
+    return qore.xml.XmlRpcClient()", "test.py");
+        hash<string, object> object_cache;
+        code callback = sub (object obj) {
+            # save object in object cache, so it doesn't go out of scope
+            object_cache{obj.uniqueHash()} = obj;
+        };
+        p.setSaveObjectCallback(callback);
+        p.callFunction("test");
+        printf("object_cache: %N\n", object_cache);
+        assertEq(1, object_cache.size());
     }
 
     basicTest() {

@@ -85,8 +85,7 @@ static int slot_qoreloader_exec(PyObject *m) {
         printd(5, "PyInit_qoreloader() Qore library initialized\n");
     }
 
-    {
-        assert(!qore_python_pgm);
+    if (!qore_python_pgm) {
         // save and restore the Python thread state while initializing the Qore python module
         PythonThreadStateHelper ptsh;
 
@@ -115,6 +114,6 @@ static int slot_qoreloader_exec(PyObject *m) {
     return 0;
 }
 
-PyMODINIT_FUNC PyInit_qoreloader(void) {
+PyMODINIT_FUNC PyInit_qoreloader() {
     return PyModuleDef_Init(&qoreloadermodule);
 }

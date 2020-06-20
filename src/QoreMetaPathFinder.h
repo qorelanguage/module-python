@@ -58,21 +58,10 @@ private:
     DLLLOCAL static PyObject* tryLoadModule(const QoreString& mname);
 };
 
-//! save and restore the Python thread state
-class PythonThreadStateHelper {
+class PythonThreadStateHelper : QorePythonGilHelper {
 public:
-    DLLLOCAL PythonThreadStateHelper() : thisThreadState(PyThreadState_Get()) {
-        assert(PyGILState_Check());
+    DLLLOCAL PythonThreadStateHelper() : QorePythonGilHelper(PyThreadState_Get()) {
     }
-
-    DLLLOCAL ~PythonThreadStateHelper() {
-        PyThreadState_Swap(nullptr);
-        PyEval_AcquireThread(thisThreadState);
-        _qore_PyGILState_SetThisThreadState(thisThreadState);
-    }
-
-private:
-    PyThreadState* thisThreadState;
 };
 
 #endif

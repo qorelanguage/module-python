@@ -79,47 +79,52 @@ DLLLOCAL void _qore_PyGILState_SetThisThreadState(PyThreadState* state);
 */
 class QorePythonGilHelper {
 public:
-    DLLLOCAL QorePythonGilHelper()
-        : state(_qore_PyRuntimeGILState_GetThreadState()),
+    DLLLOCAL QorePythonGilHelper(PyThreadState* new_thread_state = mainThreadState)
+        : new_thread_state(new_thread_state), state(_qore_PyRuntimeGILState_GetThreadState()),
             t_state(PyGILState_GetThisThreadState()),
             release_gil(!PyGILState_Check()) {
         if (release_gil) {
-            PyEval_AcquireThread(mainThreadState);
-            assert(PyThreadState_Get() == mainThreadState);
+            PyEval_AcquireThread(new_thread_state);
+            assert(PyThreadState_Get() == new_thread_state);
         } else {
-            PyThreadState_Swap(mainThreadState);
+            PyThreadState_Swap(new_thread_state);
         }
         // set this thread state
-        _qore_PyGILState_SetThisThreadState(mainThreadState);
-        assert(PyGILState_GetThisThreadState() == mainThreadState);
+        _qore_PyGILState_SetThisThreadState(new_thread_state);
+        assert(PyGILState_GetThisThreadState() == new_thread_state);
         assert(PyGILState_Check());
     }
 
     DLLLOCAL ~QorePythonGilHelper() {
-        assert(PyGILState_Check());
-        // restore the old TLD state
-        _qore_PyGILState_SetThisThreadState(t_state);
+        if (PyGILState_Check()) {
+            // restore the old TLD state
+            _qore_PyGILState_SetThisThreadState(t_state);
 
-        if (release_gil) {
-            // swap back to the mainThreadState before releasing the GIL
-            PyThreadState* state = PyThreadState_Get();
-            if (state != mainThreadState) {
-                assert(state->gilstate_counter == 1);
-                --state->gilstate_counter;
-                PyThreadState_Swap(mainThreadState);
+            if (release_gil) {
+                // swap back to the mainThreadState before releasing the GIL
+                PyThreadState* state = PyThreadState_Get();
+                if (state != new_thread_state) {
+                    assert(state->gilstate_counter == 1);
+                    --state->gilstate_counter;
+                    PyThreadState_Swap(new_thread_state);
+                }
+
+                // release the GIL
+                PyEval_ReleaseThread(new_thread_state);
+                assert(!PyGILState_Check());
+            } else {
+                PyThreadState_Swap(state);
             }
 
-            // release the GIL
-            PyEval_ReleaseThread(mainThreadState);
-            assert(!PyGILState_Check());
+            _qore_PyGILState_SetThisThreadState(t_state);
         } else {
-            PyThreadState_Swap(state);
+            PyEval_AcquireThread(state);
+            _qore_PyGILState_SetThisThreadState(state);
         }
-
-        _qore_PyGILState_SetThisThreadState(t_state);
     }
 
 protected:
+    PyThreadState* new_thread_state;
     PyThreadState* state;
     PyThreadState* t_state;
     bool release_gil = true;
@@ -266,6 +271,9 @@ DLLLOCAL extern QorePythonProgram* qore_python_pgm;
 
 // module registration function
 DLLEXPORT extern "C" void python_qore_module_desc(QoreModuleInfo& mod_info);
+
+//! Python module definition function for the qoreloader module
+DLLLOCAL PyMODINIT_FUNC PyInit_qoreloader();
 
 class QorePythonProgram;
 DLLLOCAL extern QoreNamespace PNS;

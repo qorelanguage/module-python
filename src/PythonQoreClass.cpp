@@ -30,7 +30,6 @@
 #include <frameobject.h>
 
 static int qore_exception_init(PyObject* self, PyObject* args, PyObject* kwds) {
-    /*
     assert(PyTuple_Check(args));
     Py_ssize_t size = PyTuple_Size(args);
     if (!size) {
@@ -43,7 +42,6 @@ static int qore_exception_init(PyObject* self, PyObject* args, PyObject* kwds) {
             PyObject_SetAttrString(self, "arg", PyTuple_GetItem(args, 2));
         }
     }
-    */
     return 0;
 }
 
@@ -175,6 +173,7 @@ void PythonQoreClass::populateClass(const QoreClass& qcls, cstrset_t& meth_set) 
             if (mi == meth_set.end() || strcmp(*mi, c.getName())) {
                 meth_set.insert(mi, c.getName());
                 ValueHolder qoreval(c.getReferencedValue(), &xsink);
+                QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
                 QorePythonReferenceHolder val(qore_python_pgm->getPythonValue(*qoreval, &xsink));
                 if (!xsink) {
                     PyDict_SetItemString(py_type.tp_dict, c.getName(), *val);
@@ -186,8 +185,16 @@ void PythonQoreClass::populateClass(const QoreClass& qcls, cstrset_t& meth_set) 
 
 PyObject* PythonQoreClass::wrap(QoreObject* obj) {
     PyQoreObject* self = (PyQoreObject*)py_type.tp_alloc(&py_type, 0);
-    obj->ref();
+    obj->tRef();
     self->qobj = obj;
+    // save a strong reference to the Qore object
+    ExceptionSink xsink;
+    obj->ref();
+    QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
+    qore_python_pgm->saveQoreObjectFromPython(obj, xsink);
+    if (xsink) {
+        QoreLoader::raisePythonException(xsink);
+    }
     return (PyObject*)self;
 }
 
@@ -228,6 +235,7 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
         return exec_qore_static_method(*static_meth, args);
     }
 
+    QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
     ExceptionSink xsink;
     QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
 
@@ -238,8 +246,8 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
         return py_rv.release();
     }
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    QoreLoader::raisePythonException(xsink);
+    return nullptr;
 }
 
 PyObject* PythonQoreClass::exec_qore_static_method(PyObject* method_capsule, PyObject* args) {
@@ -254,6 +262,7 @@ PyObject* PythonQoreClass::exec_qore_static_method(PyObject* method_capsule, PyO
 }
 
 PyObject* PythonQoreClass::exec_qore_static_method(const QoreMethod& m, PyObject* args) {
+    QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
     ExceptionSink xsink;
     QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
 
@@ -264,8 +273,8 @@ PyObject* PythonQoreClass::exec_qore_static_method(const QoreMethod& m, PyObject
         return py_rv.release();
     }
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    QoreLoader::raisePythonException(xsink);
+    return nullptr;
 }
 
 PyObject* PythonQoreClass::py_new(QorePyTypeObject* type, PyObject* args, PyObject* kw) {
@@ -273,6 +282,7 @@ PyObject* PythonQoreClass::py_new(QorePyTypeObject* type, PyObject* args, PyObje
     assert(PyUnicode_Check(*argstr));
     printd(5, "PythonQoreClass::py_new() type: %s (qore: %s) args: %s kw: %p\n", type->tp_name, type->qcls->getName(), PyUnicode_AsUTF8(*argstr), kw);
     assert(PyTuple_Check(args));
+    QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
     ExceptionSink xsink;
     ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args), &xsink);
     if (!xsink) {
@@ -281,21 +291,25 @@ PyObject* PythonQoreClass::py_new(QorePyTypeObject* type, PyObject* args, PyObje
         ReferenceHolder<QoreObject> qobj(type->qcls->execConstructor(*qargs, &xsink), &xsink);
         if (!xsink) {
             PyQoreObject* self = (PyQoreObject*)type->tp_alloc(type, 0);
-            self->qobj = qobj.release();
+            qobj->tRef();
+            self->qobj = *qobj;
+            // save a strong reference to the Qore object
+            qore_python_pgm->saveQoreObjectFromPython(qobj.release(), xsink);
             return (PyObject*)self;
         }
     }
-    // FIXME: convert Qore exception to Python exception
-    Py_INCREF(Py_None);
-    return Py_None;
+
+    QoreLoader::raisePythonException(xsink);
+    return nullptr;
 }
 
 void PythonQoreClass::py_dealloc(PyQoreObject* self) {
     if (self->qobj) {
+        QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
         if (qore_python_pgm) {
             ExceptionSink xsink;
             QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
-            self->qobj->deref(&xsink);
+            self->qobj->tDeref();
             self->qobj = nullptr;
         } else {
             printd(5, "PythonQoreClass::py_dealloc() ERROR leaking object %p (%s)\n", self->qobj, self->qobj->getClassName());

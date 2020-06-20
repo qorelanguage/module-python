@@ -54,7 +54,7 @@ static bool _qore_PyThreadState_IsCurrent(PyThreadState* tstate) {
 QorePythonProgram::py_thr_map_t QorePythonProgram::py_thr_map;
 QoreThreadLock QorePythonProgram::py_thr_lck;
 
-QorePythonProgram::QorePythonProgram() {
+QorePythonProgram::QorePythonProgram() : save_object_callback(nullptr) {
     assert(PyGILState_Check());
     assert(_qore_PyRuntimeGILState_GetThreadState() == PyGILState_GetThisThreadState());
     PyThreadState* python = PyGILState_GetThisThreadState();
@@ -69,7 +69,7 @@ QorePythonProgram::QorePythonProgram() {
     py_thr_map[this] = {{gettid(), {python, false}}};
 }
 
-QorePythonProgram::QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns) : qpgm(qpgm), pyns(pyns) {
+QorePythonProgram::QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns) : qpgm(qpgm), pyns(pyns), save_object_callback(nullptr) {
     //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
     QorePythonGilHelper qpgh;
 
@@ -151,7 +151,6 @@ void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
     }
 
     if (save_object_callback) {
-        save_object_callback->deref(nullptr);
         save_object_callback = nullptr;
     }
 
@@ -293,6 +292,70 @@ void QorePythonProgram::releaseContext(const QorePythonThreadInfo& oldstate) con
             _qore_PyGILState_SetThisThreadState(oldstate.t_state);
         }
     }
+}
+
+int QorePythonProgram::saveQoreObjectFromPython(const QoreValue& rv, ExceptionSink& xsink) {
+    // save object in thread-local data if relevant
+    if (rv.getType() != NT_OBJECT) {
+        return 0;
+    }
+
+    //printd(5, "QorePythonProgram::saveQoreObjectFromPython() this: %p val: %s soc: %d\n", this, rv.getFullTypeName(), *save_object_callback);
+
+    if (save_object_callback) {
+        ReferenceHolder<QoreListNode> args(new QoreListNode(autoTypeInfo), &xsink);
+        args->push(rv.refSelf(), &xsink);
+        save_object_callback->execValue(*args, &xsink);
+        if (xsink) {
+            QoreLoader::raisePythonException(xsink);
+            return -1;
+        }
+        return 0;
+    }
+
+    return saveQoreObjectFromPythonDefault(rv, xsink);
+}
+
+int QorePythonProgram::saveQoreObjectFromPythonDefault(const QoreValue& rv, ExceptionSink& xsink) {
+    QoreHashNode* data = qpgm->getThreadData();
+    assert(data);
+    const char* domain_name;
+    // get key name where to save the data if possible
+    QoreValue v = data->getKeyValue("_python_save");
+    if (v.getType() != NT_STRING) {
+        domain_name = "_python_save";
+    } else {
+        domain_name = v.get<const QoreStringNode>()->c_str();
+    }
+
+    QoreValue kv = data->getKeyValue(domain_name);
+    // ignore operation if domain exists but is not a list
+    if (!kv || kv.getType() == NT_LIST) {
+        QoreListNode* list;
+        ReferenceHolder<QoreListNode> list_holder(&xsink);
+        if (!kv) {
+            // we need to assign list in data *after* we prepend the object to the list
+            // in order to manage object counts
+            list = new QoreListNode(autoTypeInfo);
+            list_holder = list;
+        } else {
+            list = kv.get<QoreListNode>();
+        }
+
+        // prepend to list to ensure FILO destruction order
+        list->splice(0, 0, rv, &xsink);
+        if (!xsink && list_holder) {
+             data->setKeyValue(domain_name, list_holder.release(), &xsink);
+        }
+        if (xsink) {
+            QoreLoader::raisePythonException(xsink);
+            return -1;
+        }
+        //printd(5, "saveQoreObjectFromPythonDefault() domain: '%s' obj: %p %s\n", domain_name, rv.get<QoreObject>(), rv.get<QoreObject>()->getClassName());
+    } else {
+        //printd(5, "saveQoreObjectFromPythonDefault() NOT SAVING domain: '%s' HAS KEY v: %s (kv: %s)\n", domain_name, rv.getFullTypeName(), kv.getFullTypeName());
+    }
+    return 0;
 }
 
 QoreListNode* QorePythonProgram::getQoreListFromList(ExceptionSink* xsink, PyObject* val) {
@@ -682,19 +745,21 @@ PyObject* QorePythonProgram::getPythonValue(QoreValue val, ExceptionSink* xsink)
         }
     }
 
+    // ignore types that cannot be converted to a Python value and return None
     Py_INCREF(Py_None);
     return Py_None;
-    /*
-    xsink->raiseException("PYTHON-VALUE-ERROR", "don't know how to convert a value of Qore type '%s' to Python",
-        val.getFullTypeName());
-    return nullptr;
-    */
 }
 
 QoreValue QorePythonProgram::callFunction(ExceptionSink* xsink, const QoreString& func_name, const QoreListNode* args, size_t arg_offset) {
     TempEncodingHelper fname(func_name, QCS_UTF8, xsink);
     if (*xsink) {
         xsink->appendLastDescription(" (while processing the \"func_name\" argument)");
+        return QoreValue();
+    }
+
+    // set Qore program context for Qore APIs
+    QoreExternalProgramContextHelper pch(xsink, qpgm);
+    if (*xsink) {
         return QoreValue();
     }
 
@@ -732,6 +797,12 @@ QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const QoreString& 
 
 QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const char* cname, const char* mname,
     const QoreListNode* args, size_t arg_offset, PyObject* first) {
+    // set Qore program context for Qore APIs
+    QoreExternalProgramContextHelper pch(xsink, qpgm);
+    if (*xsink) {
+        return QoreValue();
+    }
+
     QorePythonHelper qph(this);
     if (checkValid(xsink)) {
         return QoreValue();
@@ -766,6 +837,12 @@ QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const char* cname,
 
 QoreValue QorePythonProgram::callInternal(ExceptionSink* xsink, PyObject* callable, const QoreListNode* args,
     size_t arg_offset, PyObject* first) {
+    // set Qore program context for Qore APIs
+    QoreExternalProgramContextHelper pch(xsink, qpgm);
+    if (*xsink) {
+        return QoreValue();
+    }
+
     QorePythonHelper qph(this);
     if (checkValid(xsink)) {
         return QoreValue();
@@ -795,6 +872,12 @@ PyObject* QorePythonProgram::callPythonInternal(ExceptionSink* xsink, PyObject* 
 
 QoreValue QorePythonProgram::callFunctionObject(ExceptionSink* xsink, PyObject* func, const QoreListNode* args,
     size_t arg_offset, PyObject* first) {
+    // set Qore program context for Qore APIs
+    QoreExternalProgramContextHelper pch(xsink, qpgm);
+    if (*xsink) {
+        return QoreValue();
+    }
+
     QorePythonHelper qph(this);
     if (checkValid(xsink)) {
         return QoreValue();
@@ -1172,6 +1255,12 @@ QoreValue QorePythonProgram::execPythonFunction(PyObject* func, const QoreListNo
 }
 
 QoreValue QorePythonProgram::callCFunctionMethod(ExceptionSink* xsink, PyObject* func, const QoreListNode* args, size_t arg_offset) {
+    // set Qore program context for Qore APIs
+    QoreExternalProgramContextHelper pch(xsink, qpgm);
+    if (*xsink) {
+        return QoreValue();
+    }
+
     QorePythonHelper qph(this);
     QorePythonReferenceHolder py_args;
     if (checkValid(xsink)) {
@@ -1196,6 +1285,12 @@ QoreValue QorePythonProgram::callCFunctionMethod(ExceptionSink* xsink, PyObject*
 void QorePythonProgram::execPythonConstructor(const QoreMethod& meth, PyObject* pycls, QoreObject* self,
     const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink) {
     QorePythonProgram* pypgm = QorePythonProgram::getPythonProgramFromMethod(meth, xsink);
+    // set Qore program context for Qore APIs
+    QoreExternalProgramContextHelper pch(xsink, pypgm->qpgm);
+    if (*xsink) {
+        return;
+    }
+
     QorePythonHelper qph(pypgm);
     if (pypgm->checkValid(xsink)) {
         return;
@@ -1211,6 +1306,12 @@ void QorePythonProgram::execPythonConstructor(const QoreMethod& meth, PyObject* 
 void QorePythonProgram::execPythonDestructor(const QorePythonClass& thisclass, PyObject* pycls, QoreObject* self,
     QorePythonPrivateData* pd, ExceptionSink* xsink) {
     QorePythonProgram* pypgm = thisclass.getPythonProgram();
+
+    // set Qore program context for Qore APIs
+    QoreExternalProgramContextHelper pch(xsink, pypgm->qpgm);
+    if (*xsink) {
+        return;
+    }
 
     QorePythonHelper qph(pypgm);
     //assert(!pypgm->checkValid(xsink));

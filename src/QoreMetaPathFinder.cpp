@@ -212,8 +212,8 @@ PyObject* QoreMetaPathFinder::getQorePackageModuleSpec() {
 
 PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& mname) {
     printd(5, "QoreMetaPathFinder::tryLoadModule() load '%s'\n", mname.c_str());
-    ExceptionSink xsink;
 
+    ExceptionSink xsink;
     if (ModuleManager::runTimeLoadModule(mname.c_str(), qore_python_pgm->getQoreProgram(), &xsink)) {
         return nullptr;
     }

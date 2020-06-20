@@ -134,6 +134,10 @@ static QoreStringNode* python_module_init() {
 
     // initialize python library; do not register signal handlers
     if (!Py_IsInitialized()) {
+        if (PyImport_AppendInittab("qoreloader", PyInit_qoreloader) == -1) {
+            throw QoreStandardException("PYTHON-MODULE-ERROR", "cannot append the qoreloader module to Python");
+        }
+
         Py_InitializeEx(0);
         python_needs_shutdown = true;
     } else {
