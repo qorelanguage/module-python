@@ -30,16 +30,41 @@
 #include <frameobject.h>
 
 static int qore_exception_init(PyObject* self, PyObject* args, PyObject* kwds) {
+    QorePythonReferenceHolder argstr(PyObject_Repr(args));
+    //printd(5, "qore_exception_init() self: %p args: %s\n", self, PyUnicode_AsUTF8(*argstr));
+
     assert(PyTuple_Check(args));
     Py_ssize_t size = PyTuple_Size(args);
     if (!size) {
         return -1;
     }
-    PyObject_SetAttrString(self, "err", PyTuple_GetItem(args, 0));
+    PyObject* err = PyTuple_GetItem(args, 0);
+    if (!PyUnicode_Check(err)) {
+        QorePythonReferenceHolder err_repr(PyObject_Repr(err));
+        if (PyObject_SetAttrString(self, "err", *err_repr) < 0) {
+            return -1;
+        }
+    } else {
+        if (PyObject_SetAttrString(self, "err", err) < 0) {
+            return -1;
+        }
+    }
     if (size > 1) {
-        PyObject_SetAttrString(self, "desc", PyTuple_GetItem(args, 1));
+        PyObject* desc = PyTuple_GetItem(args, 1);
+        if (!PyUnicode_Check(desc)) {
+            QorePythonReferenceHolder desc_repr(PyObject_Repr(desc));
+            if (PyObject_SetAttrString(self, "desc", *desc_repr) < 0) {
+                return -1;
+            }
+        } else {
+            if (PyObject_SetAttrString(self, "desc", desc) < 0) {
+                return -1;
+            }
+        }
         if (size > 2) {
-            PyObject_SetAttrString(self, "arg", PyTuple_GetItem(args, 2));
+            if (PyObject_SetAttrString(self, "arg", PyTuple_GetItem(args, 2)) < 0) {
+                return -1;
+            }
         }
     }
     return 0;

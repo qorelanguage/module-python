@@ -172,6 +172,29 @@ PythonProgram::setSaveObjectCallback(*code save_object_callback) [dom=PROCESS] {
     pp->setSaveObjectCallback(save_object_callback);
 }
 
+//! Imports the given Qore namespace to the Python program object under the given module path
+/** @param qore_ns_path the path to the Qore namespace (ex: \c "::Qore::Thread")
+    @param py_module_path the dot-separated path to the target Python module to be created (ex: \c "qore.qore.thread")
+
+    @throw IMPORT-NS-ERROR Qore namespace could not be found or the root namespace was given for import
+*/
+PythonProgram::importNamespace(string qore_ns_path, string py_module_path) {
+    TempEncodingHelper npath(qore_ns_path, QCS_DEFAULT, xsink);
+    if (*xsink) {
+        return QoreValue();
+    }
+
+    QoreProgram* pgm = getProgram();
+
+    QoreNamespace* ns = pgm->findNamespace(**npath);
+    if (!ns || ns == pgm->getRootNS()) {
+        xsink->raiseException("IMPORT-NS-ERROR", "invalid source namespace '%s'", npath->c_str());
+        return QoreValue();
+    }
+
+    pp->importQoreNamespaceToPython(*ns, *py_module_path, xsink);
+}
+
 //! Parse, compile, and evaluate the given statement and return any result
 /** @param source_code the Python source to parse and compile
     @param source_label the label or file name of the source

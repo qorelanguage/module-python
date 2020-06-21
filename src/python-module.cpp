@@ -153,11 +153,13 @@ static QoreStringNode* python_module_init() {
     QorePythonProgram::staticInit();
 
     mainThreadState = PyThreadState_Get();
-    // release the current thread state after initialization
-    PyEval_ReleaseThread(mainThreadState);
-    assert(!_qore_PyRuntimeGILState_GetThreadState());
-    _qore_PyGILState_SetThisThreadState(nullptr);
-    assert(!PyGILState_GetThisThreadState());
+    if (python_needs_shutdown) {
+        // release the current thread state after initialization
+        PyEval_ReleaseThread(mainThreadState);
+        assert(!_qore_PyRuntimeGILState_GetThreadState());
+        _qore_PyGILState_SetThisThreadState(nullptr);
+        assert(!PyGILState_GetThisThreadState());
+    }
 
     PNS.addSystemClass(initPythonProgramClass(PNS));
 

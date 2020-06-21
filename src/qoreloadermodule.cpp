@@ -29,9 +29,9 @@ QorePythonProgram* qore_python_pgm = nullptr;
 
 PyDoc_STRVAR(module_doc, "This module provides dynamic access to Qore APIs.");
 
-static PyMethodDef qoreloader_methods[] = {};
-
 static int slot_qoreloader_exec(PyObject* m);
+
+static PyMethodDef qoreloader_methods[] = {};
 
 static bool qore_needs_shutdown = false;
 
@@ -42,20 +42,24 @@ PyTypeObject PythonQoreObjectBase_Type = {
     .tp_name = "PythonQoreObjectBase",
 };
 
+static int init_count = 0;
+
 void qoreloader_free(void* obj) {
-    printd(5, "qoreloader_free() obj: %p qore_needs_shutdown: %d\n", obj, qore_needs_shutdown);
+    if (!--init_count) {
+        printd(5, "qoreloader_free() obj: %p qore_needs_shutdown: %d\n", obj, qore_needs_shutdown);
 
-    if (qore_python_pgm) {
-        ExceptionSink xsink;
-        qore_python_pgm->deref(&xsink);
-        qore_python_pgm = nullptr;
-    }
+        if (qore_python_pgm) {
+            ExceptionSink xsink;
+            qore_python_pgm->deref(&xsink);
+            qore_python_pgm = nullptr;
+        }
 
-    QoreMetaPathFinder::del();
-    QoreLoader::del();
+        QoreMetaPathFinder::del();
+        QoreLoader::del();
 
-    if (qore_needs_shutdown) {
-        qore_cleanup();
+        if (qore_needs_shutdown) {
+            qore_cleanup();
+        }
     }
 }
 
@@ -77,40 +81,48 @@ static struct PyModuleDef qoreloadermodule = {
 };
 
 static int slot_qoreloader_exec(PyObject *m) {
-    printd(5, "slot_qoreloader_exec()\n");
-    // initialize qore library if necessary
-    if (!q_libqore_initalized()) {
-        qore_init(QL_MIT);
-        qore_needs_shutdown = true;
-        printd(5, "PyInit_qoreloader() Qore library initialized\n");
-    }
+    ++init_count;
+    //printd(5, "slot_qoreloader_exec() ic: %d\n", init_count);
+    if (init_count == 1) {
+        // initialize qore library if necessary
+        if (!q_libqore_initalized()) {
+            qore_init(QL_MIT);
+            qore_needs_shutdown = true;
+            printd(5, "PyInit_qoreloader() Qore library initialized\n");
 
-    if (!qore_python_pgm) {
-        // save and restore the Python thread state while initializing the Qore python module
-        PythonThreadStateHelper ptsh;
 
-        QoreThreadAttachHelper attach_helper;
-        attach_helper.attach();
-        qore_python_pgm = new QorePythonProgram;
-        // ensure that the Qore python module is registered as a Qore module
-        ExceptionSink xsink;
-        MM.runTimeLoadModule(&xsink, "python", nullptr, python_qore_module_desc);
-        if (xsink) {
+            // ensure that the Qore python module is registered as a Qore module
+            ExceptionSink xsink;
+            MM.runTimeLoadModule(&xsink, "python", nullptr, python_qore_module_desc);
+            if (xsink) {
+                return -1;
+            }
+        }
+
+        if (!qore_python_pgm) {
+            // save and restore the Python thread state while initializing the Qore python module
+            PythonThreadStateHelper ptsh;
+
+            QoreThreadAttachHelper attach_helper;
+            attach_helper.attach();
+            qore_python_pgm = new QorePythonProgram;
+        }
+
+        if (PyType_Ready(&PythonQoreObjectBase_Type) < 0) {
+            return -1;
+        }
+
+        if (QoreLoader::init()) {
+            return -1;
+        }
+
+        if (QoreMetaPathFinder::init()) {
             return -1;
         }
     }
 
-    if (PyType_Ready(&PythonQoreObjectBase_Type) < 0) {
-        return -1;
-    }
+    QoreMetaPathFinder::setupModules();
 
-    if (QoreLoader::init()) {
-        return -1;
-    }
-
-    if (QoreMetaPathFinder::init()) {
-        return -1;
-    }
     return 0;
 }
 

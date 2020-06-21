@@ -83,6 +83,7 @@ public:
         : new_thread_state(new_thread_state), state(_qore_PyRuntimeGILState_GetThreadState()),
             t_state(PyGILState_GetThisThreadState()),
             release_gil(!PyGILState_Check()) {
+        assert(new_thread_state);
         if (release_gil) {
             PyEval_AcquireThread(new_thread_state);
             assert(PyThreadState_Get() == new_thread_state);
@@ -115,12 +116,11 @@ public:
             } else {
                 PyThreadState_Swap(state);
             }
-
-            _qore_PyGILState_SetThisThreadState(t_state);
         } else {
             PyEval_AcquireThread(state);
-            _qore_PyGILState_SetThisThreadState(state);
         }
+
+        _qore_PyGILState_SetThisThreadState(t_state);
     }
 
 protected:

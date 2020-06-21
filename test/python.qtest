@@ -41,11 +41,27 @@ class PythonTest inherits Test {
     }
 
     constructor() : Test("python test", "1.0") {
+        addTestCase("python import", \pythonImportTest());
         addTestCase("object lifecycle", \objectLifecycleTest());
         addTestCase("basic test", \basicTest());
         addTestCase("import test", \importTest());
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
+    }
+
+    pythonImportTest() {
+        PythonProgram p("
+def test1():
+    return x.ex1()
+
+def test2():
+    return x.ex2()
+", "test.py");
+
+        p.importNamespace("::Test", "x");
+
+        assertThrows("1", \p.callFunction(), ("test1"));
+        assertThrows("TEST", "test", \p.callFunction(), ("test2"));
     }
 
     objectLifecycleTest() {
@@ -306,5 +322,15 @@ auto sub get() {
             assertEq({"a": 1}, parse_json(o.encode({"a": 1})));
 %endif
         }
+    }
+}
+
+namespace Test {
+    sub ex1() {
+        throw 1;
+    }
+
+    sub ex2() {
+        throw "TEST", "test";
     }
 }

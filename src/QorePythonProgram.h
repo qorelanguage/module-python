@@ -75,72 +75,7 @@ public:
     }
 
     DLLLOCAL QorePythonProgram(const QoreString& source_code, const QoreString& source_label, int start,
-        ExceptionSink* xsink) : save_object_callback(nullptr) {
-        TempEncodingHelper src_code(source_code, QCS_UTF8, xsink);
-        if (*xsink) {
-            xsink->appendLastDescription(" (while processing the \"source_code\" argument)");
-            return;
-        }
-        TempEncodingHelper src_label(source_label, QCS_UTF8, xsink);
-        if (*xsink) {
-            xsink->appendLastDescription(" (while processing the \"source_label\" argument)");
-            return;
-        }
-
-        //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
-        QorePythonGilHelper qpgh;
-
-        //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
-        if (createInterpreter(xsink)) {
-            return;
-        }
-
-        // import qoreloader module
-        if (!PyImport_ImportModule("qoreloader")) {
-            if (!checkPythonException(xsink)) {
-                xsink->raiseException("PYTHON-COMPILE-ERROR", "cannot load the 'qoreloader' module");
-            }
-            return;
-        }
-
-        // parse code
-        QorePythonNodeHolder node(PyParser_SimpleParseString(src_code->c_str(), start));
-        if (!node) {
-            if (!checkPythonException(xsink)) {
-                xsink->raiseException("PYTHON-COMPILE-ERROR", "parse failed");
-            }
-            return;
-        }
-
-        // compile parsed code
-        python_code = (PyObject*)PyNode_Compile(*node, src_label->c_str());
-        if (!python_code) {
-            if (!checkPythonException(xsink)) {
-                xsink->raiseException("PYTHON-COMPILE-ERROR", "compile failed");
-            }
-            return;
-        }
-
-        // create module for code
-        module = PyImport_ExecCodeModule(src_label->c_str(), *python_code);
-        if (!module) {
-            if (!checkPythonException(xsink)) {
-                xsink->raiseException("PYTHON-COMPILE-ERROR", "compile failed");
-            }
-            return;
-        }
-
-        // returns a borrowed reference
-        module_dict = PyModule_GetDict(*module);
-        assert(module_dict);
-
-        // returns a borrowed reference
-        builtin_dict = PyDict_GetItemString(module_dict, "__builtins__");
-        assert(builtin_dict);
-
-        // create Qore program object with the same restrictions as the parent
-        createQoreProgram();
-    }
+        ExceptionSink* xsink);
 
     DLLLOCAL virtual AbstractQoreProgramExternalData* copy(QoreProgram* pgm) const {
         return new QorePythonProgram(*this, pgm);
@@ -350,6 +285,9 @@ public:
 
     //! Saves Qore objects in thread-local data or using a callback
     DLLLOCAL int saveQoreObjectFromPython(const QoreValue& rv, ExceptionSink& xsink);
+
+    //! Imports the given Qore namespace to Python under the given module path
+    DLLLOCAL void importQoreNamespaceToPython(const QoreNamespace& ns, const QoreString& py_mod_path, ExceptionSink* xsink);
 
     //! returns a registered PythonQoreClass for the given Qore class
     DLLLOCAL PythonQoreClass* findCreatePythonClass(const QoreClass& cls, const char* mod_name);

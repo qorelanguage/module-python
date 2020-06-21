@@ -39,6 +39,9 @@ public:
     //! initializer function
     DLLLOCAL static int init();
 
+    //! module initializer function
+    DLLLOCAL static int setupModules();
+
     //! destructor function
     DLLLOCAL static void del();
 
@@ -49,8 +52,13 @@ public:
     //! class methods
     DLLLOCAL static PyObject* find_spec(PyObject* self, PyObject* args);
 
+    //! Retuns a new module spec object
+    /** @param name the name of the new module
+        @param loader either nullptr (None will be used) or an already-referenced loader
+    */
+    DLLLOCAL static PyObject* newModuleSpec(const QoreString& name, PyObject* loader = nullptr);
+
 private:
-    DLLLOCAL static QoreThreadLock m;
     DLLLOCAL static QorePythonReferenceHolder qore_package;
     DLLLOCAL static QorePythonReferenceHolder mod_spec_cls;
 
@@ -60,7 +68,7 @@ private:
 
 class PythonThreadStateHelper : QorePythonGilHelper {
 public:
-    DLLLOCAL PythonThreadStateHelper() : QorePythonGilHelper(PyThreadState_Get()) {
+    DLLLOCAL PythonThreadStateHelper() : QorePythonGilHelper(PyGILState_GetThisThreadState()) {
     }
 };
 

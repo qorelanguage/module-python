@@ -27,10 +27,28 @@
 #include "QorePythonClass.h"
 #include "QoreLoader.h"
 #include "PythonQoreClass.h"
+#include "QoreMetaPathFinder.h"
 
 #include <structmember.h>
 #include <frameobject.h>
 #include <datetime.h>
+
+#include <vector>
+#include <string>
+
+static strvec_t get_dot_path_list(const std::string str) {
+    strvec_t rv;
+    size_t start = 0;
+    while (true) {
+        size_t pos = str.find('.', start);
+        rv.push_back(str.substr(start, pos - start));
+        if (pos == std::string::npos) {
+            break;
+        }
+        start = pos + 1;
+    }
+    return rv;
+}
 
 // from Python internal code
 bool _qore_PyGILState_Check() {
@@ -56,9 +74,15 @@ QoreThreadLock QorePythonProgram::py_thr_lck;
 
 QorePythonProgram::QorePythonProgram() : save_object_callback(nullptr) {
     assert(PyGILState_Check());
-    assert(_qore_PyRuntimeGILState_GetThreadState() == PyGILState_GetThisThreadState());
-    PyThreadState* python = PyGILState_GetThisThreadState();
-    interpreter = python->interp;
+    PyThreadState* python;
+    if (PyGILState_Check()) {
+        assert(_qore_PyRuntimeGILState_GetThreadState() == PyGILState_GetThisThreadState());
+        python = PyGILState_GetThisThreadState();
+        interpreter = python->interp;
+    } else {
+        python = nullptr;
+        interpreter = _PyGILState_GetInterpreterStateUnsafe();
+    }
     owns_interpreter = false;
 
     createQoreProgram();
@@ -85,6 +109,78 @@ QorePythonProgram::QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns) : q
     ExceptionSink xsink;
     import(&xsink, "builtins");
     assert(!xsink);
+}
+
+QorePythonProgram::QorePythonProgram(const QoreString& source_code, const QoreString& source_label, int start,
+    ExceptionSink* xsink) : save_object_callback(nullptr) {
+    TempEncodingHelper src_code(source_code, QCS_UTF8, xsink);
+    if (*xsink) {
+        xsink->appendLastDescription(" (while processing the \"source_code\" argument)");
+        return;
+    }
+    TempEncodingHelper src_label(source_label, QCS_UTF8, xsink);
+    if (*xsink) {
+        xsink->appendLastDescription(" (while processing the \"source_label\" argument)");
+        return;
+    }
+
+    //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
+    QorePythonGilHelper qpgh;
+
+    //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
+    if (createInterpreter(xsink)) {
+        return;
+    }
+
+    // import qoreloader module
+    QorePythonReferenceHolder qoreloader(PyImport_ImportModule("qoreloader"));
+    if (!qoreloader) {
+        if (!checkPythonException(xsink)) {
+            xsink->raiseException("PYTHON-COMPILE-ERROR", "cannot load the 'qoreloader' module");
+        }
+        return;
+    }
+    //printd(5, "QorePythonProgram::QorePythonProgram() loaded qoreloader: %p\n", *qoreloader);
+
+    // parse code
+    QorePythonNodeHolder node(PyParser_SimpleParseString(src_code->c_str(), start));
+    if (!node) {
+        if (!checkPythonException(xsink)) {
+            xsink->raiseException("PYTHON-COMPILE-ERROR", "parse failed");
+        }
+        return;
+    }
+
+    // compile parsed code
+    python_code = (PyObject*)PyNode_Compile(*node, src_label->c_str());
+    if (!python_code) {
+        if (!checkPythonException(xsink)) {
+            xsink->raiseException("PYTHON-COMPILE-ERROR", "compile failed");
+        }
+        return;
+    }
+
+    // create module for code
+    module = PyImport_ExecCodeModule(src_label->c_str(), *python_code);
+    if (!module) {
+        if (!checkPythonException(xsink)) {
+            xsink->raiseException("PYTHON-COMPILE-ERROR", "compile failed");
+        }
+        return;
+    }
+
+    // returns a borrowed reference
+    module_dict = PyModule_GetDict(*module);
+    assert(module_dict);
+
+    // returns a borrowed reference
+    builtin_dict = PyDict_GetItemString(module_dict, "__builtins__");
+    assert(builtin_dict);
+
+    PyDict_SetItemString(module_dict, "qoreloader", *qoreloader);
+
+    // create Qore program object with the same restrictions as the parent
+    createQoreProgram();
 }
 
 void QorePythonProgram::createQoreProgram() {
@@ -348,7 +444,7 @@ void QorePythonProgram::importQoreFunctionToPython(PyObject* mod, const QoreExte
     meth_vec.push_back(funcdef.get());
 
     QorePythonReferenceHolder pyfunc(PyCFunction_New(funcdef.release(), *capsule));
-    PyObject_SetAttrString(mod, func.getName(), pyfunc.release());
+    PyObject_SetAttrString(mod, func.getName(), *pyfunc);
 }
 
 int QorePythonProgram::saveQoreObjectFromPython(const QoreValue& rv, ExceptionSink& xsink) {
@@ -492,7 +588,7 @@ void QorePythonProgram::importQoreConstantToPython(PyObject* mod, const QoreExte
     if (!xsink) {
         QorePythonReferenceHolder val(qore_python_pgm->getPythonValue(*qoreval, &xsink));
         if (!xsink) {
-            PyObject_SetAttrString(mod, constant.getName(), val.release());
+            PyObject_SetAttrString(mod, constant.getName(), *val);
             return;
         }
     }
@@ -510,7 +606,47 @@ void QorePythonProgram::importQoreNamespaceToPython(PyObject* mod, const QoreNam
     // create a submodule
     QorePythonReferenceHolder new_mod(PyModule_New(ns.getName()));
     importQoreToPython(*new_mod, ns, ns.getName());
-    PyObject_SetAttrString(mod, ns.getName(), new_mod.release());
+    PyObject_SetAttrString(mod, ns.getName(), *new_mod);
+}
+
+void QorePythonProgram::importQoreNamespaceToPython(const QoreNamespace& ns, const QoreString& py_mod_path, ExceptionSink* xsink) {
+    //printd(5, "QorePythonProgram::getCreateModule() '%s'\n", path);
+    assert(!py_mod_path.empty());
+
+    QorePythonHelper qph(this);
+    if (checkValid(xsink)) {
+        return;
+    }
+
+    // start with the root module
+    PyObject* mod = *module;
+
+    strvec_t strpath = get_dot_path_list(py_mod_path.c_str());
+    assert(!strpath.empty());
+    for (const std::string& str : strpath) {
+        //printd(5, "QorePythonProgram::importQoreNamespaceToPython() '%s' str: '%s' mod: %p ('%s')\n", py_mod_path.c_str(), str.c_str(), mod, Py_TYPE(mod)->tp_name);
+        if (PyObject_HasAttrString(mod, str.c_str())) {
+            QorePythonReferenceHolder new_mod(PyObject_GetAttrString(mod, str.c_str()));
+            if (PyModule_Check(*new_mod)) {
+                mod = *new_mod;
+                continue;
+            }
+            // WARNING: any existing attribute will be replaced with the new module
+        }
+
+        QorePythonReferenceHolder new_mod(PyModule_New(str.c_str()));
+        if (PyObject_SetAttrString(mod, str.c_str(), *new_mod) < 0) {
+            if (!checkPythonException(xsink)) {
+                xsink->raiseException("IMPORT-NS-ERROR", "could not set module '%s' when creating path '%s'",
+                    str.c_str(), py_mod_path.c_str());
+            }
+            return;
+        }
+        mod = *new_mod;
+    }
+    //printd(5, "QorePythonProgram::importQoreNamespaceToPython() %s => %p ('%s')\n", py_mod_path.c_str(), mod, Py_TYPE(mod)->tp_name);
+    assert(mod);
+    importQoreToPython(mod, ns, strpath.back().c_str());
 }
 
 QoreListNode* QorePythonProgram::getQoreListFromList(ExceptionSink* xsink, PyObject* val) {
@@ -1109,25 +1245,55 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
         use_loc = false;
     }
 
-    // get description
-    QorePythonReferenceHolder desc(PyObject_Str(*ex_value));
-    ValueHolder qore_desc(getQoreValue(xsink, *desc), xsink);
-    ValueHolder arg(xsink);
-    if (!*xsink) {
-        if (use_loc) {
-            xsink->raiseExceptionArg(loc.get(), Py_TYPE(*ex_value)->tp_name, arg.release(),
-                qore_desc->getType() == NT_STRING ? qore_desc.release().get<QoreStringNode>() : nullptr, callstack);
-        } else {
-            xsink->raiseExceptionArg(Py_TYPE(*ex_value)->tp_name, arg.release(),
-                qore_desc->getType() == NT_STRING ? qore_desc.release().get<QoreStringNode>() : nullptr, callstack);
+    // check if it's a QoreException
+    if (*ex_type == (PyObject*)&PythonQoreException_Type) {
+        assert(PyObject_HasAttrString(*ex_value, "err"));
+        ValueHolder err(getQoreValue(xsink, PyObject_GetAttrString(*ex_value, "err")), xsink);
+        assert(err->getType() == NT_STRING);
+        if (!*xsink) {
+            ValueHolder desc(xsink);
+            if (PyObject_HasAttrString(*ex_value, "desc")) {
+                desc = getQoreValue(xsink, PyObject_GetAttrString(*ex_value, "desc"));
+            }
+            if (!*xsink) {
+                assert(!desc || desc->getType() == NT_STRING);
+                ValueHolder arg(xsink);
+                if (PyObject_HasAttrString(*ex_value, "arg")) {
+                    desc = getQoreValue(xsink, PyObject_GetAttrString(*ex_value, "arg"));
+                }
+                if (!*xsink) {
+                    if (use_loc) {
+                        xsink->raiseExceptionArg(loc.get(), err->get<const QoreStringNode>()->c_str(), arg->refSelf(),
+                            desc ? desc->get<const QoreStringNode>()->stringRefSelf() : nullptr, callstack);
+                    } else {
+                        xsink->raiseExceptionArg(err->get<const QoreStringNode>()->c_str(), arg->refSelf(),
+                            desc ? desc->get<const QoreStringNode>()->stringRefSelf() : nullptr, callstack);
+                    }
+                    return -1;
+                }
+            }
         }
-    } else {
-        xsink->appendLastDescription(" (while trying to convert Python exception arguments to Qore)");
     }
 
-    ex_type = nullptr;
-    ex_value = nullptr;
-    traceback = nullptr;
+    if (!*xsink) {
+        // get description
+        QorePythonReferenceHolder desc(PyObject_Str(*ex_value));
+        ValueHolder qore_desc(getQoreValue(xsink, *desc), xsink);
+        if (!*xsink) {
+            if (use_loc) {
+                // check if we have a Qore exception
+                xsink->raiseExceptionArg(loc.get(), Py_TYPE(*ex_value)->tp_name, QoreValue(),
+                    qore_desc->getType() == NT_STRING ? qore_desc.release().get<QoreStringNode>() : nullptr, callstack);
+            } else {
+                // check if we have a Qore exception
+                xsink->raiseExceptionArg(Py_TYPE(*ex_value)->tp_name, QoreValue(),
+                    qore_desc->getType() == NT_STRING ? qore_desc.release().get<QoreStringNode>() : nullptr, callstack);
+            }
+            return -1;
+        }
+    }
+
+    xsink->appendLastDescription(" (while trying to convert Python exception arguments to Qore)");
 
     return -1;
 }
