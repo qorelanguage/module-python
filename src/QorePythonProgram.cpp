@@ -411,8 +411,13 @@ int QorePythonProgram::createInterpreter(ExceptionSink* xsink) {
     // save thread state
     int tid = gettid();
     AutoLocker al(py_thr_lck);
-    assert(py_thr_map.find(this) == py_thr_map.end());
-    py_thr_map[this] = {{tid, {python, true}}};
+    py_thr_map_t::iterator ti = py_thr_map.lower_bound(this);
+    if (ti == py_thr_map.end() || ti->first != this) {
+        py_thr_map.insert(ti, {this, {{tid, {python, true}}}});
+    } else {
+        ti->second[tid] = {python, true};
+    }
+
     //printd(5, "QorePythonProgram::createInterpreter() this: %p\n", this);
     return 0;
 }
