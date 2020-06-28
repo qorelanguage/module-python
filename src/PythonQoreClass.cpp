@@ -77,8 +77,8 @@ PyTypeObject PythonQoreException_Type = {
     .tp_name = "QoreException",
     .tp_basicsize = sizeof(PyBaseExceptionObject),
     .tp_flags = Py_TPFLAGS_DEFAULT,
-    .tp_base = reinterpret_cast<PyTypeObject*>(PyExc_Exception),
     .tp_doc = "Qore exception class",
+    .tp_base = reinterpret_cast<PyTypeObject*>(PyExc_Exception),
     .tp_init = qore_exception_init,
 };
 
