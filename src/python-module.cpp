@@ -299,7 +299,7 @@ static void py_mc_import_ns(ExceptionSink* xsink, QoreString& arg, QorePythonPro
 static void py_mc_alias(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
     // find end of qore namespace
     qore_offset_t end = arg.find(' ');
-    if (end == -1 || end == (arg.size() - 1)) {
+    if (end == -1 || (size_t)end == (arg.size() - 1)) {
         throw QoreStandardException("PYTHON-MODULE-ERROR", "syntax: alias <python-source-path> " \
             "<python-target-path: python target path argument; value given: '%s'", arg.c_str());
     }
@@ -314,7 +314,7 @@ static void py_mc_alias(ExceptionSink* xsink, QoreString& arg, QorePythonProgram
 static void py_mc_parse(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
     // find end of qore namespace
     qore_offset_t end = arg.find(' ');
-    if (end == -1 || end == (arg.size() - 1)) {
+    if (end == -1 || (size_t)end == (arg.size() - 1)) {
         throw QoreStandardException("PYTHON-MODULE-ERROR", "syntax: alias <python-source-path> " \
             "<python-target-path: python target path argument; value given: '%s'", arg.c_str());
     }

@@ -152,7 +152,6 @@ PyObject* QoreMetaPathFinder::repr(PyObject* obj) {
 
 // class method functions
 PyObject* QoreMetaPathFinder::find_spec(PyObject* self, PyObject* args) {
-    Py_ssize_t len = PyTuple_Size(args);
     {
         // show args
         QorePythonReferenceHolder argstr(PyObject_Repr(args));
