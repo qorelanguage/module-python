@@ -269,8 +269,6 @@ void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
         {
             QorePythonHelper qph(this);
 
-            PyGC_Collect();
-
             for (auto& i : obj_sink) {
                 Py_DECREF(i);
             }
@@ -450,23 +448,28 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
 
     PyGILState_STATE g_state;
     PyThreadState* t_state;
+
     if (PyGILState_Check()) {
         t_state = _qore_PyRuntimeGILState_GetThreadState();
+
+        // set new thread state
+        _qore_PyGILState_SetThisThreadState(python);
+
         if (t_state != python) {
             PyThreadState_Swap(python);
         }
         g_state = PyGILState_LOCKED;
     } else {
-        assert(!_qore_PyRuntimeGILState_GetThreadState());
+        //assert(!_qore_PyRuntimeGILState_GetThreadState());
         //assert(!PyGILState_GetThisThreadState());
+
+        // set new thread state
+        _qore_PyGILState_SetThisThreadState(python);
 
         t_state = nullptr;
         PyEval_RestoreThread(python);
         g_state = PyGILState_UNLOCKED;
     }
-
-    // set new thread state
-    _qore_PyGILState_SetThisThreadState(python);
 
     assert(PyGILState_Check());
 
@@ -506,8 +509,8 @@ void QorePythonProgram::releaseContext(const QorePythonThreadInfo& oldstate) con
     } else {
         // restore old thread context; GIL still held
         if (python != oldstate.t_state) {
-            PyThreadState_Swap(oldstate.t_state);
             _qore_PyGILState_SetThisThreadState(oldstate.t_state);
+            PyThreadState_Swap(oldstate.t_state);
         }
     }
 }
@@ -559,7 +562,7 @@ int QorePythonProgram::importQoreFunctionToPython(PyObject* mod, const QoreExter
     QorePythonReferenceHolder pyfunc(PyCFunction_New(funcdef.release(), *capsule));
     assert(pyfunc);
     if (PyObject_SetAttrString(mod, func.getName(), *pyfunc)) {
-        assert(PyErr_Occurred);
+        assert(PyErr_Occurred());
         printd(5, "QorePythonProgram::importQoreFunctionToPython() error setting function %s in %p (%s)\n", func.getName(), mod, Py_TYPE(mod)->tp_name);
         return -1;
     }

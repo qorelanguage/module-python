@@ -31,7 +31,9 @@ PyDoc_STRVAR(module_doc, "This module provides dynamic access to Qore APIs.");
 
 static int slot_qoreloader_exec(PyObject* m);
 
-static PyMethodDef qoreloader_methods[] = {};
+static PyMethodDef qoreloader_methods[] = {
+    {nullptr, nullptr},
+};
 
 static bool qore_needs_shutdown = false;
 
@@ -90,7 +92,6 @@ static int slot_qoreloader_exec(PyObject *m) {
             qore_init(QL_MIT);
             qore_needs_shutdown = true;
             printd(5, "PyInit_qoreloader() Qore library initialized\n");
-
 
             // ensure that the Qore python module is registered as a Qore module
             ExceptionSink xsink;
