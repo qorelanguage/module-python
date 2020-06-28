@@ -1,22 +1,22 @@
 /* indent-tabs-mode: nil -*- */
 /*
-  python Qore module
+    python Qore module
 
-  Copyright (C) 2020 Qore Technologies, s.r.o.
+    Copyright (C) 2020 Qore Technologies, s.r.o.
 
-  This library is free software; you can redistribute it and/or
-  modify it under the terms of the GNU Lesser General Public
-  License as published by the Free Software Foundation; either
-  version 2.1 of the License, or (at your option) any later version.
+    This library is free software; you can redistribute it and/or
+    modify it under the terms of the GNU Lesser General Public
+    License as published by the Free Software Foundation; either
+    version 2.1 of the License, or (at your option) any later version.
 
-  This library is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-  Lesser General Public License for more details.
+    This library is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    Lesser General Public License for more details.
 
-  You should have received a copy of the GNU Lesser General Public
-  License along with this library; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+    You should have received a copy of the GNU Lesser General Public
+    License along with this library; if not, write to the Free Software
+    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
 #include "python-module.h"
@@ -28,21 +28,22 @@ static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns);
 static void python_module_delete();
 static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink);
 
-// qore module symbols
-DLLEXPORT char qore_module_name[] = QORE_PYTHON_MODULE_NAME;
-DLLEXPORT char qore_module_version[] = PACKAGE_VERSION;
-DLLEXPORT char qore_module_description[] = "python module";
-DLLEXPORT char qore_module_author[] = "David Nichols";
-DLLEXPORT char qore_module_url[] = "http://qore.org";
-DLLEXPORT int qore_module_api_major = QORE_MODULE_API_MAJOR;
-DLLEXPORT int qore_module_api_minor = QORE_MODULE_API_MINOR;
-DLLEXPORT qore_module_init_t qore_module_init = python_module_init;
-DLLEXPORT qore_module_ns_init_t qore_module_ns_init = python_module_ns_init;
-DLLEXPORT qore_module_delete_t qore_module_delete = python_module_delete;
-DLLEXPORT qore_module_parse_cmd_t qore_module_parse_cmd = python_module_parse_cmd;
-
-DLLEXPORT qore_license_t qore_module_license = QL_MIT;
-DLLEXPORT char qore_module_license_str[] = "MIT";
+// module declaration for Qore 0.9.5+
+void python_qore_module_desc(QoreModuleInfo& mod_info) {
+    mod_info.name = QORE_PYTHON_MODULE_NAME;
+    mod_info.version = PACKAGE_VERSION;
+    mod_info.desc = "python module";
+    mod_info.author = "David Nichols";
+    mod_info.url = "http://qore.org";
+    mod_info.api_major = QORE_MODULE_API_MAJOR;
+    mod_info.api_minor = QORE_MODULE_API_MINOR;
+    mod_info.init = python_module_init;
+    mod_info.ns_init = python_module_ns_init;
+    mod_info.del = python_module_delete;
+    mod_info.parse_cmd = python_module_parse_cmd;
+    mod_info.license = QL_MIT;
+    mod_info.license_str = "MIT";
+}
 
 QoreNamespace PNS(QORE_PYTHON_NS_NAME);
 PyThreadState* mainThreadState = nullptr;
@@ -53,14 +54,27 @@ qore_classid_t CID_PYTHONBASEOBJECT;
 // module cmd type
 using qore_python_module_cmd_t = void (*) (ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 static void py_mc_import(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
+static void py_mc_import_ns(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
+static void py_mc_alias(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
+static void py_mc_parse(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
+static void py_mc_export_class(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 
 // module cmds
 typedef std::map<std::string, qore_python_module_cmd_t> mcmap_t;
 static mcmap_t mcmap = {
     {"import", py_mc_import},
+    {"import-ns", py_mc_import_ns},
+    {"alias", py_mc_alias},
+    {"parse", py_mc_parse},
+    {"export-class", py_mc_export_class}
 };
 
+static bool python_needs_shutdown = false;
+
 #ifdef NEED_PYTHON_36_TLS_KEY
+#ifndef __linux__
+#error Python TLS key prediction required when linking with Python 3.6 only works on Linux
+#endif
 int autoTLSkey;
 #endif
 
@@ -127,18 +141,35 @@ static QoreStringNode* python_module_init() {
 #endif
 
     // initialize python library; do not register signal handlers
-    Py_InitializeEx(0);
+    if (!Py_IsInitialized()) {
+        if (PyImport_AppendInittab("qoreloader", PyInit_qoreloader) == -1) {
+            throw QoreStandardException("PYTHON-MODULE-ERROR", "cannot append the qoreloader module to Python");
+        }
+
+        Py_InitializeEx(0);
+        python_needs_shutdown = true;
+    } else {
+#ifdef NEED_PYTHON_36_TLS_KEY
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "cannot use the \"python\" module when liked with Python " \
+            "3.6 when not initialized by Qore");
+#endif
+    }
 
     // ensure that runtime version matches compiled version
     check_python_version();
 
-    QorePythonProgram::staticInit();
+    if (QorePythonProgram::staticInit()) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "failed to initialize \"python\" module");
+    }
 
     mainThreadState = PyThreadState_Get();
-    PyEval_ReleaseThread(mainThreadState);
-    assert(!_qore_PyRuntimeGILState_GetThreadState());
-    _qore_PyGILState_SetThisThreadState(nullptr);
-    assert(!PyGILState_GetThisThreadState());
+    if (python_needs_shutdown) {
+        // release the current thread state after initialization
+        PyEval_ReleaseThread(mainThreadState);
+        assert(!_qore_PyRuntimeGILState_GetThreadState());
+        _qore_PyGILState_SetThisThreadState(nullptr);
+        assert(!PyGILState_GetThisThreadState());
+    }
 
     PNS.addSystemClass(initPythonProgramClass(PNS));
 
@@ -163,10 +194,12 @@ static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns) {
 }
 
 static void python_module_delete() {
-    PyThreadState_Swap(nullptr);
-    PyEval_AcquireThread(mainThreadState);
-    _qore_PyGILState_SetThisThreadState(mainThreadState);
-    Py_Finalize();
+    if (python_needs_shutdown) {
+        PyThreadState_Swap(nullptr);
+        PyEval_AcquireThread(mainThreadState);
+        _qore_PyGILState_SetThisThreadState(mainThreadState);
+        Py_Finalize();
+    }
 }
 
 static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink) {
@@ -212,6 +245,7 @@ static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink)
     i->second(xsink, arg, pypgm);
 }
 
+// %module-cmd(python) import
 static void py_mc_import(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
     // process import statement
     //printd(5, "python_module_parse_cmd() pypgm: %p arg: %s\n", pypgm, arg.c_str());
@@ -233,6 +267,69 @@ static void py_mc_import(ExceptionSink* xsink, QoreString& arg, QorePythonProgra
             pypgm->import(xsink, arg.c_str(), symbol);
         }
     }
+}
+
+// %module-cmd(python) import-ns <qore-namespace> <python-module-path>
+static void py_mc_import_ns(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
+    // find end of qore namespace
+    qore_offset_t end = arg.find(' ');
+    if (end == -1) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "syntax: import-ns <qore-namespace> " \
+            "<python-module-path>: missing python module path argument; value given: '%s'", arg.c_str());
+    }
+
+    QoreString qore_ns(&arg, end);
+    QoreString py_mod_path(arg.c_str() + end + 1);
+
+    QoreProgram* pgm = getProgram();
+    if (!pgm) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "import-ns error: no current Program context");
+    }
+
+    QoreNamespace* ns = pgm->findNamespace(qore_ns);
+    if (!ns || ns == pgm->getRootNS()) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "import-ns error: Qore namespace '%s' not found",
+            qore_ns.c_str());
+    }
+
+    pypgm->importQoreNamespaceToPython(*ns, py_mod_path, xsink);
+}
+
+// %module-cmd(python) alias <python-source-path> <python-target-path>
+static void py_mc_alias(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
+    // find end of qore namespace
+    qore_offset_t end = arg.find(' ');
+    if (end == -1 || (size_t)end == (arg.size() - 1)) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "syntax: alias <python-source-path> " \
+            "<python-target-path: python target path argument; value given: '%s'", arg.c_str());
+    }
+
+    QoreString source_path(&arg, end);
+    QoreString target_path(arg.c_str() + end + 1);
+
+    pypgm->aliasDefinition(source_path, target_path);
+}
+
+// %module-cmd(python) parse <label> <source code>
+static void py_mc_parse(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
+    // find end of qore namespace
+    qore_offset_t end = arg.find(' ');
+    if (end == -1 || (size_t)end == (arg.size() - 1)) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "syntax: alias <python-source-path> " \
+            "<python-target-path: python target path argument; value given: '%s'", arg.c_str());
+    }
+
+    QoreString source_label(&arg, end);
+    QoreString source_code(arg.c_str() + end + 1);
+
+    ValueHolder val(pypgm->eval(xsink, source_code, source_label, Py_single_input, false), xsink);
+}
+
+// %module-cmd(python) export-class <python path>
+/** export a Python class to Qore
+*/
+static void py_mc_export_class(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
+    pypgm->exportClass(xsink, arg);
 }
 
 QorePythonHelper::QorePythonHelper(const QorePythonProgram* pypgm) : pypgm(pypgm), old_state(pypgm->setContext()) {

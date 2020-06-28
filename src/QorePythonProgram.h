@@ -42,17 +42,30 @@
 
 #include <set>
 #include <map>
+#include <memory>
 
 // forward reference
 class QorePythonProgram;
+class PythonQoreClass;
 
 #define IF_CLASS (1 << 0)
 #define IF_OTHER (1 << 1)
 #define IF_ALL   (IF_CLASS | IF_OTHER)
 
+struct QorePythonThreadStateInfo {
+    PyThreadState* state;
+    bool owns_state;
+};
+
+// python creation flags
+constexpr int PQC_NO_CONSTRUCTOR = (1 << 0);
+
 class QorePythonProgram : public AbstractPrivateData, public AbstractQoreProgramExternalData {
     friend class PythonModuleContextHelper;
 public:
+    //! Python context using the main interpreter
+    DLLLOCAL QorePythonProgram();
+
     //! Default Qore Python context; does not own the QoreProgram reference
     DLLLOCAL QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns);
 
@@ -66,75 +79,22 @@ public:
     }
 
     DLLLOCAL QorePythonProgram(const QoreString& source_code, const QoreString& source_label, int start,
-        ExceptionSink* xsink) {
-        TempEncodingHelper src_code(source_code, QCS_UTF8, xsink);
-        if (*xsink) {
-            xsink->appendLastDescription(" (while processing the \"source_code\" argument)");
-            return;
-        }
-        TempEncodingHelper src_label(source_label, QCS_UTF8, xsink);
-        if (*xsink) {
-            xsink->appendLastDescription(" (while processing the \"source_label\" argument)");
-            return;
-        }
-
-        //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
-        QorePythonGilHelper qpgh;
-
-        //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
-        if (createInterpreter(xsink)) {
-            return;
-        }
-
-        // parse code
-        QorePythonNodeHolder node(PyParser_SimpleParseString(src_code->c_str(), start));
-        if (!node) {
-            if (!checkPythonException(xsink)) {
-                xsink->raiseException("PYTHON-COMPILE-ERROR", "parse failed");
-            }
-            return;
-        }
-
-        // compile parsed code
-        python_code = (PyObject*)PyNode_Compile(*node, src_label->c_str());
-        if (!python_code) {
-            if (!checkPythonException(xsink)) {
-                xsink->raiseException("PYTHON-COMPILE-ERROR", "compile failed");
-            }
-            return;
-        }
-
-        // create module for code
-        module = PyImport_ExecCodeModule(src_label->c_str(), *python_code);
-
-        // returns a borrowed reference
-        module_dict = PyModule_GetDict(*module);
-        assert(module_dict);
-
-        // returns a borrowed reference
-        builtin_dict = PyDict_GetItemString(module_dict, "__builtins__");
-        assert(builtin_dict);
-
-        // create Qore program object with the same restrictions as the parent
-        QoreProgram* pgm = getProgram();
-        int64 parse_options = pgm ? pgm->getParseOptions64() : 0;
-        qpgm = new QoreProgram(parse_options);
-        owns_qore_program_ref = true;
-        pyns = PNS.copy();
-        qpgm->getRootNS()->addNamespace(pyns);
-        qpgm->setExternalData(QORE_PYTHON_MODULE_NAME, this);
-    }
+        ExceptionSink* xsink);
 
     DLLLOCAL virtual AbstractQoreProgramExternalData* copy(QoreProgram* pgm) const {
         return new QorePythonProgram(*this, pgm);
     }
 
     DLLLOCAL virtual void doDeref() {
-        deref();
+        ExceptionSink xsink;
+        deref(&xsink);
+        if (xsink) {
+            throw QoreXSinkException(xsink);
+        }
     }
 
-    DLLLOCAL void destructor() {
-        deleteIntern();
+    DLLLOCAL void destructor(ExceptionSink* xsink) {
+        deleteIntern(xsink);
     }
 
     DLLLOCAL QoreValue run(ExceptionSink* xsink) {
@@ -154,62 +114,8 @@ public:
         return getQoreValue(xsink, return_value);
     }
 
-    DLLLOCAL QoreValue eval(const QoreString& source_code, const QoreString& source_label, int input, ExceptionSink* xsink) {
-        TempEncodingHelper src_code(source_code, QCS_UTF8, xsink);
-        if (*xsink) {
-            xsink->appendLastDescription(" (while processing the \"source_code\" argument)");
-            return QoreValue();
-        }
-        TempEncodingHelper src_label(source_label, QCS_UTF8, xsink);
-        if (*xsink) {
-            xsink->appendLastDescription(" (while processing the \"source_label\" argument)");
-            return QoreValue();
-        }
-
-        // ensure atomic access to the Python interpreter (GIL) and manage the Python thread state
-        QorePythonHelper qph(this);
-        if (checkValid(xsink)) {
-            return QoreValue();
-        }
-
-        QorePythonReferenceHolder return_value;
-        QorePythonReferenceHolder python_code;
-        {
-            //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
-            // parse code
-            QorePythonNodeHolder node(PyParser_SimpleParseString(src_code->c_str(), input));
-            if (!node) {
-                if (!checkPythonException(xsink)) {
-                    xsink->raiseException("PYTHON-COMPILE-ERROR", "parse failed");
-                }
-                return QoreValue();
-            }
-
-            // compile parsed code
-            python_code = (PyObject*)PyNode_Compile(*node, src_label->c_str());
-            if (!python_code) {
-                if (!checkPythonException(xsink)) {
-                    xsink->raiseException("PYTHON-COMPILE-ERROR", "compile failed");
-                }
-                return QoreValue();
-            }
-        }
-
-        {
-            //QorePythonHelper qph(this);
-            // returns a borrowed reference
-            PyObject* main = PyImport_AddModule("__main__");
-            PyObject* main_dict = PyModule_GetDict(main);
-            return_value = PyEval_EvalCode(*python_code, main_dict, main_dict);
-        }
-
-        // check for Python exceptions
-        if (checkPythonException(xsink)) {
-            return QoreValue();
-        }
-
-        return getQoreValue(xsink, return_value);
-    }
+    //! Evaluates the statement and returns any result
+    DLLLOCAL QoreValue eval(ExceptionSink* xsink, const QoreString& source_code, const QoreString& source_label, int input, bool encapsulate);
 
     //! Call the function and return the result
     DLLLOCAL QoreValue callFunction(ExceptionSink* xsink, const QoreString& func_name, const QoreListNode* args,
@@ -233,7 +139,7 @@ public:
 
     //! Call a callable and and return the result as a Python value
     DLLLOCAL PyObject* callPythonInternal(ExceptionSink* xsink, PyObject* callable, const QoreListNode* args,
-        size_t arg_offset = 0, PyObject* first = nullptr);
+        size_t arg_offset = 0, PyObject* first = nullptr, PyObject* kwargs = nullptr);
 
     //! Call a PyFunctionObject and and return the result
     DLLLOCAL QoreValue callFunctionObject(ExceptionSink* xsink, PyObject* func, const QoreListNode* args,
@@ -241,15 +147,13 @@ public:
 
     //! Sets the "save object callback" for %Qore objects created in Python code
     DLLLOCAL void setSaveObjectCallback(const ResolvedCallReferenceNode* save_object_callback) {
-        if (this->save_object_callback) {
-            this->save_object_callback->deref(nullptr);
-        }
+        //printd(5, "QorePythonProgram::setSaveObjectCallback() this: %p old: %p new: %p\n", this, *this->save_object_callback, save_object_callback);
         this->save_object_callback = save_object_callback ? save_object_callback->refRefSelf() : nullptr;
     }
 
     //! Returns the "save object callback" for %Qore objects created in Python code
     DLLLOCAL ResolvedCallReferenceNode* getSaveObjectCallback() const {
-        return save_object_callback;
+        return *save_object_callback;
     }
 
     //! Checks for a Python exception and creates a Qore exception from it
@@ -288,7 +192,7 @@ public:
     //! Returns a Qore list from a Python tuple
     /** must already have the Python thread context set
     */
-    DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val);
+    DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, size_t offset = 0);
 
     //! Returns a Qore hash from a Python dict
     /** must already have the Python thread context set
@@ -316,6 +220,76 @@ public:
         return 0;
     }
 
+    //! Returns the Qore program
+    DLLLOCAL QoreProgram* getQoreProgram() const {
+        return qpgm;
+    }
+
+    using AbstractPrivateData::deref;
+    DLLLOCAL virtual void deref(ExceptionSink* xsink) {
+        if (ROdereference()) {
+            deleteIntern(xsink);
+            delete this;
+        }
+    }
+
+    //! Saves a unique string
+    DLLLOCAL const char* saveString(const char* str) {
+        std::string sstr = str;
+        strset_t::iterator i = strset.lower_bound(sstr);
+        if (i != strset.end() && *i == sstr) {
+            return (*i).c_str();
+        }
+        i = strset.insert(i, sstr);
+        return (*i).c_str();
+    }
+
+    //! Saves Qore objects in thread-local data or using a callback
+    DLLLOCAL int saveQoreObjectFromPython(const QoreValue& rv, ExceptionSink& xsink);
+
+    //! Imports the given Qore namespace to Python under the given module path
+    DLLLOCAL void importQoreNamespaceToPython(const QoreNamespace& ns, const QoreString& py_mod_path, ExceptionSink* xsink);
+
+    //! returns a registered PythonQoreClass for the given Qore class
+    DLLLOCAL PythonQoreClass* findCreatePythonClass(const QoreClass& cls, const char* mod_name);
+
+    //! Imports a Qore namespace into a Python module
+    DLLLOCAL void importQoreToPython(PyObject* mod, const QoreNamespace& ns, const char* mod_name);
+
+    //! Imports a Qore constant into a Python module
+    DLLLOCAL int importQoreConstantToPython(PyObject* mod, const QoreExternalConstant& constant);
+
+    //! imports a Qore function into a Python module
+    DLLLOCAL int importQoreFunctionToPython(PyObject* mod, const QoreExternalFunction& func);
+
+    //! Imports a Qore class into a Python module
+    DLLLOCAL int importQoreClassToPython(PyObject* mod, const QoreClass& cls, const char* mod_name);
+
+    //! Creates an alias for an existing definition
+    DLLLOCAL void aliasDefinition(const QoreString& source_path, const QoreString& target_path);
+
+    //! export a Python class and create a QoreClass for it
+    DLLLOCAL void exportClass(ExceptionSink* xsink, QoreString& arg);
+
+    //! Raise a Python exception from a Qore exception; consumes the Qore exception
+    DLLLOCAL void raisePythonException(ExceptionSink& xsink);
+
+    //! Returns a Python list for the given Qore list
+    DLLLOCAL PyObject* getPythonList(ExceptionSink* xsink, const QoreListNode* l);
+
+    //! Returns a Python tuple for the given Qore list
+    DLLLOCAL PyObject* getPythonTupleValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset = 0,
+        PyObject* first = nullptr);
+
+    //! Returns a Python dict for the given Qore hash
+    DLLLOCAL PyObject* getPythonDict(ExceptionSink* xsink, const QoreHashNode* h);
+
+    //! Populates the QoreClass based on the Python class
+    DLLLOCAL QorePythonClass* setupQorePythonClass(ExceptionSink* xsink, QoreNamespace* ns, PyTypeObject* type, std::unique_ptr<QorePythonClass>& cls, int flags = 0);
+
+    //! Creates ot retrieves a QoreClass for the given Python type
+    DLLLOCAL QoreClass* getCreateQorePythonClass(ExceptionSink* xsink, PyTypeObject* type, int flags = 0);
+
     //! Returns a Qore binary from a Python Bytes object
     DLLLOCAL static BinaryNode* getQoreBinaryFromBytes(PyObject* val);
 
@@ -333,16 +307,6 @@ public:
 
     //! Returns a Qore absolute date time value from a Python Time object
     DLLLOCAL static DateTimeNode* getQoreDateTimeFromTime(PyObject* val);
-
-    //! Returns a Python list for the given Qore list
-    DLLLOCAL PyObject* getPythonList(ExceptionSink* xsink, const QoreListNode* l);
-
-    //! Returns a Python tuple for the given Qore list
-    DLLLOCAL PyObject* getPythonTupleValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset = 0,
-        PyObject* first = nullptr);
-
-    //! Returns a Python dict for the given Qore hash
-    DLLLOCAL PyObject* getPythonDict(ExceptionSink* xsink, const QoreHashNode* h);
 
     //! Returns a Python string for the given Qore string
     DLLLOCAL static PyObject* getPythonString(ExceptionSink* xsink, const QoreString* str);
@@ -389,11 +353,11 @@ public:
                 return pypgm;
             }
         }
-        return nullptr;
+        return qore_python_pgm;
     }
 
     //! Static initialization
-    DLLLOCAL static void staticInit();
+    DLLLOCAL static int staticInit();
 
     //! Delete thread local data when a thread terminates
     DLLLOCAL static void pythonThreadCleanup(void*);
@@ -411,9 +375,6 @@ protected:
     //! module context when importing Python modules to Qore
     const char* module_context = nullptr;
 
-    // call reference for saving object references
-    ResolvedCallReferenceNode* save_object_callback = nullptr;
-
     // list of objects to dereference when classes are deleted
     typedef std::vector<PyObject*> obj_sink_t;
     obj_sink_t obj_sink;
@@ -423,6 +384,9 @@ protected:
     //! true if the object is valid
     bool valid = true;
 
+    //! if we should destroy the interpreter state
+    bool owns_interpreter = false;
+
     //! maps types to classes
     typedef std::map<PyTypeObject*, QorePythonClass*> clmap_t;
     clmap_t clmap;
@@ -431,19 +395,40 @@ protected:
     typedef std::set<PyObject*> pyobj_set_t;
     pyobj_set_t mod_set;
 
+    //! set of unique strings
+    typedef std::set<std::string> strset_t;
+    strset_t strset;
+
     //! mutex for thread state map
     static QoreThreadLock py_thr_lck;
     //! map of TIDs to the thread state
-    typedef std::map<int, PyThreadState*> py_tid_map_t;
+    typedef std::map<int, QorePythonThreadStateInfo> py_tid_map_t;
     //! map of QorePythonProgram objects to thread states for the current thread
     typedef std::map<const QorePythonProgram*, py_tid_map_t> py_thr_map_t;
     DLLLOCAL static py_thr_map_t py_thr_map;
 
+    // call reference for saving object references
+    mutable ReferenceHolder<ResolvedCallReferenceNode> save_object_callback;
+
+    //! Map of Qore classes to Python classes
+    typedef std::map<const QoreClass*, PythonQoreClass*> py_cls_map_t;
+    py_cls_map_t py_cls_map;
+
+    typedef std::vector<PyMethodDef*> meth_vec_t;
+    meth_vec_t meth_vec;
+
+    //! Saves Qore objects in thread-local data
+    DLLLOCAL int saveQoreObjectFromPythonDefault(const QoreValue& rv, ExceptionSink& xsink);
+
+    DLLLOCAL int importQoreNamespaceToPython(PyObject* mod, const QoreNamespace& ns);
+
     DLLLOCAL QoreNamespace* getNamespaceForObject(PyObject* type);
 
-    DLLLOCAL QorePythonClass* getCreateQorePythonClass(ExceptionSink* xsink, PyTypeObject* type);
-    DLLLOCAL QorePythonClass* getCreateQorePythonClassIntern(ExceptionSink* xsink, PyTypeObject* type,
-        const char* cls_name = nullptr);
+    DLLLOCAL QoreClass* getCreateQorePythonClassIntern(ExceptionSink* xsink, PyTypeObject* type,
+        const char* cls_name = nullptr, int flags = 0);
+
+    DLLLOCAL QorePythonClass* addClassToNamespaceIntern(ExceptionSink* xsink, QoreNamespace* ns, PyTypeObject* type,
+        const char* cname, clmap_t::iterator i, int flags = 0);
 
     //! Call a method and and return the result
     DLLLOCAL QoreValue callCFunctionMethod(ExceptionSink* xsink, PyObject* func, const QoreListNode* args,
@@ -481,7 +466,8 @@ protected:
     //! Returns a Qore list from a Python list
     DLLLOCAL QoreListNode* getQoreListFromList(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset);
     //! Returns a Qore list from a Python tuple
-    DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset);
+    DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset,
+        size_t offset = 0);
 
     DLLLOCAL static void execPythonConstructor(const QoreMethod& meth, PyObject* pycls, QoreObject* self,
         const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
@@ -511,60 +497,15 @@ protected:
     DLLLOCAL static QoreValue execPythonFunction(PyObject* func, const QoreListNode* args, q_rt_flags_t rtflags,
         ExceptionSink* xsink);
 
+    //! Python integration
+    DLLLOCAL static PyObject* callQoreFunction(PyObject* self, PyObject* args);
+
     DLLLOCAL virtual ~QorePythonProgram() {
-        deleteIntern();
+        //printd(5, "QorePythonProgram::~QorePythonProgram() this: %p\n", this);
+        assert(!qpgm);
     }
 
-    DLLLOCAL void deleteIntern() {
-        // remove all thread states; the objects will be deleted by Python when the interpreter is destroyed
-        {
-            AutoLocker al(py_thr_lck);
-            py_thr_map_t::iterator i = py_thr_map.find(this);
-            assert(i != py_thr_map.end());
-            py_thr_map.erase(i);
-        }
-
-        if (qpgm && owns_qore_program_ref) {
-            // remove the external data before dereferencing
-            qpgm->removeExternalData(QORE_PYTHON_MODULE_NAME);
-            qpgm->deref(nullptr);
-        }
-
-        if (interpreter || module || python_code) {
-            QorePythonGilHelper qpgh;
-
-            for (auto& i : obj_sink) {
-                Py_DECREF(i);
-            }
-
-            if (interpreter) {
-                PyInterpreterState_Clear(interpreter);
-                PyInterpreterState_Delete(interpreter);
-            }
-            module.purge();
-            python_code.purge();
-
-            valid = false;
-        }
-
-        /*
-        if (python) {
-            QorePythonHelper qph(this);
-            assert(valid);
-            valid = false;
-
-            Py_EndInterpreter(python);
-            python = nullptr;
-        }
-        */
-
-        if (save_object_callback) {
-            save_object_callback->deref(nullptr);
-            save_object_callback = nullptr;
-        }
-
-        //printd(5, "QorePythonProgram::deleteIntern() this: %p\n", this);
-    }
+    DLLLOCAL void deleteIntern(ExceptionSink* xsink);
 
     //! the GIL must be held when this function is called
     DLLLOCAL int createInterpreter(ExceptionSink* xsink);
@@ -578,8 +519,12 @@ protected:
         }
         int tid = gettid();
         py_tid_map_t::iterator ti = i->second.find(tid);
-        return ti == i->second.end() ? nullptr : ti->second;
+        //printd(5, "QorePythonProgram::getThreadState() this: %p found TID %d: %p\n", this, gettid(), ti == i->second.end() ? nullptr : ti->second);
+        return ti == i->second.end() ? nullptr : ti->second.state;
     }
+
+    //! Creates a QoreProgram object owned by this object
+    DLLLOCAL void createQoreProgram();
 };
 
 class PythonModuleContextHelper {

@@ -29,12 +29,14 @@
 */
 qclass PythonProgram [arg=QorePythonProgram* pp; ns=Python; dom=EMBEDDED_LOGIC];
 
-//! Creates the object and parses the given source code
+//! Creates the object and parses and runs the given source code
 /** @param source_code the Python source to parse and compile
     @param source_label the label or file name of the source; this is used as the module name for the compiled Python
     code as well
 
-    @note Exceptions parsing or compiling the Python code are thrown according to @ref python_exceptions
+    @note
+    - The code is executed after parsing and compiling
+    - Exceptions parsing, compiling, or running the Python code are thrown according to @ref python_exceptions
 */
 PythonProgram::constructor(string source_code, string source_label) {
     ReferenceHolder<QorePythonProgram> pp(new QorePythonProgram(*source_code, *source_label, Py_file_input, xsink),
@@ -50,7 +52,7 @@ PythonProgram::constructor(string source_code, string source_label) {
 */
 PythonProgram::destructor() {
     //printd(5, "Qore PythonProgram::destructor() this: %p\n", pp);
-    pp->destructor();
+    pp->destructor(xsink);
 }
 
 //! Runs the program
@@ -121,14 +123,28 @@ auto PythonProgram::callMethodArgs(string class_name, string method_name, *softl
     return pp->callMethod(xsink, class_name, method_name, argv);
 }
 
-//! Parse, compile, and evaluate the given statement and return any result
+//! Parse, compile, and evaluate the given statement and return any result; declarations are not persistent
 /** @param source_code the Python source to parse and compile
     @param source_label the label or file name of the source
 
     @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
+
+    @see evalStatementKeep()
  */
 auto PythonProgram::evalStatement(string source_code, string source_label = "stmt") {
-    return pp->eval(*source_code, *source_label, Py_single_input, xsink);
+    return pp->eval(xsink, *source_code, *source_label, Py_single_input, true);
+}
+
+//! Parse, compile, and evaluate the given statement and return any result; declarations are persistent
+/** @param source_code the Python source to parse and compile
+    @param source_label the label or file name of the source
+
+    @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
+
+    @see evalStatement()
+ */
+auto PythonProgram::evalStatementKeep(string source_code, string source_label = "stmt") {
+    return pp->eval(xsink, *source_code, *source_label, Py_single_input, false);
 }
 
 //! Parse, compile, and evaluate the given expression and return any result
@@ -140,7 +156,7 @@ auto PythonProgram::evalStatement(string source_code, string source_label = "stm
     @note This method uses a shared static PythonProgram object to parse, compile, and evaluate the input string
  */
 auto PythonProgram::evalExpression(string source_code, string source_label = "exp") {
-    return pp->eval(*source_code, *source_label, Py_eval_input, xsink);
+    return pp->eval(xsink, *source_code, *source_label, Py_eval_input, true);
 }
 
 //! Sets the "save object" callback for %Qore objects created from Python code
@@ -170,6 +186,52 @@ PythonProgram::setSaveObjectCallback(*code save_object_callback) [dom=PROCESS] {
     pp->setSaveObjectCallback(save_object_callback);
 }
 
+//! Imports the given Qore namespace to the Python program object under the given module path
+/** @param qore_ns_path the path to the Qore namespace (ex: \c "::Qore::Thread")
+    @param py_module_path the dot-separated path to the target Python module to be created (ex: \c "qore.qore.thread")
+
+    @throw IMPORT-NS-ERROR Qore namespace could not be found or the root namespace was given for import
+*/
+PythonProgram::importNamespace(string qore_ns_path, string py_module_path) {
+    TempEncodingHelper npath(qore_ns_path, QCS_DEFAULT, xsink);
+    if (*xsink) {
+        return QoreValue();
+    }
+
+    QoreProgram* pgm = getProgram();
+
+    const QoreNamespace* ns = pgm->findNamespace(**npath);
+    if (!ns || ns == pgm->getRootNS()) {
+        xsink->raiseException("IMPORT-NS-ERROR", "invalid source namespace '%s'", npath->c_str());
+        return QoreValue();
+    }
+
+    pp->importQoreNamespaceToPython(*ns, *py_module_path, xsink);
+}
+
+//! Creates an alias in the Python program for the given symbol
+/** @param python_source_path the dotted path to the source definition (ex: \c "some.path.to.sometehing")
+    @param python_target_path the dotted path to the target definition (ex: \c "a.different.path")
+
+    @throw PYTHON-ALIAS-ERROR there was an error finding the source object or creating the target
+*/
+PythonProgram::aliasDefinition(string python_source_path, string python_target_path) {
+    TempEncodingHelper srcpath(python_source_path, QCS_DEFAULT, xsink);
+    if (*xsink) {
+        return QoreValue();
+    }
+    TempEncodingHelper trgpath(python_target_path, QCS_DEFAULT, xsink);
+    if (*xsink) {
+        return QoreValue();
+    }
+
+    try {
+        pp->aliasDefinition(**srcpath, **trgpath);
+    } catch (AbstractException& e) {
+        e.convert(xsink);
+    }
+}
+
 //! Parse, compile, and evaluate the given statement and return any result
 /** @param source_code the Python source to parse and compile
     @param source_label the label or file name of the source
@@ -177,11 +239,29 @@ PythonProgram::setSaveObjectCallback(*code save_object_callback) [dom=PROCESS] {
     @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
 
     @note This method uses the PythonProgram context in the current program to parse, compile, and evaluate the input string
+
+    @see evalStatementKeep()
  */
 static auto PythonProgram::evalStatement(string source_code, string source_label = "stmt") {
     QorePythonProgram* pypgm = QorePythonProgram::getContext();
     assert(pypgm);
-    return pypgm->eval(*source_code, *source_label, Py_single_input, xsink);
+    return pypgm->eval(xsink, *source_code, *source_label, Py_single_input, true);
+}
+
+//! Parse, compile, and evaluate the given code and leave declarations in the Python program object
+/** @param source_code the Python source to parse and compile
+    @param source_label the label or file name of the source
+
+    @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
+
+    @note This method uses the PythonProgram context in the current program to parse, compile, and evaluate the input string
+
+    @see evalStatement()
+ */
+static auto PythonProgram::evalStatementKeep(string source_code, string source_label = "stmt") {
+    QorePythonProgram* pypgm = QorePythonProgram::getContext();
+    assert(pypgm);
+    return pypgm->eval(xsink, *source_code, *source_label, Py_single_input, false);
 }
 
 //! Parse, compile, and evaluate the given expression and return any result
@@ -195,7 +275,7 @@ static auto PythonProgram::evalStatement(string source_code, string source_label
 static auto PythonProgram::evalExpression(string source_code, string source_label = "exp") {
     QorePythonProgram* pypgm = QorePythonProgram::getContext();
     assert(pypgm);
-    return pypgm->eval(*source_code, *source_label, Py_eval_input, xsink);
+    return pypgm->eval(xsink, *source_code, *source_label, Py_eval_input, true);
 }
 
 //! Sets the "save object" callback for %Qore objects created from Python code in the root %Qore Program context

@@ -13,8 +13,16 @@ endif()
 
 cmake_policy(SET CMP0042 NEW)
 
+if (LINUX)
+    # thread-state mamangement only works on Linux with Python 3.6
+    set(MIN_PY_VER 3.6)
+else()
+    set(MIN_PY_VER 3.7)
+endif()
+
 find_package(Qore 0.9.5 REQUIRED)
-find_package(PythonLibs 3.6.0)
+find_package(PythonInterp ${MIN_PY_VER})
+find_package(PythonLibs ${MIN_PY_VER})
 
 # Check for C++11.
 include(CheckCXXCompilerFlag)
@@ -30,9 +38,15 @@ set(QPP_SRC
 )
 
 set(CPP_SRC
+    # python module for Qore
     src/python-module.cpp
     src/QorePythonProgram.cpp
     src/QorePythonClass.cpp
+    # qoreloader module for Python
+    src/qoreloadermodule.cpp
+    src/QoreMetaPathFinder.cpp
+    src/QoreLoader.cpp
+    src/PythonQoreClass.cpp
 )
 
 qore_wrap_qpp_value(QPP_SOURCES ${QPP_SRC})

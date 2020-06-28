@@ -1,0 +1,75 @@
+/* indent-tabs-mode: nil -*- */
+/*
+    qore Python module
+
+    Copyright (C) 2020 Qore Technologies, s.r.o.
+
+    This library is free software; you can redistribute it and/or
+    modify it under the terms of the GNU Lesser General Public
+    License as published by the Free Software Foundation; either
+    version 2.1 of the License, or (at your option) any later version.
+
+    This library is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public
+    License along with this library; if not, write to the Free Software
+    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+*/
+
+#ifndef _QORE_PYTHON_QOREMETAPATHFINDER_H
+
+#define _QORE_PYTHON_QOREMETAPATHFINDER_H
+
+#include "python-module.h"
+
+#include <map>
+
+/*
+struct ModInfo {
+    PyObject* spec;
+    QoreProgram* pgm;
+};
+*/
+
+class QoreMetaPathFinder {
+public:
+    //! initializer function
+    DLLLOCAL static int init();
+
+    //! module initializer function
+    DLLLOCAL static int setupModules();
+
+    //! destructor function
+    DLLLOCAL static void del();
+
+    //! type functions
+    DLLLOCAL static void dealloc(PyObject* self);
+    DLLLOCAL static PyObject* repr(PyObject* obj);
+
+    //! class methods
+    DLLLOCAL static PyObject* find_spec(PyObject* self, PyObject* args);
+
+    //! Retuns a new module spec object
+    /** @param name the name of the new module
+        @param loader either nullptr (None will be used) or an already-referenced loader
+    */
+    DLLLOCAL static PyObject* newModuleSpec(const QoreString& name, PyObject* loader = nullptr);
+
+private:
+    DLLLOCAL static QorePythonManualReferenceHolder qore_package;
+    DLLLOCAL static QorePythonManualReferenceHolder mod_spec_cls;
+
+    DLLLOCAL static PyObject* getQorePackageModuleSpec();
+    DLLLOCAL static PyObject* tryLoadModule(const QoreString& mname);
+};
+
+class PythonThreadStateHelper : QorePythonGilHelper {
+public:
+    DLLLOCAL PythonThreadStateHelper() : QorePythonGilHelper(PyGILState_GetThisThreadState()) {
+    }
+};
+
+#endif

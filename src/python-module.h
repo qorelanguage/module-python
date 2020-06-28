@@ -79,39 +79,55 @@ DLLLOCAL void _qore_PyGILState_SetThisThreadState(PyThreadState* state);
 */
 class QorePythonGilHelper {
 public:
-    DLLLOCAL QorePythonGilHelper() {
-        assert(!PyGILState_Check());
-        assert(!_qore_PyRuntimeGILState_GetThreadState());
-        assert(!PyGILState_GetThisThreadState());
-        PyEval_AcquireThread(mainThreadState);
-        assert(PyThreadState_Get() == mainThreadState);
+    DLLLOCAL QorePythonGilHelper(PyThreadState* new_thread_state = mainThreadState)
+        : new_thread_state(new_thread_state), state(_qore_PyRuntimeGILState_GetThreadState()),
+            t_state(PyGILState_GetThisThreadState()),
+            release_gil(!PyGILState_Check()) {
+        assert(new_thread_state);
+        if (release_gil) {
+            PyEval_AcquireThread(new_thread_state);
+            assert(PyThreadState_Get() == new_thread_state);
+        } else {
+            PyThreadState_Swap(new_thread_state);
+        }
         // set this thread state
-        _qore_PyGILState_SetThisThreadState(mainThreadState);
-        assert(PyGILState_GetThisThreadState() == mainThreadState);
+        _qore_PyGILState_SetThisThreadState(new_thread_state);
+        assert(PyGILState_GetThisThreadState() == new_thread_state);
         assert(PyGILState_Check());
     }
 
     DLLLOCAL ~QorePythonGilHelper() {
-        // swap back to the mainThreadState before releasing the GIL
-        PyThreadState* state = PyThreadState_Get();
-        if (state != mainThreadState) {
-            assert(state->gilstate_counter == 1);
-            --state->gilstate_counter;
-            PyThreadState_Swap(mainThreadState);
+        if (PyGILState_Check()) {
+            // restore the old TLD state
+            _qore_PyGILState_SetThisThreadState(t_state);
+
+            if (release_gil) {
+                // swap back to the mainThreadState before releasing the GIL
+                PyThreadState* state = PyThreadState_Get();
+                if (state != new_thread_state) {
+                    assert(state->gilstate_counter == 1);
+                    --state->gilstate_counter;
+                    PyThreadState_Swap(new_thread_state);
+                }
+
+                // release the GIL
+                PyEval_ReleaseThread(new_thread_state);
+                assert(!PyGILState_Check());
+            } else {
+                PyThreadState_Swap(state);
+            }
+        } else {
+            PyEval_AcquireThread(state);
         }
-        state = PyGILState_GetThisThreadState();
-        if (state != mainThreadState) {
-            _qore_PyGILState_SetThisThreadState(mainThreadState);
-        }
-        assert(PyGILState_Check());
-        // release the GIL
-        PyEval_ReleaseThread(mainThreadState);
-        assert(!PyGILState_Check());
-        _qore_PyGILState_SetThisThreadState(nullptr);
+
+        _qore_PyGILState_SetThisThreadState(t_state);
     }
 
 protected:
+    PyThreadState* new_thread_state;
     PyThreadState* state;
+    PyThreadState* t_state;
+    bool release_gil = true;
 };
 
 struct QorePythonThreadInfo {
@@ -132,29 +148,28 @@ protected:
     QorePythonThreadInfo old_state;
 };
 
-//! Python ref holder
-class QorePythonReferenceHolder {
+class QorePythonManualReferenceHolder {
 public:
-    DLLLOCAL QorePythonReferenceHolder() : obj(nullptr) {
+    DLLLOCAL QorePythonManualReferenceHolder() : obj(nullptr) {
     }
 
-    DLLLOCAL QorePythonReferenceHolder(PyObject* obj) : obj(obj) {
+    DLLLOCAL QorePythonManualReferenceHolder(PyObject* obj) : obj(obj) {
     }
 
-    DLLLOCAL ~QorePythonReferenceHolder() {
-        purge();
+    DLLLOCAL QorePythonManualReferenceHolder(QorePythonManualReferenceHolder&& old) : obj(old.obj) {
+        old.obj = nullptr;
     }
 
     DLLLOCAL void purge() {
         if (obj) {
-            Py_DECREF(obj);
+            py_deref();
             obj = nullptr;
         }
     }
 
-    DLLLOCAL QorePythonReferenceHolder& operator=(PyObject* obj) {
+    DLLLOCAL QorePythonManualReferenceHolder& operator=(PyObject* obj) {
         if (this->obj) {
-            Py_DECREF(this->obj);
+            py_deref();
         }
         this->obj = obj;
         return *this;
@@ -178,12 +193,47 @@ public:
         return (bool)obj;
     }
 
+    DLLLOCAL void py_ref() {
+        assert(obj);
+        Py_INCREF(obj);
+    }
+
+    DLLLOCAL void py_deref() {
+        assert(obj);
+        Py_DECREF(obj);
+    }
+
 protected:
     PyObject* obj;
 
 private:
-    QorePythonReferenceHolder(const QorePythonReferenceHolder&) = delete;
-    QorePythonReferenceHolder& operator=(QorePythonReferenceHolder&) = delete;
+    QorePythonManualReferenceHolder(const QorePythonManualReferenceHolder&) = delete;
+    QorePythonManualReferenceHolder& operator=(QorePythonManualReferenceHolder&) = delete;
+};
+
+//! Python ref holder
+class QorePythonReferenceHolder : public QorePythonManualReferenceHolder {
+public:
+    DLLLOCAL QorePythonReferenceHolder() : QorePythonManualReferenceHolder(nullptr) {
+    }
+
+    DLLLOCAL QorePythonReferenceHolder(PyObject* obj) : QorePythonManualReferenceHolder(obj) {
+    }
+
+    DLLLOCAL QorePythonReferenceHolder(QorePythonReferenceHolder&& old) : QorePythonManualReferenceHolder(std::move(old)) {
+    }
+
+    DLLLOCAL ~QorePythonReferenceHolder() {
+        purge();
+    }
+
+    DLLLOCAL QorePythonReferenceHolder& operator=(PyObject* obj) {
+        if (this->obj) {
+            py_deref();
+        }
+        this->obj = obj;
+        return *this;
+    }
 };
 
 class QorePythonGilStateHelper {
@@ -233,7 +283,21 @@ protected:
     _node* node;
 };
 
+// Base type for Qore objects in Python
+DLLLOCAL extern PyTypeObject PythonQoreObjectBase_Type;
+
+// Python program control for Qore interfacing
+DLLLOCAL extern QorePythonProgram* qore_python_pgm;
+
+// module registration function
+DLLEXPORT extern "C" void python_qore_module_desc(QoreModuleInfo& mod_info);
+
+//! Python module definition function for the qoreloader module
+DLLLOCAL PyMODINIT_FUNC PyInit_qoreloader();
+
 class QorePythonProgram;
 DLLLOCAL extern QoreNamespace PNS;
+
+static constexpr const char* QOBJ_KEY = "__$QOBJ__";
 
 #endif

@@ -57,8 +57,6 @@ public:
     }
 
     //! Called when a class is copied
-    /** @since %Qore 0.9.5
-    */
     DLLLOCAL virtual QoreClass* copy() {
         return new QorePythonClass(*this);
     }
@@ -85,6 +83,10 @@ public:
     DLLLOCAL QorePythonProgram* getPythonProgram() const {
         return pypgm;
     }
+
+    DLLLOCAL PyObject* getPyObject(QoreObject* self, ExceptionSink* xsink) const;
+
+    DLLLOCAL int setPyObject(QoreObject* self, PyObject* pyself, ExceptionSink* xsink) const;
 
     DLLLOCAL QoreValue getPythonMember(QorePythonProgram* pypgm, const char* mname, QorePythonPrivateData* pd,
         ExceptionSink* xsink) const;
