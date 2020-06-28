@@ -23,8 +23,8 @@
 #include "QoreLoader.h"
 #include "QorePythonProgram.h"
 
-QorePythonReferenceHolder QoreMetaPathFinder::qore_package;
-QorePythonReferenceHolder QoreMetaPathFinder::mod_spec_cls;
+QorePythonManualReferenceHolder QoreMetaPathFinder::qore_package;
+QorePythonManualReferenceHolder QoreMetaPathFinder::mod_spec_cls;
 
 PyDoc_STRVAR(QoreMetaPathFinder_doc,
 "QoreMetaPathFinder()\n\

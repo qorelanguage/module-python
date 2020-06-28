@@ -33,17 +33,17 @@ struct PyQoreObject {
     QoreObject* qobj;
 };
 
-struct QorePyTypeObject : public PyTypeObject {
-    const QoreClass* qcls = nullptr;
-};
-
 class PythonQoreClass {
-    friend QorePyTypeObject;
 public:
-    DLLLOCAL PythonQoreClass(const char* module_name, const QoreClass& qcls);
+    DLLLOCAL PythonQoreClass(QorePythonProgram* pypgm, const char* module_name, const QoreClass& qcls);
 
-    DLLLOCAL PyTypeObject* getType() {
-        return &py_type;
+    //! called for pure Python types to allow them to be extended in Qore
+    DLLLOCAL PythonQoreClass(PyTypeObject* type, const QoreClass& qcls);
+
+    DLLLOCAL ~PythonQoreClass();
+
+    DLLLOCAL PyTypeObject* getPythonType() {
+        return py_type;
     }
 
     //! wraps a Qore object as a Python object of this class
@@ -51,10 +51,14 @@ public:
     */
     DLLLOCAL PyObject* wrap(QoreObject* obj);
 
+    DLLLOCAL static const QoreClass* getQoreClass(PyTypeObject* type);
+
     // Python type methods
-    DLLLOCAL static PyObject* py_new(QorePyTypeObject* type, PyObject* args, PyObject* kw);
+    DLLLOCAL static int py_init(PyObject* self, PyObject* args, PyObject* kwds);
+    DLLLOCAL static PyObject* py_new(PyTypeObject* type, PyObject* args, PyObject* kw);
     DLLLOCAL static void py_dealloc(PyQoreObject* self);
     DLLLOCAL static PyObject* py_repr(PyObject* obj);
+    DLLLOCAL static void py_free(PyQoreObject* self);
 
 private:
     QoreString name;
@@ -69,12 +73,12 @@ private:
     py_obj_vec_t py_normal_meth_obj_vec;
     py_obj_vec_t py_static_meth_obj_vec;
     typedef std::set<const char*, ltstr> cstrset_t;
+    typedef std::set<const QoreClass*> clsset_t;
 
-    QorePyTypeObject py_type;
+    PyTypeObject* py_type;
 
-    static PyTypeObject static_py_type;
-
-    DLLLOCAL void populateClass(const QoreClass& qcls, cstrset_t& meth_set);
+    DLLLOCAL void saveQoreClassPtr(const QoreClass* qcls);
+    DLLLOCAL void populateClass(QorePythonProgram* pypgm, const QoreClass& qcls, clsset_t& cls_set, cstrset_t& meth_set, bool skip_first = true);
 
     DLLLOCAL static PyObject* exec_qore_static_method(const QoreMethod& m, PyObject* args);
 
@@ -101,6 +105,10 @@ protected:
         * error_traceback;
 };
 */
+
+DLLLOCAL bool PyQoreObject_Check(PyObject* obj);
+
+DLLLOCAL bool PyQoreObjectType_Check(PyTypeObject* type);
 
 DLLLOCAL extern PyTypeObject PythonQoreException_Type;
 

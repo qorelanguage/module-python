@@ -5,9 +5,11 @@
 %require-types
 %strict-args
 %enable-all-warnings
+%no-child-restrictions
 
 %requires python
 %requires QUnit
+%requires reflection
 %try-module json
 %define NO_JSON
 %endtry
@@ -50,18 +52,90 @@ class PythonTest inherits Test {
     }
 
     pythonImportTest() {
-        PythonProgram p("
+        {
+            PythonProgram p("
 def test1():
     return x.ex1()
 
 def test2():
     return x.ex2()
+
+def z():
+    return y.z.exz()
 ", "test.py");
 
-        p.importNamespace("::Test", "x");
+            p.importNamespace("::Test", "x");
 
-        assertThrows("1", \p.callFunction(), ("test1"));
-        assertThrows("TEST", "test", \p.callFunction(), ("test2"));
+            assertThrows("1", \p.callFunction(), ("test1"));
+            assertThrows("TEST", "test", \p.callFunction(), ("test2"));
+
+            p.aliasDefinition("x.ex1", "y.z.exz");
+            assertThrows("1", \p.callFunction(), ("z"));
+
+            p.evalStatementKeep("
+class PyTest(x.Test):
+    def py_test(self):
+        return 2
+", "new.py");
+
+            p.evalStatementKeep("
+def py_test_func(i):
+    t = PyTest()
+    if (i == 1):
+        return t.get()
+    return t.py_test()
+", "new2.py");
+
+            assertEq(2, p.callFunction("py_test_func", 0));
+            assertEq(1, p.callFunction("py_test_func", 1));
+
+            p.evalStatementKeep("
+class PyAbstractTest(x.AbstractTest):
+    def get(self):
+        return 3
+
+    def getpy(self):
+        return 4
+", "new3.py");
+
+            p.evalStatementKeep("
+def py_abstract_test(x = 0):
+    t = PyAbstractTest()
+    if (x):
+        return t.getpy()
+    return t.get()
+", "new4.py");
+
+            assertEq(3, p.callFunction("py_abstract_test"));
+            assertEq(4, p.callFunction("py_abstract_test", 1));
+        }
+
+        {
+            Program p(PO_NEW_STYLE);
+            string src = "
+class PyTest(x.AbstractTest):
+    def get(self):
+        return 3
+
+    def getpy(self):
+        return 4
+
+    def addonenormal(self, x0):
+        return self.addOneNormal(x0)
+
+    def addone(self, x0):
+        return x.AbstractTest.addOne(x0)
+";
+            p.issueModuleCmd("python", "import-ns ::Test x");
+            p.issueModuleCmd("python", "parse t " + src);
+            p.issueModuleCmd("python", "export-class PyTest");
+            Class cls = Class::forName(p, "PyTest");
+            object obj = cls.newObject();
+            assertEq(3, obj.get());
+            assertEq(4, obj.getpy());
+            assertEq(5, obj.addonenormal(4));
+            assertEq(6, obj.addone(5));
+        }
     }
 
     objectLifecycleTest() {
@@ -97,6 +171,15 @@ def test():
             assertThrows("NO-FUNCTION", \pp.callFunction(), "xxx");
             # test module dictionary key that exists but is not a function
             assertThrows("NO-FUNCTION", \pp.callFunction(), "__name__");
+
+            pp.evalStatementKeep("def test1():\n    return 2", "test1.py");
+            assertEq(1, pp.callFunction("test"));
+            assertEq(2, pp.callFunction("test1"));
+
+            pp.evalStatementKeep("def test2():\n    return 3", "test2.py");
+            assertEq(1, pp.callFunction("test"));
+            assertEq(2, pp.callFunction("test1"));
+            assertEq(3, pp.callFunction("test2"));
         }
 
         {
@@ -258,7 +341,7 @@ class test:
 
     importTest() {
         {
-            Program p();
+            Program p(PO_NEW_STYLE);
             p.parse("
 %module-cmd(python) import math.sin
 
@@ -272,7 +355,7 @@ auto sub get(auto arg) {
         }
 
         {
-            Program p();
+            Program p(PO_NEW_STYLE);
             p.parse("
 %module-cmd(python) import math
 
@@ -292,7 +375,7 @@ auto sub get(auto arg) {
         }
 
         {
-            Program p();
+            Program p(PO_NEW_STYLE);
             p.parse("
 %module-cmd(python) import json.JSONEncoder
 
@@ -308,7 +391,7 @@ auto sub get() {
         }
 
         {
-            Program p();
+            Program p(PO_NEW_STYLE);
             p.parse("
 %module-cmd(python) import json
 
@@ -325,12 +408,30 @@ auto sub get() {
     }
 }
 
-namespace Test {
+public namespace Test {
     sub ex1() {
         throw 1;
     }
 
     sub ex2() {
         throw "TEST", "test";
+    }
+
+    class Test {
+        int get() {
+            return 1;
+        }
+    }
+
+    public class AbstractTest {
+        abstract int get();
+
+        int addOneNormal(int x) {
+            return x + 1;
+        }
+
+        static int addOne(int x) {
+            return x + 1;
+        }
     }
 }

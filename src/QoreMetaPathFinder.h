@@ -59,8 +59,8 @@ public:
     DLLLOCAL static PyObject* newModuleSpec(const QoreString& name, PyObject* loader = nullptr);
 
 private:
-    DLLLOCAL static QorePythonReferenceHolder qore_package;
-    DLLLOCAL static QorePythonReferenceHolder mod_spec_cls;
+    DLLLOCAL static QorePythonManualReferenceHolder qore_package;
+    DLLLOCAL static QorePythonManualReferenceHolder mod_spec_cls;
 
     DLLLOCAL static PyObject* getQorePackageModuleSpec();
     DLLLOCAL static PyObject* tryLoadModule(const QoreString& mname);

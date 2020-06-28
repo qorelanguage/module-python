@@ -50,8 +50,8 @@ public:
     DLLLOCAL static PyObject* exec_module(PyObject* self, PyObject* args);
 
 private:
-    DLLLOCAL static QorePythonReferenceHolder loader_cls;
-    DLLLOCAL static QorePythonReferenceHolder loader;
+    DLLLOCAL static QorePythonManualReferenceHolder loader_cls;
+    DLLLOCAL static QorePythonManualReferenceHolder loader;
 
     DLLLOCAL static const QoreNamespace* getModuleRootNs(const char* name, const QoreNamespace* root_ns);
 };

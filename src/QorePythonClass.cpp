@@ -28,6 +28,8 @@
 
 type_vec_t QorePythonClass::gateParamTypeInfo = { stringTypeInfo };
 
+static constexpr const char* PYOBJ_KEY = "__$PYCLS__";
+
 QorePythonClass::QorePythonClass(const char* name) : QoreBuiltinClass(name, QDOM_UNCONTROLLED_API), pypgm(nullptr) {
 }
 
@@ -37,11 +39,33 @@ QorePythonClass::QorePythonClass(QorePythonProgram* pypgm, const char* name) : Q
     addMethod(nullptr, "methodGate", (q_external_method_t)methodGate, Public, QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API,
         autoTypeInfo, gateParamTypeInfo);
 
+    addMember(PYOBJ_KEY, Internal, autoTypeInfo);
+
     setPublicMemberFlag();
 }
 
 void QorePythonClass::addObj(PyObject* obj) {
     pypgm->addObj(obj);
+}
+
+PyObject* QorePythonClass::getPyObject(QoreObject* self, ExceptionSink* xsink) const {
+    ValueHolder v(self->getReferencedMemberNoMethod(PYOBJ_KEY, this, xsink), xsink);
+    if (*xsink) {
+        assert(!v);
+        return nullptr;
+    }
+    if (!v) {
+        return nullptr;
+    }
+    if (v->getType() != NT_INT) {
+        xsink->raiseException("PYTHON-OBJECT-ERROR", "invalid type '%s' saved to internal data key '%s'", v->getFullTypeName(), PYOBJ_KEY);
+        return nullptr;
+    }
+    return (PyObject*)v->getAsBigInt();
+}
+
+int QorePythonClass::setPyObject(QoreObject* self, PyObject* pyself, ExceptionSink* xsink) const {
+    return self->setMemberValue(PYOBJ_KEY, this, (int64)pyself, xsink);
 }
 
 // static method

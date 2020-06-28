@@ -40,6 +40,7 @@ thread_local QoreThreadAttacher qoreThreadAttacher;
 PyTypeObject PythonQoreObjectBase_Type = {
     PyVarObject_HEAD_INIT(nullptr, 0)
     .tp_name = "PythonQoreObjectBase",
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
 };
 
 static int init_count = 0;

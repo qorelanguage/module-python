@@ -148,21 +148,16 @@ protected:
     QorePythonThreadInfo old_state;
 };
 
-//! Python ref holder
-class QorePythonReferenceHolder {
+class QorePythonManualReferenceHolder {
 public:
-    DLLLOCAL QorePythonReferenceHolder() : obj(nullptr) {
+    DLLLOCAL QorePythonManualReferenceHolder() : obj(nullptr) {
     }
 
-    DLLLOCAL QorePythonReferenceHolder(PyObject* obj) : obj(obj) {
+    DLLLOCAL QorePythonManualReferenceHolder(PyObject* obj) : obj(obj) {
     }
 
-    QorePythonReferenceHolder(QorePythonReferenceHolder&& old) : obj(old.obj) {
+    DLLLOCAL QorePythonManualReferenceHolder(QorePythonManualReferenceHolder&& old) : obj(old.obj) {
         old.obj = nullptr;
-    }
-
-    DLLLOCAL ~QorePythonReferenceHolder() {
-        purge();
     }
 
     DLLLOCAL void purge() {
@@ -172,7 +167,7 @@ public:
         }
     }
 
-    DLLLOCAL QorePythonReferenceHolder& operator=(PyObject* obj) {
+    DLLLOCAL QorePythonManualReferenceHolder& operator=(PyObject* obj) {
         if (this->obj) {
             py_deref();
         }
@@ -212,8 +207,33 @@ protected:
     PyObject* obj;
 
 private:
-    QorePythonReferenceHolder(const QorePythonReferenceHolder&) = delete;
-    QorePythonReferenceHolder& operator=(QorePythonReferenceHolder&) = delete;
+    QorePythonManualReferenceHolder(const QorePythonManualReferenceHolder&) = delete;
+    QorePythonManualReferenceHolder& operator=(QorePythonManualReferenceHolder&) = delete;
+};
+
+//! Python ref holder
+class QorePythonReferenceHolder : public QorePythonManualReferenceHolder {
+public:
+    DLLLOCAL QorePythonReferenceHolder() : QorePythonManualReferenceHolder(nullptr) {
+    }
+
+    DLLLOCAL QorePythonReferenceHolder(PyObject* obj) : QorePythonManualReferenceHolder(obj) {
+    }
+
+    DLLLOCAL QorePythonReferenceHolder(QorePythonReferenceHolder&& old) : QorePythonManualReferenceHolder(std::move(old)) {
+    }
+
+    DLLLOCAL ~QorePythonReferenceHolder() {
+        purge();
+    }
+
+    DLLLOCAL QorePythonReferenceHolder& operator=(PyObject* obj) {
+        if (this->obj) {
+            py_deref();
+        }
+        this->obj = obj;
+        return *this;
+    }
 };
 
 class QorePythonGilStateHelper {
@@ -277,5 +297,7 @@ DLLLOCAL PyMODINIT_FUNC PyInit_qoreloader();
 
 class QorePythonProgram;
 DLLLOCAL extern QoreNamespace PNS;
+
+static constexpr const char* QOBJ_KEY = "__$QOBJ__";
 
 #endif

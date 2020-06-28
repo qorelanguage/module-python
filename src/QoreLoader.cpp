@@ -26,8 +26,8 @@
 
 #include <memory>
 
-QorePythonReferenceHolder QoreLoader::loader_cls;
-QorePythonReferenceHolder QoreLoader::loader;
+QorePythonManualReferenceHolder QoreLoader::loader_cls;
+QorePythonManualReferenceHolder QoreLoader::loader;
 
 static PyMethodDef QoreLoader_methods[] = {
     {"create_module", QoreLoader::create_module, METH_VARARGS, "QoreLoader.create_module() implementation"},

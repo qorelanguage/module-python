@@ -54,11 +54,19 @@ qore_classid_t CID_PYTHONBASEOBJECT;
 // module cmd type
 using qore_python_module_cmd_t = void (*) (ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 static void py_mc_import(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
+static void py_mc_import_ns(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
+static void py_mc_alias(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
+static void py_mc_parse(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
+static void py_mc_export_class(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 
 // module cmds
 typedef std::map<std::string, qore_python_module_cmd_t> mcmap_t;
 static mcmap_t mcmap = {
     {"import", py_mc_import},
+    {"import-ns", py_mc_import_ns},
+    {"alias", py_mc_alias},
+    {"parse", py_mc_parse},
+    {"export-class", py_mc_export_class}
 };
 
 static bool python_needs_shutdown = false;
@@ -150,7 +158,9 @@ static QoreStringNode* python_module_init() {
     // ensure that runtime version matches compiled version
     check_python_version();
 
-    QorePythonProgram::staticInit();
+    if (QorePythonProgram::staticInit()) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "failed to initialize \"python\" module");
+    }
 
     mainThreadState = PyThreadState_Get();
     if (python_needs_shutdown) {
@@ -235,6 +245,7 @@ static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink)
     i->second(xsink, arg, pypgm);
 }
 
+// %module-cmd(python) import
 static void py_mc_import(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
     // process import statement
     //printd(5, "python_module_parse_cmd() pypgm: %p arg: %s\n", pypgm, arg.c_str());
@@ -256,6 +267,69 @@ static void py_mc_import(ExceptionSink* xsink, QoreString& arg, QorePythonProgra
             pypgm->import(xsink, arg.c_str(), symbol);
         }
     }
+}
+
+// %module-cmd(python) import-ns <qore-namespace> <python-module-path>
+static void py_mc_import_ns(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
+    // find end of qore namespace
+    qore_offset_t end = arg.find(' ');
+    if (end == -1) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "syntax: import-ns <qore-namespace> " \
+            "<python-module-path>: missing python module path argument; value given: '%s'", arg.c_str());
+    }
+
+    QoreString qore_ns(&arg, end);
+    QoreString py_mod_path(arg.c_str() + end + 1);
+
+    QoreProgram* pgm = getProgram();
+    if (!pgm) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "import-ns error: no current Program context");
+    }
+
+    QoreNamespace* ns = pgm->findNamespace(qore_ns);
+    if (!ns || ns == pgm->getRootNS()) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "import-ns error: Qore namespace '%s' not found",
+            qore_ns.c_str());
+    }
+
+    pypgm->importQoreNamespaceToPython(*ns, py_mod_path, xsink);
+}
+
+// %module-cmd(python) alias <python-source-path> <python-target-path>
+static void py_mc_alias(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
+    // find end of qore namespace
+    qore_offset_t end = arg.find(' ');
+    if (end == -1 || end == (arg.size() - 1)) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "syntax: alias <python-source-path> " \
+            "<python-target-path: python target path argument; value given: '%s'", arg.c_str());
+    }
+
+    QoreString source_path(&arg, end);
+    QoreString target_path(arg.c_str() + end + 1);
+
+    pypgm->aliasDefinition(source_path, target_path);
+}
+
+// %module-cmd(python) parse <label> <source code>
+static void py_mc_parse(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
+    // find end of qore namespace
+    qore_offset_t end = arg.find(' ');
+    if (end == -1 || end == (arg.size() - 1)) {
+        throw QoreStandardException("PYTHON-MODULE-ERROR", "syntax: alias <python-source-path> " \
+            "<python-target-path: python target path argument; value given: '%s'", arg.c_str());
+    }
+
+    QoreString source_label(&arg, end);
+    QoreString source_code(arg.c_str() + end + 1);
+
+    ValueHolder val(pypgm->eval(xsink, source_code, source_label, Py_single_input, false), xsink);
+}
+
+// %module-cmd(python) export-class <python path>
+/** export a Python class to Qore
+*/
+static void py_mc_export_class(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
+    pypgm->exportClass(xsink, arg);
 }
 
 QorePythonHelper::QorePythonHelper(const QorePythonProgram* pypgm) : pypgm(pypgm), old_state(pypgm->setContext()) {
