@@ -100,7 +100,7 @@ bool PyQoreObjectType_Check(PyTypeObject* type) {
 PythonQoreClass::PythonQoreClass(PyTypeObject* type, const QoreClass& qcls) {
     Py_INCREF((PyObject*)type);
     py_type = type;
-    saveQoreClassPtr(&qcls);
+    // do not save the qore class to the python class, as the python class may be a builtin class and the Qore class can be deleted afterwards
 }
 
 PythonQoreClass::PythonQoreClass(QorePythonProgram* pypgm, const char* module_name, const QoreClass& qcls) {
@@ -198,17 +198,24 @@ PythonQoreClass::PythonQoreClass(QorePythonProgram* pypgm, const char* module_na
     saveQoreClassPtr(&qcls);
 }
 
+static void breakit() {}
 void PythonQoreClass::saveQoreClassPtr(const QoreClass* qcls) {
     assert(py_type->tp_dict);
     // add Qore class to type dictionary
     QorePythonReferenceHolder qore_class(PyCapsule_New((void*)qcls, nullptr, nullptr));
     PyDict_SetItemString(py_type->tp_dict, QCLASS_KEY, *qore_class);
+    if (!strcmp(qcls->getName(), "ellipsis")) {
+        printd(0, "PythonQoreClass::saveQoreClassPtr() type: %p '%s' cls: %p '%s'\n", py_type, py_type->tp_name, qcls, qcls->getName());
+        breakit();
+    }
 }
 
 PythonQoreClass::~PythonQoreClass() {
     printd(5, "PythonQoreClass::~PythonQoreClass() this: %p '%s'\n", this, name.c_str());
+    /*
     Py_DECREF(py_type->tp_dict);
     py_type->tp_dict = nullptr;
+    */
     Py_DECREF(py_type);
 }
 
