@@ -41,8 +41,50 @@ thread_local QoreThreadAttacher qoreThreadAttacher;
 
 PyTypeObject PythonQoreObjectBase_Type = {
     PyVarObject_HEAD_INIT(nullptr, 0)
+#if !defined(__clang__) && __GNUC__ < 6
+    // g++ 5.4.0 does not accept the short-form initialization below :(
+    "PythonQoreObjectBase",         // tp_name
+    0,                              // tp_basicsize
+    0,                              // tp_itemsize
+    nullptr,                        // tp_dealloc
+    0,                              // tp_vectorcall_offset/
+    0,                              // tp_getattr
+    0,                              // tp_setattr
+    0,                              // tp_as_async
+    nullptr,                        // tp_repr
+    0,                              // tp_as_number
+    0,                              // tp_as_sequence
+    0,                              // tp_as_mapping
+    0,                              // tp_hash
+    0,                              // tp_call
+    0,                              // tp_str
+    0,                              // tp_getattro
+    0,                              // tp_setattro
+    0,                              // tp_as_buffer
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,              // tp_flags
+    "base class for Python objects based on Qore classes", // tp_doc
+    0,                              // tp_traverse
+    0,                              // tp_clear
+    0,                              // tp_richcompare
+    0,                              // tp_weaklistoffset
+    0,                              // tp_iter
+    0,                              // tp_iternext
+    0,                              // tp_methods
+    0,                              // tp_members
+    0,                              // tp_getset
+    0,                              // tp_base
+    0,                              // tp_dict
+    0,                              // tp_descr_get
+    0,                              // tp_descr_set
+    0,                              // tp_dictoffset
+    0,                              // tp_init
+    0,                              // tp_alloc
+    0,                              // tp_new
+#else
     .tp_name = "PythonQoreObjectBase",
+    .tp_doc = "base class for Python objects based on Qore classes",
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+#endif
 };
 
 static int init_count = 0;

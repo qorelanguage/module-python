@@ -44,12 +44,54 @@ struct PythonQoreNs {
 
 PyTypeObject PythonQoreNamespaceBase_Type = {
     PyVarObject_HEAD_INIT(nullptr, 0)
+#if !defined(__clang__) && __GNUC__ < 6
+    // g++ 5.4.0 does not accept the short-form initialization below :(
+    "ImportedQoreNamespace",        // tp_name
+    sizeof(PythonQoreNs),           // tp_basicsize
+    0,                              // tp_itemsize
+    nullptr,                        // tp_dealloc
+    0,                              // tp_vectorcall_offset/
+    0,                              // tp_getattr
+    0,                              // tp_setattr
+    0,                              // tp_as_async
+    nullptr,                        // tp_repr
+    0,                              // tp_as_number
+    0,                              // tp_as_sequence
+    0,                              // tp_as_mapping
+    0,                              // tp_hash
+    0,                              // tp_call
+    0,                              // tp_str
+    PyObject_GenericGetAttr,        // tp_getattro
+    PyObject_GenericSetAttr,        // tp_setattro
+    0,                              // tp_as_buffer
+    0,                              // tp_flags
+    "Imported Qore namspeace",      // tp_doc
+    0,                              // tp_traverse
+    0,                              // tp_clear
+    0,                              // tp_richcompare
+    0,                              // tp_weaklistoffset
+    0,                              // tp_iter
+    0,                              // tp_iternext
+    0,                              // tp_methods
+    0,                              // tp_members
+    0,                              // tp_getset
+    0,                              // tp_base
+    0,                              // tp_dict
+    0,                              // tp_descr_get
+    0,                              // tp_descr_set
+    offsetof(PythonQoreNs, dict),   // tp_dictoffset
+    0,                              // tp_init
+    0,                              // tp_alloc
+    PyType_GenericNew,              // tp_new
+#else
     .tp_name = "ImportedQoreNamespace",
     .tp_basicsize = sizeof(PythonQoreNs),
     .tp_getattro = PyObject_GenericGetAttr,
     .tp_setattro = PyObject_GenericSetAttr,
+    .tp_doc = "Imported Qore namspeace",
     .tp_dictoffset = offsetof(PythonQoreNs, dict),
     .tp_new = PyType_GenericNew,
+#endif
 };
 
 static strvec_t get_dot_path_list(const std::string str) {

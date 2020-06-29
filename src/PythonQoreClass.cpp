@@ -74,12 +74,53 @@ static int qore_exception_init(PyObject* self, PyObject* args, PyObject* kwds) {
 
 PyTypeObject PythonQoreException_Type = {
     PyVarObject_HEAD_INIT(nullptr, 0)
+#if !defined(__clang__) && __GNUC__ < 6
+    // g++ 5.4.0 does not accept the short-form initialization below :(
+    "QoreException",                // tp_name
+    sizeof(PyBaseExceptionObject),  // tp_basicsize
+    0,                              // tp_itemsize
+    nullptr,                        // tp_dealloc
+    0,                              // tp_vectorcall_offset/
+    0,                              // tp_getattr
+    0,                              // tp_setattr
+    0,                              // tp_as_async
+    nullptr,                        // tp_repr
+    0,                              // tp_as_number
+    0,                              // tp_as_sequence
+    0,                              // tp_as_mapping
+    0,                              // tp_hash
+    0,                              // tp_call
+    0,                              // tp_str
+    0,                              // tp_getattro
+    0,                              // tp_setattro
+    0,                              // tp_as_buffer
+    Py_TPFLAGS_DEFAULT,             // tp_flags
+    "Qore exception class",         // tp_doc
+    0,                              // tp_traverse
+    0,                              // tp_clear
+    0,                              // tp_richcompare
+    0,                              // tp_weaklistoffset
+    0,                              // tp_iter
+    0,                              // tp_iternext
+    0,                              // tp_methods
+    0,                              // tp_members
+    0,                              // tp_getset
+    reinterpret_cast<PyTypeObject*>(PyExc_Exception),   // tp_base
+    0,                              // tp_dict
+    0,                              // tp_descr_get
+    0,                              // tp_descr_set
+    0,                              // tp_dictoffset
+    qore_exception_init,            // tp_init
+    0,                              // tp_alloc
+    0,                              // tp_new
+#else
     .tp_name = "QoreException",
     .tp_basicsize = sizeof(PyBaseExceptionObject),
     .tp_flags = Py_TPFLAGS_DEFAULT,
     .tp_doc = "Qore exception class",
     .tp_base = reinterpret_cast<PyTypeObject*>(PyExc_Exception),
     .tp_init = qore_exception_init,
+#endif
 };
 
 void PythonQoreClass::py_free(PyQoreObject* self) {
