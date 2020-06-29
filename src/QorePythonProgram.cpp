@@ -375,12 +375,16 @@ void QorePythonProgram::pythonThreadCleanup(void*) {
     // delete all thread states for the tid
     for (auto& i : py_thr_map) {
         py_tid_map_t::iterator ti = i.second.find(tid);
-        if (ti != i.second.end() && ti->second.owns_state) {
-            printd(5, "QorePythonProgram::pythonThreadCleanup() deleting thread state %p for TID %d", ti->second, tid);
-            // delete thread state
-            QorePythonGilHelper pgh;
-            PyThreadState_Clear(ti->second.state);
-            PyThreadState_Delete(ti->second.state);
+        if (ti != i.second.end()) {
+            /*
+            if (ti->second.owns_state) {
+                printd(5, "QorePythonProgram::pythonThreadCleanup() deleting thread state %p for TID %d", ti->second, tid);
+                // delete thread state
+                QorePythonGilHelper pgh;
+                PyThreadState_Clear(ti->second.state);
+                PyThreadState_Delete(ti->second.state);
+            }
+            */
             i.second.erase(ti);
         }
     }
@@ -436,10 +440,10 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
         AutoLocker al(py_thr_lck);
         py_thr_map_t::iterator i = py_thr_map.find(this);
         if (i == py_thr_map.end()) {
-            py_thr_map[this] = {{gettid(), {python, true}}};
+            py_thr_map[this] = {{gettid(), {python, owns_interpreter}}};
         } else {
             assert(i->second.find(gettid()) == i->second.end());
-            i->second[gettid()] = {python, true};
+            i->second[gettid()] = {python, owns_interpreter};
         }
         //printd(5, "QorePythonProgram::setContext() this: %p\n", this);
     }

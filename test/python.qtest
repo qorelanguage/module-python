@@ -89,6 +89,21 @@ def py_test_func(i):
             assertEq(2, p.callFunction("py_test_func", 0));
             assertEq(1, p.callFunction("py_test_func", 1));
 
+            code call_bg = auto sub (string func) {
+                Queue q();
+                *list<auto> args = argv;
+                background (sub () {
+                    try {
+                        q.push(p.callFunctionArgs(func, args));
+                    } catch (hash<ExceptionInfo> ex) {
+                        q.push(ex);
+                    }
+                })();
+                return q.get();
+            };
+            assertEq(2, call_bg("py_test_func", 0));
+            assertEq(1, call_bg("py_test_func", 1));
+
             p.evalStatementKeep("
 class PyAbstractTest(x.AbstractTest):
     def get(self):
@@ -108,6 +123,9 @@ def py_abstract_test(x = 0):
 
             assertEq(3, p.callFunction("py_abstract_test"));
             assertEq(4, p.callFunction("py_abstract_test", 1));
+
+            assertEq(3, call_bg("py_abstract_test"));
+            assertEq(4, call_bg("py_abstract_test", 1));
         }
 
         {
@@ -135,6 +153,24 @@ class PyTest(x.AbstractTest):
             assertEq(4, obj.getpy());
             assertEq(5, obj.addonenormal(4));
             assertEq(6, obj.addone(5));
+
+            code call_bg_obj = auto sub (string method) {
+                Queue q();
+                *list<auto> args = argv;
+                background (sub () {
+                    try {
+                        q.push(call_object_method_args(obj, method, args));
+                    } catch (hash<ExceptionInfo> ex) {
+                        q.push(ex);
+                    }
+                })();
+                return q.get();
+            };
+
+            assertEq(3, call_bg_obj("get"));
+            assertEq(4, call_bg_obj("getpy"));
+            assertEq(5, call_bg_obj("addonenormal", 4));
+            assertEq(6, call_bg_obj("addone", 5));
         }
     }
 
