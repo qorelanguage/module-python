@@ -173,6 +173,26 @@ class PyTest(x.AbstractTest):
             assertEq(4, call_bg_obj("getpy"));
             assertEq(5, call_bg_obj("addonenormal", 4));
             assertEq(6, call_bg_obj("addone", 5));
+
+            p.issueModuleCmd("python", "parse t1 from qore.__root__ import test as t
+def dot():
+    return t()");
+            p.issueModuleCmd("python", "export-func dot");
+            p.parse("int sub pydot() { return dot(); }", "pydot");
+            assertEq(99, p.callFunction("pydot"));
+        }
+
+        {
+            Program p(PO_NEW_STYLE);
+            p.loadModule("python");
+            p.loadModule("reflection");
+            p.issueModuleCmd("python", "parse t1 from qore.__root__ import test as t
+def dot():
+    return t()");
+            p.parse("Function sub getfunc(string name) { return Function::forName(name); }", "test");
+            p.issueModuleCmd("python", "export-func dot");
+            Function f = p.callFunction("getfunc", "dot");
+            assertEq(99, f.call());
         }
     }
 
@@ -472,4 +492,8 @@ public namespace Test {
             return x + 1;
         }
     }
+}
+
+public int sub test() {
+    return 99;
 }

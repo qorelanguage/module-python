@@ -144,8 +144,9 @@ public:
     DLLLOCAL ~QorePythonHelper();
 
 protected:
-    const QorePythonProgram* pypgm;
+    void* old_pgm;
     QorePythonThreadInfo old_state;
+    const QorePythonProgram* new_pypgm;
 };
 
 class QorePythonManualReferenceHolder {
@@ -299,5 +300,7 @@ class QorePythonProgram;
 DLLLOCAL extern QoreNamespace PNS;
 
 static constexpr const char* QOBJ_KEY = "__$QOBJ__";
+
+DLLLOCAL extern int python_u_tld_key;
 
 #endif

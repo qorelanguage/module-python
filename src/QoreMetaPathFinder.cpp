@@ -152,12 +152,14 @@ PyObject* QoreMetaPathFinder::repr(PyObject* obj) {
 
 // class method functions
 PyObject* QoreMetaPathFinder::find_spec(PyObject* self, PyObject* args) {
+    /*
     {
         // show args
         QorePythonReferenceHolder argstr(PyObject_Repr(args));
         assert(PyUnicode_Check(*argstr));
         printd(5, "QoreMetaPathFinder::find_spec() args: %s\n", PyUnicode_AsUTF8(*argstr));
     }
+    */
 
     // returns a borrowed reference
     PyObject* fullname = PyTuple_GetItem(args, 0);
@@ -211,7 +213,6 @@ PyObject* QoreMetaPathFinder::getQorePackageModuleSpec() {
         qore_package = newModuleSpec("qore");
 
         QorePythonReferenceHolder search_locations(PyList_New(0));
-        //PyList_SET_ITEM(*search_locations, 0, PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, "test", 4));
         PyObject_SetAttrString(*qore_package, "submodule_search_locations", *search_locations);
     }
 
@@ -223,10 +224,18 @@ PyObject* QoreMetaPathFinder::getQorePackageModuleSpec() {
 PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& mname) {
     printd(5, "QoreMetaPathFinder::tryLoadModule() load '%s'\n", mname.c_str());
 
+    if (mname == "__root__") {
+        return newModuleSpec(mname, QoreLoader::getLoaderRef());
+    }
+
+    QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
     ExceptionSink xsink;
     if (ModuleManager::runTimeLoadModule(mname.c_str(), qore_python_pgm->getQoreProgram(), &xsink)) {
+        // ignore exceptions and continue
+        xsink.clear();
         return nullptr;
     }
+    assert(!xsink);
 
     return newModuleSpec(mname, QoreLoader::getLoaderRef());
 }
