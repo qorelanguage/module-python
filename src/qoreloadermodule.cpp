@@ -82,8 +82,8 @@ PyTypeObject PythonQoreObjectBase_Type = {
     0,                              // tp_new
 #else
     .tp_name = "PythonQoreObjectBase",
-    .tp_doc = "base class for Python objects based on Qore classes",
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .tp_doc = "base class for Python objects based on Qore classes",
 #endif
 };
 
