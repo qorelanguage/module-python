@@ -57,9 +57,6 @@ struct QorePythonThreadStateInfo {
     bool owns_state;
 };
 
-// python creation flags
-constexpr int PQC_NO_CONSTRUCTOR = (1 << 0);
-
 class QorePythonProgram : public AbstractPrivateData, public AbstractQoreProgramExternalData {
     friend class PythonModuleContextHelper;
 public:

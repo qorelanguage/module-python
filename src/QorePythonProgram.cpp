@@ -1013,7 +1013,7 @@ void QorePythonProgram::exportClass(ExceptionSink* xsink, QoreString& arg) {
         ns = ns->findCreateNamespacePathAll(ns_str.c_str());
     }
 
-    addClassToNamespaceIntern(xsink, ns, (PyTypeObject*)*obj, strpath.back().c_str(), i, PQC_NO_CONSTRUCTOR);
+    addClassToNamespaceIntern(xsink, ns, (PyTypeObject*)*obj, strpath.back().c_str(), i);
 }
 
 QoreListNode* QorePythonProgram::getQoreListFromList(ExceptionSink* xsink, PyObject* val) {
@@ -1811,10 +1811,8 @@ QorePythonClass* QorePythonProgram::addClassToNamespaceIntern(ExceptionSink* xsi
 
 QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, QoreNamespace* ns, PyTypeObject* type, std::unique_ptr<QorePythonClass>& cls, int flags) {
     //printd(5, "QorePythonProgram::setupQorePythonClass() ns: '%s' cls: '%s' (%s) flags: %d\n", ns->getName(), cls->getName(), type->tp_name, flags);
-    //if (!(flags & PQC_NO_CONSTRUCTOR)) {
-        cls->addConstructor((void*)type, (q_external_constructor_t)execPythonConstructor, Public,
-                QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API);
-    //}
+    cls->addConstructor((void*)type, (q_external_constructor_t)execPythonConstructor, Public,
+            QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API);
     cls->setDestructor((void*)type, (q_external_destructor_t)execPythonDestructor);
 
     ns->addSystemClass(cls.get());
@@ -1825,7 +1823,6 @@ QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, Q
         py_cls_map.insert(py_cls_map_t::value_type(cls.get(), py_cls.release()));
     }
 
-    ///*
     // add single base class
     if (type->tp_base) {
         QoreClass* bclass = getCreateQorePythonClassIntern(xsink, type->tp_base);
@@ -1837,28 +1834,6 @@ QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, Q
         //printd(5, "QorePythonProgram::setupQorePythonClass() %s parent: %s (bclass: %p)\n", type->tp_name, type->tp_base->tp_name, bclass);
         cls->addBuiltinVirtualBaseClass(bclass);
     }
-    //*/
-
-    /*
-    // iterate base classes
-    if (type->tp_bases) {
-        for (Py_ssize_t i = 0, end = PyTuple_GET_SIZE(type->tp_bases); i < end; ++i) {
-            PyTypeObject* b = reinterpret_cast<PyTypeObject*>(PyTuple_GET_ITEM(type->tp_bases, i));
-            assert(PyType_Check(b));
-
-            //printd(5, "QorePythonProgram::setupQorePythonClass() %s (%p) parent: %s (%p)\n", type->tp_name, type, b->tp_name, b);
-
-            QoreClass* bclass = getCreateQorePythonClassIntern(xsink, b);
-            if (!bclass) {
-                assert(*xsink);
-                return nullptr;
-            }
-
-            //printd(5, "QorePythonProgram::setupQorePythonClass() %s parent: %s (bclass: %p)\n", type->tp_name, b->tp_name, bclass);
-            cls->addBuiltinVirtualBaseClass(bclass);
-        }
-    }
-    */
 
     cls->addBuiltinVirtualBaseClass(QC_PYTHONBASEOBJECT);
 

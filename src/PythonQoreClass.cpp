@@ -464,7 +464,7 @@ int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
     if (!PyQoreObjectType_Check(type)) {
         assert(type->tp_base);
         // create Qore type for Python type
-        qcls = qore_python_pgm->getCreateQorePythonClass(&xsink, type, PQC_NO_CONSTRUCTOR);
+        qcls = qore_python_pgm->getCreateQorePythonClass(&xsink, type);
     } else {
         qcls = getQoreClass(type);
     }

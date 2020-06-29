@@ -322,7 +322,7 @@ static void py_mc_parse(ExceptionSink* xsink, QoreString& arg, QorePythonProgram
     QoreString source_label(&arg, end);
     QoreString source_code(arg.c_str() + end + 1);
 
-    ValueHolder val(pypgm->eval(xsink, source_code, source_label, Py_single_input, false), xsink);
+    ValueHolder val(pypgm->eval(xsink, source_code, source_label, Py_file_input, false), xsink);
 }
 
 // %module-cmd(python) export-class <python path>

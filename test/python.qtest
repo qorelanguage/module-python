@@ -131,6 +131,8 @@ def py_abstract_test(x = 0):
         {
             Program p(PO_NEW_STYLE);
             string src = "
+import qoreloader
+
 class PyTest(x.AbstractTest):
     def get(self):
         return 3
