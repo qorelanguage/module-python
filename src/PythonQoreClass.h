@@ -38,7 +38,7 @@ public:
     DLLLOCAL PythonQoreClass(QorePythonProgram* pypgm, const char* module_name, const QoreClass& qcls);
 
     //! called for pure Python types to allow them to be extended in Qore
-    DLLLOCAL PythonQoreClass(PyTypeObject* type, const QoreClass& qcls);
+    DLLLOCAL PythonQoreClass(QorePythonProgram* pypgm, PyTypeObject* type, const QoreClass& qcls);
 
     DLLLOCAL ~PythonQoreClass();
 

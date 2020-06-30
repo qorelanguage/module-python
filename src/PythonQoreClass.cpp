@@ -138,7 +138,7 @@ bool PyQoreObjectType_Check(PyTypeObject* type) {
     return type->tp_dict && PyDict_GetItemString(type->tp_dict, QCLASS_KEY);
 }
 
-PythonQoreClass::PythonQoreClass(PyTypeObject* type, const QoreClass& qcls) {
+PythonQoreClass::PythonQoreClass(QorePythonProgram* pypgm, PyTypeObject* type, const QoreClass& qcls) {
     Py_INCREF((PyObject*)type);
     py_type = type;
     // do not save the qore class to the python class, as the python class may be a builtin class and the Qore class can be deleted afterwards
@@ -239,16 +239,11 @@ PythonQoreClass::PythonQoreClass(QorePythonProgram* pypgm, const char* module_na
     saveQoreClassPtr(&qcls);
 }
 
-static void breakit() {}
 void PythonQoreClass::saveQoreClassPtr(const QoreClass* qcls) {
     assert(py_type->tp_dict);
     // add Qore class to type dictionary
     QorePythonReferenceHolder qore_class(PyCapsule_New((void*)qcls, nullptr, nullptr));
     PyDict_SetItemString(py_type->tp_dict, QCLASS_KEY, *qore_class);
-    if (!strcmp(qcls->getName(), "ellipsis")) {
-        printd(0, "PythonQoreClass::saveQoreClassPtr() type: %p '%s' cls: %p '%s'\n", py_type, py_type->tp_name, qcls, qcls->getName());
-        breakit();
-    }
 }
 
 PythonQoreClass::~PythonQoreClass() {
@@ -454,7 +449,7 @@ int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
     //QorePythonReferenceHolder argstr(PyObject_Repr(args));
     assert(PyTuple_Check(args));
 
-    QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
+    QorePythonProgram* qore_python_pgm = QorePythonProgram::getExecutionContext();
 
     ExceptionSink xsink;
 
@@ -464,9 +459,11 @@ int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
     if (!PyQoreObjectType_Check(type)) {
         assert(type->tp_base);
         // create Qore type for Python type
-        qcls = qore_python_pgm->getCreateQorePythonClass(&xsink, type, PQC_NO_CONSTRUCTOR);
+        qcls = qore_python_pgm->getCreateQorePythonClass(&xsink, type);
+        //printd(5, "PythonQoreClass::py_init() self: %p type: %s got context pypgm: %p\n", self, type->tp_name, qore_python_pgm);
     } else {
         qcls = getQoreClass(type);
+        //printd(5, "PythonQoreClass::py_init() self: %p type: %s pypgm: %p\n", self, type->tp_name, qore_python_pgm);
     }
 
     PyQoreObject* pyself = reinterpret_cast<PyQoreObject*>(self);

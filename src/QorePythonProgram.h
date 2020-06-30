@@ -57,9 +57,6 @@ struct QorePythonThreadStateInfo {
     bool owns_state;
 };
 
-// python creation flags
-constexpr int PQC_NO_CONSTRUCTOR = (1 << 0);
-
 class QorePythonProgram : public AbstractPrivateData, public AbstractQoreProgramExternalData {
     friend class PythonModuleContextHelper;
 public:
@@ -271,6 +268,9 @@ public:
     //! export a Python class and create a QoreClass for it
     DLLLOCAL void exportClass(ExceptionSink* xsink, QoreString& arg);
 
+    //! export a Python function and create a Qore function for it
+    DLLLOCAL void exportFunction(ExceptionSink* xsink, QoreString& arg);
+
     //! Raise a Python exception from a Qore exception; consumes the Qore exception
     DLLLOCAL void raisePythonException(ExceptionSink& xsink);
 
@@ -335,26 +335,9 @@ public:
         return static_cast<const QorePythonClass*>(cls)->getPythonProgram();
     }
 
-    DLLLOCAL static QorePythonProgram* getContext() {
-        QorePythonProgram* pypgm;
+    DLLLOCAL static QorePythonProgram* getExecutionContext();
 
-        // first try to get the actual Program context
-        QoreProgram* pgm = getProgram();
-        if (pgm) {
-            pypgm = static_cast<QorePythonProgram*>(pgm->getExternalData(QORE_PYTHON_MODULE_NAME));
-            if (pypgm) {
-                return pypgm;
-            }
-        }
-        pgm = qore_get_call_program_context();
-        if (pgm) {
-            pypgm = static_cast<QorePythonProgram*>(pgm->getExternalData(QORE_PYTHON_MODULE_NAME));
-            if (pypgm) {
-                return pypgm;
-            }
-        }
-        return qore_python_pgm;
-    }
+    DLLLOCAL static QorePythonProgram* getContext();
 
     //! Static initialization
     DLLLOCAL static int staticInit();
@@ -390,6 +373,10 @@ protected:
     //! maps types to classes
     typedef std::map<PyTypeObject*, QorePythonClass*> clmap_t;
     clmap_t clmap;
+
+    //! maps python functions to Qore functions
+    typedef std::map<PyObject*, QoreExternalFunction*> flmap_t;
+    flmap_t flmap;
 
     //! ensures modulea are only imported once
     typedef std::set<PyObject*> pyobj_set_t;

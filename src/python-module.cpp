@@ -58,6 +58,7 @@ static void py_mc_import_ns(ExceptionSink* xsink, QoreString& arg, QorePythonPro
 static void py_mc_alias(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 static void py_mc_parse(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 static void py_mc_export_class(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
+static void py_mc_export_func(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 
 // module cmds
 typedef std::map<std::string, qore_python_module_cmd_t> mcmap_t;
@@ -66,10 +67,13 @@ static mcmap_t mcmap = {
     {"import-ns", py_mc_import_ns},
     {"alias", py_mc_alias},
     {"parse", py_mc_parse},
-    {"export-class", py_mc_export_class}
+    {"export-class", py_mc_export_class},
+    {"export-func", py_mc_export_func},
 };
 
 static bool python_needs_shutdown = false;
+
+int python_u_tld_key = -1;
 
 #ifdef NEED_PYTHON_36_TLS_KEY
 #ifndef __linux__
@@ -154,6 +158,8 @@ static QoreStringNode* python_module_init() {
             "3.6 when not initialized by Qore");
 #endif
     }
+
+    python_u_tld_key = q_get_unique_thread_local_data_key();
 
     // ensure that runtime version matches compiled version
     check_python_version();
@@ -322,7 +328,7 @@ static void py_mc_parse(ExceptionSink* xsink, QoreString& arg, QorePythonProgram
     QoreString source_label(&arg, end);
     QoreString source_code(arg.c_str() + end + 1);
 
-    ValueHolder val(pypgm->eval(xsink, source_code, source_label, Py_single_input, false), xsink);
+    ValueHolder val(pypgm->eval(xsink, source_code, source_label, Py_file_input, false), xsink);
 }
 
 // %module-cmd(python) export-class <python path>
@@ -332,9 +338,20 @@ static void py_mc_export_class(ExceptionSink* xsink, QoreString& arg, QorePython
     pypgm->exportClass(xsink, arg);
 }
 
-QorePythonHelper::QorePythonHelper(const QorePythonProgram* pypgm) : pypgm(pypgm), old_state(pypgm->setContext()) {
+// %module-cmd(python) export-func <python path>
+/** export a Python function to Qore
+*/
+static void py_mc_export_func(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
+    pypgm->exportFunction(xsink, arg);
+}
+
+QorePythonHelper::QorePythonHelper(const QorePythonProgram* pypgm)
+    : old_pgm(q_swap_thread_local_data(python_u_tld_key, (void*)pypgm)), old_state(pypgm->setContext()), new_pypgm(pypgm) {
+    //printd(5, "QorePythonHelper::QorePythonHelper() new: %p old: %p\n", pypgm, old_pgm);
 }
 
 QorePythonHelper::~QorePythonHelper() {
-    pypgm->releaseContext(old_state);
+    new_pypgm->releaseContext(old_state);
+    q_swap_thread_local_data(python_u_tld_key, (void*)old_pgm);
+    //printd(5, "QorePythonHelper::~QorePythonHelper() restored old: %p\n", old_pgm);
 }

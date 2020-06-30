@@ -130,7 +130,7 @@ PyObject* QoreLoader::create_module(PyObject* self, PyObject* args) {
 PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
     QorePythonReferenceHolder argstr(PyObject_Repr(args));
     assert(PyUnicode_Check(*argstr));
-    printd(5, "QoreLoader::exec_module() self: %p args: %s\n", self, PyUnicode_AsUTF8(*argstr));
+    //printd(5, "QoreLoader::exec_module() self: %p args: %s\n", self, PyUnicode_AsUTF8(*argstr));
 
     assert(PyTuple_Check(args));
 
@@ -146,19 +146,22 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
     const char* name_str = PyUnicode_AsUTF8(*name);
 
     printd(5, "QoreLoader::exec_module() mod: '%s'\n", name_str);
+    QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
     //QoreProgram* mod_pgm = QoreMetaPathFinder::getProgram(name_str);
     QoreProgram* mod_pgm = qore_python_pgm->getQoreProgram();
-    printd(5, "QoreLoader::exec_module() mod pgm: %p\n", mod_pgm);
+    //printd(5, "QoreLoader::exec_module() qore_python_pgm: %p mod pgm: %p\n", qore_python_pgm, mod_pgm);
 
     // get root namespace
     const QoreNamespace* ns;
     if (!strcmp(name_str, "qore")) {
         ns = mod_pgm->getQoreNS();
+    } else if (!strcmp(name_str, "__root__")) {
+        ns = mod_pgm->getRootNS();
     } else {
         ns = getModuleRootNs(name_str, mod_pgm->findNamespace("::"));
     }
     assert(ns);
-    printd(5, "QoreLoader::exec_module() found root NS %p: %s\n", ns, ns->getName());
+    //printd(5, "QoreLoader::exec_module() found '%s' NS %p: '::%s'\n", name_str, ns, ns->getName());
 
     if (ns) {
         QoreProgramContextHelper pch(qore_python_pgm->getQoreProgram());
