@@ -13,6 +13,10 @@ endif()
 
 cmake_policy(SET CMP0042 NEW)
 
+if (UNIX AND NOT APPLE)
+    set(LINUX TRUE)
+endif()
+
 if (LINUX)
     # thread-state mamangement only works on Linux with Python 3.6
     set(MIN_PY_VER 3.6)
