@@ -59,6 +59,7 @@ static void py_mc_alias(ExceptionSink* xsink, QoreString& arg, QorePythonProgram
 static void py_mc_parse(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 static void py_mc_export_class(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 static void py_mc_export_func(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
+static void py_mc_add_module_path(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 
 // module cmds
 typedef std::map<std::string, qore_python_module_cmd_t> mcmap_t;
@@ -69,6 +70,7 @@ static mcmap_t mcmap = {
     {"parse", py_mc_parse},
     {"export-class", py_mc_export_class},
     {"export-func", py_mc_export_func},
+    {"add-module-path", py_mc_add_module_path},
 };
 
 static bool python_needs_shutdown = false;
@@ -343,6 +345,13 @@ static void py_mc_export_class(ExceptionSink* xsink, QoreString& arg, QorePython
 */
 static void py_mc_export_func(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
     pypgm->exportFunction(xsink, arg);
+}
+
+// %module-cmd(python) add-module-path <fs path>
+/** add a path to the module path
+*/
+static void py_mc_add_module_path(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
+    pypgm->addModulePath(xsink, arg);
 }
 
 QorePythonHelper::QorePythonHelper(const QorePythonProgram* pypgm)

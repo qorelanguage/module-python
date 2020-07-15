@@ -998,6 +998,37 @@ void QorePythonProgram::exportClass(ExceptionSink* xsink, QoreString& arg) {
     addClassToNamespaceIntern(xsink, ns, (PyTypeObject*)*obj, strpath.back().c_str(), i);
 }
 
+void QorePythonProgram::addModulePath(ExceptionSink* xsink, QoreString& arg) {
+    q_env_subst(arg);
+    printd(5, "QorePythonProgram::addModulePath() this: %p arg: '%s'\n", this, arg.c_str());
+
+    QorePythonHelper qph(this);
+    if (checkValid(xsink)) {
+        return;
+    }
+
+    QorePythonReferenceHolder mod(PyImport_ImportModule("sys"));
+    if (!mod) {
+        if (!checkPythonException(xsink)) {
+            throw QoreStandardException("PYTHON-ERROR", "cannot load 'sys' module");
+        }
+        return;
+    }
+
+    QorePythonReferenceHolder path;
+
+    if (!PyObject_HasAttrString(*mod, "path")) {
+        path = PyList_New(0);
+    } else {
+        path = PyObject_GetAttrString(*mod, "path");
+        if (!PyList_Check(*path)) {
+            throw QoreStandardException("PYTHON-ERROR", "'sys.path' is not a list; got type '%s' instead", Py_TYPE(*path)->tp_name);
+        }
+    }
+    QorePythonReferenceHolder item(PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, arg.c_str(), arg.size()));
+    PyList_Append(*path, *item);
+}
+
 void QorePythonProgram::exportFunction(ExceptionSink* xsink, QoreString& arg) {
     QorePythonHelper qph(this);
     if (checkValid(xsink)) {
