@@ -171,5 +171,31 @@ static int slot_qoreloader_exec(PyObject *m) {
 }
 
 PyMODINIT_FUNC PyInit_qoreloader() {
+    // first check if the runtime library differs from the dynamically-linked one
+    if (!Py_TYPE(PyExc_RuntimeError)) {
+        fprintf(stderr, "ERROR: the Python runtime library is different than the dynamically linked one; it's not " \
+            "possible to raise a Python exception in case without a crash; aborting\n");
+        return nullptr;
+    }
+
+    const char* ver = Py_GetVersion();
+    if (!ver) {
+        fprintf(stderr, "cannot determine Python version; no value returned from Py_GetVersion()'\n");
+        return nullptr;
+    }
+    const char* p = strchr(ver, '.');
+    if (!p || p == ver) {
+        fprintf(stderr, "cannot determine Python major version from '%s'\n", ver);
+        return nullptr;
+    }
+    int major = atoi(ver);
+    int minor = atoi(p + 1);
+
+    if (major != PY_MAJOR_VERSION || minor != PY_MINOR_VERSION) {
+        fprintf(stderr, "cannot load the qoreloader module; compiled with '%d.%d.%d'; runtime version is '%s'\n",
+            PY_MAJOR_VERSION, PY_MINOR_VERSION, PY_MICRO_VERSION, ver);
+        return nullptr;
+    }
+
     return PyModuleDef_Init(&qoreloadermodule);
 }
