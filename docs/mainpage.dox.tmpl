@@ -4,7 +4,13 @@
 
     @section pythonintro python Module Introduction
 
-    The \c python module allows for ,,,,
+    The \c python module allows for transparent and dynamic bidirectional importined code from %Qore to Python and
+    vice-versa.  Qore classes can inherit Python classes and extend them, and Python classes can inherit %Qore classes
+    and extend them as well; even %Qore abstract classes can be inherited by Python classes and made concrete by
+    implementing the requried concrete methods in Python.
+
+    This module also implements support in the same shared object for the \c qoreloader module for Python so allow
+    native Python code to import %Qore APIs; see @ref python_qoreloader_module for more information.
 
     This module is released under the MIT license (see \c COPYING.MIT in the source distribution for more
     information).  The module is tagged as such in the module's header (meaning it can be loaded unconditionally
@@ -59,9 +65,148 @@ public class Main {
 
     @section python_import Importing Python APIs into Qore
 
-    To import Python APIs and definitions into a %Qore program, any of the following python-module-specific parse
-    directives can be used, each of which also causes the python module to be loaded and initialized:
-    - @code{.qore} %module-cmd(jni) import module[.symbol|*] @endcode imports the given symbol into the %Qore program
+    To import Python APIs and definitions into a %Qore program, the following python-module-specific module
+    command can be used, which also causes the python module to be loaded and initialized if necessary:
+    - @code{.qore} %module-cmd(python) import module[.symbol|*] @endcode imports the given Python module into Python
+      and then imports the module or optionally only the given symbol into the %Qore program from Python.
+
+    @par Example:
+    @code{.qore}
+%module-cmd(python) import math.sin
+
+auto sub get(auto arg) {
+    return math::sin(arg);
+}
+    @endcode
+
+    @par Example:
+    @code{.qore}
+Program p(PO_NEW_STYLE);
+p.loadModule("python");
+p.issueModuleCmd("python", "import math");
+    @endcode
+
+    @subsection python_module_path Set the Python Module Path
+
+    Elements can be added to the Python import module path by using the following module command:
+    - @code{.qore} %module-cmd(python) add-module-path <path>@encode
+
+    The path given is also subjected to environment variable substitutions; the environment variable name must be
+    prefixed with a \c "$" char and then can be given either surrounded by \c "()" or \c "{}" brackets, of if no
+    brackets are used, the environment variable must fit the following pattern: [a-zA-Z0-9_] (alphanumeric + \c "_").
+
+    @par Example:
+    @code{.qore}
+%module-cmd(python) add-module-path ${MY_PYTHON_MODS}
+%module-cmd(python) import my-python-mod
+    @endcode
+
+    @par Example:
+    @code{.qore}
+Program p(PO_NEW_STYLE);
+p.loadModule("python");
+p.issueModuleCmd("python", "add-module-path " + get_script_dir());
+p.issueModuleCmd("python", "import my-python-module");
+    @endcode
+
+    @subsection python_immediate_parsing Parsing Python Code Immediately
+
+    Python code can be parsed immediately using the following module command:
+    - @code{.qore} %module-cmd(python) parse <filename> <Python source>@endcode
+
+    @par Example:
+    @code{.qore}
+Program p(PO_NEW_STYLE);
+string src = "
+class PyTest:
+    def get(self):
+        return 3
+";
+p.issueModuleCmd("python", "parse pytest.py " + src);
+    @endcode
+
+    @subsection python_class_export Exporting Python Classes to Qore
+
+    Python classes can be explicitly exported to %Qore with the following module command:
+    - @code{.qore} %module-cmd(python) export-class <class-name>@endcode
+
+    @par Example:
+    @code{.qore}
+Program p(PO_NEW_STYLE);
+p.issueModuleCmd("python", "export-class PyTest");
+Class cls = Class::forName(p, "PyTest");
+object obj = cls.newObject();
+printf("get(): %y\n", obj.get());
+    @endcode
+
+    @subsection python_func_export Exporting Python Functions to Qore
+
+    Python functions can be explicitly exported to %Qore with the following module command:
+    - @code{.qore} %module-cmd(python) export-func <func-name>@endcode
+
+    @par Example:
+    @code{.qore}
+Program p(PO_NEW_STYLE);
+p.issueModuleCmd("python", "export-func PyTest");
+Function f = Function::forName(p, "py_test");
+printf("py_test(): %y\n", obj.call());
+    @endcode
+
+    @section python_qore_import Importing Qore APIs into Python
+
+    %Qore APIs and definitions can be imported into a Python program by using the following module command:
+    - @code{.qore} %module-cmd(python) import-ns <qore-namespace> <python-module-path>@endcode
+
+    @par Example:
+    @code{.qore}
+Program p(PO_NEW_STYLE);
+p.issueModuleCmd("python", "import-ns MyQoreNamespace MyPythonModule");
+    @endcode
+
+    @subsection python_aliases Creating Python Aliases
+
+    The following module command can be used to create an alias in Python code:
+    - @code{.qore} %module-cmd(python) alias <python-source-path> <python-target-path>@endcode
+
+    This is often used when importing %Qore namespaces to Python to create an alias directly from a child %Qore
+    namespace to a Python module or package that is more convenient to access in Python code.
+
+    @par Example:
+    @code{.qore}
+Program p(PO_NEW_STYLE);
+p.issueModuleCmd("python", "import-ns MyQoreNamespace MyPythonModule");
+p.issueModuleCmd("python", "alias MyPythonModule.MySubModule1.MySubModule2.MyApi MyApi");
+    @endcode
+
+    @section python_qoreloader_module qoreloader Module
+
+    The %Qore python module can also be aliased or symlinked to \c "qoreloader.so" and placed in the Python module
+    path, as the %Qore binary module also implement code for the \c qoreloader Python module in the same shared
+    object, which allows Python programs to dynamically initialize the %Qore library from Python programs and then
+    import %Qore APIs into Python using an injected \c qore package.
+
+    For example, for Python to import the %Qore \c SqlUtil module, the following code can be used.
+
+    @par Example
+    @code{.py}
+import qoreloader
+from import qore.SqlUtil
+
+t = qore.SqlUtil.Table("pgsql:user/pass@db", "table_name")
+print(t.getTable().selectRow({"where": {"col1": "value"}}))
+    @endcode
+
+    When %Qore modules are imported, the lowest namespace created by the module is imported as the new Python module
+    under the Python \c qore package.
+
+    See the next section about importing the entire root namespace.
+
+    @subsection python_qore_root_imports qore.__root__ Module
+
+    The special \c qore package has a special module called \c __root__ which represents the root namespace of the
+    %Qore program object.
+
+    Importing \c qore.__root__ causes all symbols to be imported into the Python program.
 
     @section python_types Type Conversions Between Qore and Python
 

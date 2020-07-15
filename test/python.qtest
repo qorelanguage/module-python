@@ -131,8 +131,6 @@ def py_abstract_test(x = 0):
         {
             Program p(PO_NEW_STYLE);
             string src = "
-import qoreloader
-
 class PyTest(x.AbstractTest):
     def get(self):
         return 3
@@ -193,6 +191,15 @@ def dot():
             p.issueModuleCmd("python", "export-func dot");
             Function f = p.callFunction("getfunc", "dot");
             assertEq(99, f.call());
+        }
+
+        {
+            Program p(PO_NEW_STYLE);
+            p.loadModule("python");
+            p.issueModuleCmd("python", "add-module-path " + get_script_dir());
+            p.issueModuleCmd("python", "import fib");
+            auto x = p.callFunction("fib2", 5);
+            assertEq((0, 1, 1, 2, 3), x);
         }
     }
 

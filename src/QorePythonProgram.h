@@ -271,6 +271,9 @@ public:
     //! export a Python function and create a Qore function for it
     DLLLOCAL void exportFunction(ExceptionSink* xsink, QoreString& arg);
 
+    //! add a path to the Python module search path
+    DLLLOCAL void addModulePath(ExceptionSink* xsink, QoreString& arg);
+
     //! Raise a Python exception from a Qore exception; consumes the Qore exception
     DLLLOCAL void raisePythonException(ExceptionSink& xsink);
 

@@ -32,7 +32,7 @@ PyDoc_STRVAR(module_doc, "This module provides dynamic access to Qore APIs.");
 static int slot_qoreloader_exec(PyObject* m);
 
 static PyMethodDef qoreloader_methods[] = {
-    {nullptr, nullptr},
+    {nullptr, nullptr, 0, nullptr},
 };
 
 static bool qore_needs_shutdown = false;
