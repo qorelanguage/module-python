@@ -445,6 +445,15 @@ protected:
     //! Imports the given module
     DLLLOCAL int importModule(ExceptionSink* xsink, PyObject* mod, PyObject* globals, const char* module, int filter);
 
+    //! Saves the module in sys.modules
+    DLLLOCAL int saveModule(const char* name, PyObject* mod);
+
+    //! Creates a new module or package
+    DLLLOCAL PyObject* newModule(const char* name, const QoreNamespace* ns_pkg = nullptr);
+
+    //! Creates a new module package with an explicit path name
+    DLLLOCAL PyObject* newModule(const char* name, const char* path);
+
     DLLLOCAL int findCreateQoreFunction(PyObject* value, const char* symbol, q_external_func_t func);
 
     //! Returns a Qore value for the given Python value; does not dereference val
