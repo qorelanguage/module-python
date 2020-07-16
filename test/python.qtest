@@ -53,6 +53,28 @@ class PythonTest inherits Test {
 
     pythonImportTest() {
         {
+            Program p(PO_NEW_STYLE);
+            p.issueModuleCmd("python", "import-ns Test test");
+            p.issueModuleCmd("python", "parse t from test import X");
+            assertTrue(True);
+        }
+
+        {
+            Program p(PO_NEW_STYLE);
+            p.issueModuleCmd("python", "import-ns Test test");
+            p.issueModuleCmd("python", "parse t from test.X import T");
+            assertTrue(True);
+        }
+
+        {
+            Program p(PO_NEW_STYLE);
+            p.issueModuleCmd("python", "import-ns Test test");
+            p.issueModuleCmd("python", "alias test.X x");
+            p.issueModuleCmd("python", "parse t from x import T");
+            assertTrue(True);
+        }
+
+        {
             PythonProgram p("
 def test1():
     return x.ex1()
@@ -498,6 +520,10 @@ public namespace Test {
         static int addOne(int x) {
             return x + 1;
         }
+    }
+
+    public namespace X {
+        public class T;
     }
 }
 

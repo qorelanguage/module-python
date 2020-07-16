@@ -42,58 +42,6 @@ struct PythonQoreNs {
     PyObject* dict;
 };
 
-PyTypeObject PythonQoreNamespaceBase_Type = {
-    PyVarObject_HEAD_INIT(nullptr, 0)
-#if !defined(__clang__) && __GNUC__ < 6
-    // g++ 5.4.0 does not accept the short-form initialization below :(
-    "ImportedQoreNamespace",        // tp_name
-    sizeof(PythonQoreNs),           // tp_basicsize
-    0,                              // tp_itemsize
-    nullptr,                        // tp_dealloc
-    0,                              // tp_vectorcall_offset/
-    0,                              // tp_getattr
-    0,                              // tp_setattr
-    0,                              // tp_as_async
-    nullptr,                        // tp_repr
-    0,                              // tp_as_number
-    0,                              // tp_as_sequence
-    0,                              // tp_as_mapping
-    0,                              // tp_hash
-    0,                              // tp_call
-    0,                              // tp_str
-    PyObject_GenericGetAttr,        // tp_getattro
-    PyObject_GenericSetAttr,        // tp_setattro
-    0,                              // tp_as_buffer
-    0,                              // tp_flags
-    "Imported Qore namspeace",      // tp_doc
-    0,                              // tp_traverse
-    0,                              // tp_clear
-    0,                              // tp_richcompare
-    0,                              // tp_weaklistoffset
-    0,                              // tp_iter
-    0,                              // tp_iternext
-    0,                              // tp_methods
-    0,                              // tp_members
-    0,                              // tp_getset
-    0,                              // tp_base
-    0,                              // tp_dict
-    0,                              // tp_descr_get
-    0,                              // tp_descr_set
-    offsetof(PythonQoreNs, dict),   // tp_dictoffset
-    0,                              // tp_init
-    0,                              // tp_alloc
-    PyType_GenericNew,              // tp_new
-#else
-    .tp_name = "ImportedQoreNamespace",
-    .tp_basicsize = sizeof(PythonQoreNs),
-    .tp_getattro = PyObject_GenericGetAttr,
-    .tp_setattro = PyObject_GenericSetAttr,
-    .tp_doc = "Imported Qore namspeace",
-    .tp_dictoffset = offsetof(PythonQoreNs, dict),
-    .tp_new = PyType_GenericNew,
-#endif
-};
-
 static strvec_t get_dot_path_list(const std::string str) {
     strvec_t rv;
     size_t start = 0;
@@ -318,10 +266,6 @@ QorePythonProgram* QorePythonProgram::getContext() {
 
 int QorePythonProgram::staticInit() {
     PyDateTime_IMPORT;
-
-    if (PyType_Ready(&PythonQoreNamespaceBase_Type)) {
-        return -1;
-    }
     return 0;
 }
 
@@ -827,14 +771,37 @@ int QorePythonProgram::importQoreClassToPython(PyObject* mod, const QoreClass& c
 
 int QorePythonProgram::importQoreNamespaceToPython(PyObject* mod, const QoreNamespace& ns) {
     printd(5, "QorePythonProgram::importQoreNamespaceToPython() %s\n", ns.getName());
+    assert(PyModule_Check(mod));
+
+    QoreStringMaker nsname("%s.%s", PyModule_GetName(mod), ns.getName());
 
     // create a submodule
-    QorePythonReferenceHolder new_mod(PyModule_New(ns.getName()));
-    importQoreToPython(*new_mod, ns, ns.getName());
+    QorePythonReferenceHolder new_mod(newModule(nsname.c_str(), &ns));
+    //printd(5, "QorePythonProgram::importQoreNamespaceToPython() (mod) created new module '%s'\n", nsname.c_str());
+    importQoreToPython(*new_mod, ns, nsname.c_str());
     if (PyObject_SetAttrString(mod, ns.getName(), *new_mod)) {
         return -1;
     }
     return 0;
+}
+
+PyObject* QorePythonProgram::newModule(const char* name, const QoreNamespace* ns_pkg) {
+    QorePythonReferenceHolder new_mod(PyModule_New(name));
+    if (ns_pkg) {
+        std::string nspath = ns_pkg->getPath();
+        QorePythonReferenceHolder path(PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, nspath.c_str(), nspath.size()));
+        PyObject_SetAttrString(*new_mod, "__path__", *path);
+    }
+    saveModule(name, *new_mod);
+    return new_mod.release();
+}
+
+PyObject* QorePythonProgram::newModule(const char* name, const char* path) {
+    QorePythonReferenceHolder new_mod(PyModule_New(name));
+    QorePythonReferenceHolder py_path(PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, path, strlen(path)));
+    PyObject_SetAttrString(*new_mod, "__path__", *py_path);
+    saveModule(name, *new_mod);
+    return new_mod.release();
 }
 
 void QorePythonProgram::importQoreNamespaceToPython(const QoreNamespace& ns, const QoreString& py_mod_path, ExceptionSink* xsink) {
@@ -853,8 +820,15 @@ void QorePythonProgram::importQoreNamespaceToPython(const QoreNamespace& ns, con
 
     strvec_t strpath = get_dot_path_list(py_mod_path.c_str());
     assert(!strpath.empty());
+    QoreString nspath;
     for (const std::string& str : strpath) {
-        printd(5, "QorePythonProgram::importQoreNamespaceToPython() '%s' str: '%s' mod: %p ('%s')\n", py_mod_path.c_str(), str.c_str(), *mod, Py_TYPE(*mod)->tp_name);
+        bool store = nspath.empty();
+        if (!store) {
+            nspath.concat('.');
+        }
+        nspath.concat(str);
+
+        //printd(5, "QorePythonProgram::importQoreNamespaceToPython() '%s' str: '%s' mod: %p ('%s')\n", py_mod_path.c_str(), str.c_str(), *mod, Py_TYPE(*mod)->tp_name);
         if (PyObject_HasAttrString(*mod, str.c_str())) {
             QorePythonReferenceHolder new_mod(PyObject_GetAttrString(*mod, str.c_str()));
             if (PyModule_Check(*new_mod) || PyDict_Check(*new_mod)) {
@@ -864,9 +838,9 @@ void QorePythonProgram::importQoreNamespaceToPython(const QoreNamespace& ns, con
             // WARNING: any existing attribute will be replaced with the new module
         }
 
-        QorePythonReferenceHolder new_mod(PyObject_CallObject((PyObject*)&PythonQoreNamespaceBase_Type, nullptr));
+        QorePythonReferenceHolder new_mod(newModule(nspath.c_str(), &ns));
+        //printd(5, "QorePythonProgram::importQoreNamespaceToPython() created new module '%s' (store: %d)\n", nspath.c_str(), store);
         assert(new_mod);
-        //QorePythonReferenceHolder new_mod(xxxx);
         if (PyObject_SetAttrString(*mod, str.c_str(), *new_mod)) {
             if (!checkPythonException(xsink)) {
                 xsink->raiseException("IMPORT-NS-ERROR", "could not set element '%s' when creating path '%s'",
@@ -915,8 +889,14 @@ void QorePythonProgram::aliasDefinition(const QoreString& source_path, const Qor
     QorePythonReferenceHolder obj(*module);
     strpath = get_dot_path_list(target_path.c_str());
     assert(!strpath.empty());
+    QoreString nspath;
     for (size_t i = 0, e = strpath.size(); i < e; ++i) {
         const std::string& str = strpath[i];
+        if (!nspath.empty()) {
+            nspath.concat('.');
+        }
+        nspath.concat(str);
+
         //printd(5, "QorePythonProgram::aliasDefinition() '%s' str: '%s' obj: %p ('%s')\n", target_path.c_str(), str.c_str(), *obj, Py_TYPE(*obj)->tp_name);
         QorePythonReferenceHolder new_elem;
         if (i < (e - 1)) {
@@ -925,9 +905,16 @@ void QorePythonProgram::aliasDefinition(const QoreString& source_path, const Qor
                 continue;
             }
             // create a new module, if the parent is a module, or a dictionary
-            new_elem = PyObject_CallObject((PyObject*)&PythonQoreNamespaceBase_Type, nullptr);
+            QoreStringMaker path("alias:%s", source_path.c_str());
+            new_elem = newModule(nspath.c_str(), path.c_str());
+            //printd(5, "QorePythonProgram::aliasDefinition() created module '%s'\n", nspath.c_str());
         } else {
             new_elem = source_obj.release();
+            //printd(5, "QorePythonProgram::aliasDefinition() got elem %p %s (path %s)\n", *new_elem, Py_TYPE(*new_elem)->tp_name, nspath.c_str());
+            // if aliasing a module, insert the new alias in sys.modules
+            if (PyModule_Check(*new_elem)) {
+                saveModule(nspath.c_str(), *new_elem);
+            }
         }
 
         if (PyObject_SetAttrString(*obj, str.c_str(), *new_elem) < 0) {
@@ -2219,6 +2206,22 @@ QoreValue QorePythonProgram::callClassMethodDescriptorMethod(ExceptionSink* xsin
     }
 
     return getQoreValue(xsink, *return_value);
+}
+
+int QorePythonProgram::saveModule(const char* name, PyObject* mod) {
+    QorePythonReferenceHolder sys(PyImport_ImportModule("sys"));
+    if (!sys) {
+        return -1;
+    }
+    if (!PyObject_HasAttrString(*sys, "modules")) {
+        return -1;
+    }
+    QorePythonReferenceHolder modules(PyObject_GetAttrString(*sys, "modules"));
+    //printd(5, "QorePythonProgram::saveModule() modules: %p %s\n", *modules, Py_TYPE(*modules)->tp_name);
+    if (!PyDict_Check(*modules)) {
+        return -1;
+    }
+    return PyDict_SetItemString(*modules, name, mod);
 }
 
 int QorePythonProgram::import(ExceptionSink* xsink, const char* module, const char* symbol) {
