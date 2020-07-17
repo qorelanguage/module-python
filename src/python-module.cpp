@@ -43,6 +43,12 @@ void python_qore_module_desc(QoreModuleInfo& mod_info) {
     mod_info.parse_cmd = python_module_parse_cmd;
     mod_info.license = QL_MIT;
     mod_info.license_str = "MIT";
+
+    mod_info.info = new QoreHashNode(autoTypeInfo);
+    mod_info.info->setKeyValue("python_version", new QoreStringNodeMaker(PY_VERSION), nullptr);
+    mod_info.info->setKeyValue("python_major", PY_MAJOR_VERSION, nullptr);
+    mod_info.info->setKeyValue("python_minor", PY_MINOR_VERSION, nullptr);
+    mod_info.info->setKeyValue("python_micro", PY_MICRO_VERSION, nullptr);
 }
 
 QoreNamespace PNS(QORE_PYTHON_NS_NAME);
