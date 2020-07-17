@@ -19,14 +19,18 @@ endif()
 
 if (LINUX)
     # thread-state mamangement only works on Linux with Python 3.6
-    set(MIN_PY_VER 3.6)
+    set(MIN_PY_MINOR_VER 6)
 else()
-    set(MIN_PY_VER 3.7)
+    set(MIN_PY_MINOR_VER 7)
 endif()
 
 find_package(Qore 0.9.5 REQUIRED)
-find_package(PythonInterp ${MIN_PY_VER})
-find_package(PythonLibs ${MIN_PY_VER})
+find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+if(${Python3_VERSION_MINOR} VERSION_LESS ${MIN_PY_MINOR_VER})
+    message(FATAL_ERROR "Python version ${Python3_VERSION} is unsupported; the minimum Python version is 3.${MIN_PY_MINOR_VER}")
+endif()
+message(STATUS "Found Python3 libs: ${Python3_LIBRARIES}")
+message(STATUS "Found Python3 includes: ${Python3_INCLUDE_DIRS}")
 
 # Check for C++11.
 include(CheckCXXCompilerFlag)
@@ -69,13 +73,13 @@ set(QORE_DOX_TMPL_SRC
 add_library(${module_name} SHARED ${CPP_SRC} ${QPP_SOURCES})
 
 include_directories(${CMAKE_SOURCE_DIR}/src)
-include_directories(${PYTHON_INCLUDE_DIR})
+include_directories(${Python3_INCLUDE_DIRS})
 target_include_directories(${module_name} PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>)
 
 add_custom_target(QORE_INC_FILES DEPENDS ${QORE_INC_SRC})
 add_dependencies(${module_name} QORE_INC_FILES)
 
-target_link_libraries(${module_name} ${PYTHON_LIBRARIES})
+target_link_libraries(${module_name} ${Python3_LIBRARIES})
 
 set(MODULE_DOX_INPUT ${CMAKE_CURRENT_BINARY_DIR}/mainpage.dox ${JAVA_JAR_SRC_STR} ${QPP_DOX})
 string(REPLACE ";" " " MODULE_DOX_INPUT "${MODULE_DOX_INPUT}")
