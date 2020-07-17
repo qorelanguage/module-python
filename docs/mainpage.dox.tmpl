@@ -190,9 +190,9 @@ p.issueModuleCmd("python", "alias MyPythonModule.MySubModule1.MySubModule2.MyApi
     @par Example
     @code{.py}
 import qoreloader
-from import qore.SqlUtil
+from qore.SqlUtil import Table
 
-t = qore.SqlUtil.Table("pgsql:user/pass@db", "table_name")
+t = Table("pgsql:user/pass@db", "table_name")
 print(t.getTable().selectRow({"where": {"col1": "value"}}))
     @endcode
 
