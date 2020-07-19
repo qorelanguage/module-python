@@ -469,19 +469,12 @@ int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
     PyQoreObject* pyself = reinterpret_cast<PyQoreObject*>(self);
     //printd(5, "PythonQoreClass::py_init() self: %p %s py_cls: '%s' qcls: '%s' args: %s\n", self, PyUnicode_AsUTF8(*selfstr), type->tp_name, qcls->getName(), PyUnicode_AsUTF8(*argstr));
 
-    if (kwds) {
-        assert(PyDict_Check(kwds));
-        // returns a borrowed reference
-        PyObject* pobj = PyDict_GetItemString(kwds, QOBJ_KEY);
-        if (pobj) {
-            QoreObject* qobj = reinterpret_cast<QoreObject*>(PyCapsule_GetPointer(pobj, nullptr));
-            if (!qobj) {
-                return -1;
-            }
-            qobj->tRef();
-            pyself->qobj = qobj;
-            return 0;
-        }
+    // returns a borrowed reference
+    QoreObject* qobj = QorePythonImplicitQoreObjectHelper::getQoreObject();
+    if (qobj) {
+        qobj->tRef();
+        pyself->qobj = qobj;
+        return 0;
     }
 
     ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args), &xsink);

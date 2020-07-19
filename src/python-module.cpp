@@ -82,6 +82,7 @@ static mcmap_t mcmap = {
 static bool python_needs_shutdown = false;
 
 int python_u_tld_key = -1;
+int python_qobj_key = -1;
 
 #ifdef NEED_PYTHON_36_TLS_KEY
 #ifndef __linux__
@@ -168,6 +169,7 @@ static QoreStringNode* python_module_init() {
     }
 
     python_u_tld_key = q_get_unique_thread_local_data_key();
+    python_qobj_key = q_get_unique_thread_local_data_key();
 
     // ensure that runtime version matches compiled version
     check_python_version();

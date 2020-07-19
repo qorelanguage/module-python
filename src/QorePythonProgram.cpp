@@ -2067,14 +2067,17 @@ void QorePythonProgram::execPythonConstructor(const QoreMethod& meth, PyObject* 
     assert(PyType_Check(pycls));
 
     // add the QoreObject as the first argument
-    QorePythonReferenceHolder obj_capsule;
-    QorePythonReferenceHolder kwargs;
+    //QorePythonReferenceHolder obj_capsule;
+    //QorePythonReferenceHolder kwargs;
+    QorePythonImplicitQoreObjectHelper qpiqoh(self);
+    /*
     if (PyType_IsSubtype(reinterpret_cast<PyTypeObject*>(pycls), &PythonQoreObjectBase_Type)) {
         kwargs = PyDict_New();
         obj_capsule = PyCapsule_New((void*)self, nullptr, nullptr);
         PyDict_SetItemString(*kwargs, QOBJ_KEY, *obj_capsule);
     }
-    QorePythonReferenceHolder pyobj(pypgm->callPythonInternal(xsink, pycls, args, 0, nullptr, *kwargs));
+    */
+    QorePythonReferenceHolder pyobj(pypgm->callPythonInternal(xsink, pycls, args));
     if (*xsink) {
         return;
     }
