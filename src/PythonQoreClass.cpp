@@ -529,5 +529,5 @@ void PythonQoreClass::py_dealloc(PyQoreObject* self) {
 
 PyObject* PythonQoreClass::py_repr(PyObject* obj) {
     QoreStringMaker str("Qore %s object %p", Py_TYPE(obj)->tp_name, obj);
-    return PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, str.c_str(), str.size());
+    return PyUnicode_FromStringAndSize(str.c_str(), str.size());
 }
