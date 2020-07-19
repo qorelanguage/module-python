@@ -53,6 +53,13 @@ class PythonTest inherits Test {
 
     pythonImportTest() {
         {
+            PythonProgram p("from qore.__root__ import Test as t
+def get():
+    return t.get()", "test.py");
+            assertEq("55.00 €", p.callFunction("get"));
+        }
+
+        {
             Program p(PO_NEW_STYLE);
             p.issueModuleCmd("python", "import-ns Test test");
             p.issueModuleCmd("python", "parse t from test import X");
@@ -502,6 +509,10 @@ public namespace Test {
 
     sub ex2() {
         throw "TEST", "test";
+    }
+
+    string sub get() {
+        return "55.00 €";
     }
 
     class Test {

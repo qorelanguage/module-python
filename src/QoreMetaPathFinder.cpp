@@ -147,7 +147,7 @@ void QoreMetaPathFinder::dealloc(PyObject* self) {
 
 PyObject* QoreMetaPathFinder::repr(PyObject* obj) {
     QoreStringMaker str("QoreMetaPathFinder object %p", obj);
-    return PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, str.c_str(), str.size());
+    return PyUnicode_FromStringAndSize(str.c_str(), str.size());
 }
 
 // class method functions
@@ -193,7 +193,7 @@ PyObject* QoreMetaPathFinder::find_spec(PyObject* self, PyObject* args) {
 PyObject* QoreMetaPathFinder::newModuleSpec(const QoreString& name, PyObject* loader) {
     // create args for ModuleSpec constructor
     QorePythonReferenceHolder args(PyTuple_New(2));
-    PyTuple_SET_ITEM(*args, 0, PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, name.c_str(), name.size()));
+    PyTuple_SET_ITEM(*args, 0, PyUnicode_FromStringAndSize(name.c_str(), name.size()));
 
     if (!loader) {
         Py_INCREF(Py_None);

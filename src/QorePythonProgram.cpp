@@ -789,7 +789,7 @@ PyObject* QorePythonProgram::newModule(const char* name, const QoreNamespace* ns
     QorePythonReferenceHolder new_mod(PyModule_New(name));
     if (ns_pkg) {
         std::string nspath = ns_pkg->getPath();
-        QorePythonReferenceHolder path(PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, nspath.c_str(), nspath.size()));
+        QorePythonReferenceHolder path(PyUnicode_FromStringAndSize(nspath.c_str(), nspath.size()));
         PyObject_SetAttrString(*new_mod, "__path__", *path);
     }
     saveModule(name, *new_mod);
@@ -798,7 +798,7 @@ PyObject* QorePythonProgram::newModule(const char* name, const QoreNamespace* ns
 
 PyObject* QorePythonProgram::newModule(const char* name, const char* path) {
     QorePythonReferenceHolder new_mod(PyModule_New(name));
-    QorePythonReferenceHolder py_path(PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, path, strlen(path)));
+    QorePythonReferenceHolder py_path(PyUnicode_FromStringAndSize(path, strlen(path)));
     PyObject_SetAttrString(*new_mod, "__path__", *py_path);
     saveModule(name, *new_mod);
     return new_mod.release();
@@ -1012,7 +1012,7 @@ void QorePythonProgram::addModulePath(ExceptionSink* xsink, QoreString& arg) {
             throw QoreStandardException("PYTHON-ERROR", "'sys.path' is not a list; got type '%s' instead", Py_TYPE(*path)->tp_name);
         }
     }
-    QorePythonReferenceHolder item(PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, arg.c_str(), arg.size()));
+    QorePythonReferenceHolder item(PyUnicode_FromStringAndSize(arg.c_str(), arg.size()));
     PyList_Append(*path, *item);
 }
 
@@ -1388,7 +1388,7 @@ PyObject* QorePythonProgram::getPythonString(ExceptionSink* xsink, const QoreStr
     if (*xsink) {
         return nullptr;
     }
-    return PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, py_str->c_str(), py_str->size());
+    return PyUnicode_FromStringAndSize(py_str->c_str(), py_str->size());
 }
 
 PyObject* QorePythonProgram::getPythonByteArray(ExceptionSink* xsink, const BinaryNode* b) {

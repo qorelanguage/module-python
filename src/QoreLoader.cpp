@@ -118,7 +118,7 @@ void QoreLoader::dealloc(PyObject* self) {
 
 PyObject* QoreLoader::repr(PyObject* obj) {
     QoreStringMaker str("QoreLoader object %p", obj);
-    return PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, str.c_str(), str.size());
+    return PyUnicode_FromStringAndSize(str.c_str(), str.size());
 }
 
 // class method functions
