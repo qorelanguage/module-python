@@ -299,8 +299,25 @@ DLLLOCAL PyMODINIT_FUNC PyInit_qoreloader();
 class QorePythonProgram;
 DLLLOCAL extern QoreNamespace PNS;
 
-static constexpr const char* QOBJ_KEY = "__$QOBJ__";
-
 DLLLOCAL extern int python_u_tld_key;
+DLLLOCAL extern int python_qobj_key;
+
+class QorePythonImplicitQoreObjectHelper {
+public:
+    DLLLOCAL QorePythonImplicitQoreObjectHelper(QoreObject* obj)
+        : old_obj((QoreObject*)q_swap_thread_local_data(python_qobj_key, (void*)obj)) {
+    }
+
+    DLLLOCAL ~QorePythonImplicitQoreObjectHelper() {
+        q_swap_thread_local_data(python_qobj_key, (void*)old_obj);
+    }
+
+    DLLLOCAL static QoreObject* getQoreObject() {
+        return (QoreObject*)q_get_thread_local_data(python_qobj_key);
+    }
+
+private:
+    QoreObject* old_obj;
+};
 
 #endif
