@@ -1698,12 +1698,13 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
                     desc = getQoreValue(xsink, *pyval);
                 }
                 if (!*xsink) {
+                    QoreStringValueHelper errstr(*err);
+                    QoreStringNodeValueHelper descstr(*desc);
                     if (use_loc) {
-                        xsink->raiseExceptionArg(loc.get(), err->get<const QoreStringNode>()->c_str(), arg->refSelf(),
-                            desc ? desc->get<const QoreStringNode>()->stringRefSelf() : nullptr, callstack);
+                        xsink->raiseExceptionArg(loc.get(), errstr->c_str(), arg->refSelf(), descstr.getReferencedValue(),
+                            callstack);
                     } else {
-                        xsink->raiseExceptionArg(err->get<const QoreStringNode>()->c_str(), arg->refSelf(),
-                            desc ? desc->get<const QoreStringNode>()->stringRefSelf() : nullptr, callstack);
+                        xsink->raiseExceptionArg(errstr->c_str(), arg->refSelf(), descstr.getReferencedValue(), callstack);
                     }
                     return -1;
                 }
@@ -1716,14 +1717,14 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
         QorePythonReferenceHolder desc(PyObject_Str(*ex_value));
         ValueHolder qore_desc(getQoreValue(xsink, *desc), xsink);
         if (!*xsink) {
+            QoreStringNodeValueHelper descstr(*qore_desc);
             if (use_loc) {
                 // check if we have a Qore exception
                 xsink->raiseExceptionArg(loc.get(), Py_TYPE(*ex_value)->tp_name, QoreValue(),
-                    qore_desc->getType() == NT_STRING ? qore_desc.release().get<QoreStringNode>() : nullptr, callstack);
+                    descstr.getReferencedValue(), callstack);
             } else {
                 // check if we have a Qore exception
-                xsink->raiseExceptionArg(Py_TYPE(*ex_value)->tp_name, QoreValue(),
-                    qore_desc->getType() == NT_STRING ? qore_desc.release().get<QoreStringNode>() : nullptr, callstack);
+                xsink->raiseExceptionArg(Py_TYPE(*ex_value)->tp_name, QoreValue(), descstr.getReferencedValue(), callstack);
             }
             return -1;
         }
@@ -2066,17 +2067,8 @@ void QorePythonProgram::execPythonConstructor(const QoreMethod& meth, PyObject* 
 
     assert(PyType_Check(pycls));
 
-    // add the QoreObject as the first argument
-    //QorePythonReferenceHolder obj_capsule;
-    //QorePythonReferenceHolder kwargs;
+    // save Qore object for any Python class that needs it
     QorePythonImplicitQoreObjectHelper qpiqoh(self);
-    /*
-    if (PyType_IsSubtype(reinterpret_cast<PyTypeObject*>(pycls), &PythonQoreObjectBase_Type)) {
-        kwargs = PyDict_New();
-        obj_capsule = PyCapsule_New((void*)self, nullptr, nullptr);
-        PyDict_SetItemString(*kwargs, QOBJ_KEY, *obj_capsule);
-    }
-    */
     QorePythonReferenceHolder pyobj(pypgm->callPythonInternal(xsink, pycls, args));
     if (*xsink) {
         return;
@@ -2094,8 +2086,6 @@ void QorePythonProgram::execPythonDestructor(const QorePythonClass& thisclass, P
     if (pypgm->valid) {
         pd->deref(xsink);
     }
-    //assert(!pypgm->checkValid(xsink));
-    //pd->deref(xsink);
 }
 
 QoreValue QorePythonProgram::execPythonStaticMethod(const QoreMethod& meth, PyObject* m,
