@@ -119,7 +119,7 @@ QoreValue QorePythonClass::callPythonMethod(ExceptionSink* xsink, QorePythonProg
     // returns a borrowed reference
     PyObject* attr = PyDict_GetItemString(mtype->tp_dict, mname);
     if (!attr) {
-        xsink->raiseException("PYTHON-ERROR", "Python value of type '%s' has no method or member '%s'",
+        xsink->raiseException("METHOD-DOES-NOT-EXIST", "Python value of type '%s' has no method or member '%s'",
             mtype->tp_name, mname);
         return QoreValue();
     }
