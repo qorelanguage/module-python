@@ -30,10 +30,14 @@ type_vec_t QorePythonClass::gateParamTypeInfo = { stringTypeInfo };
 
 static constexpr const char* PYOBJ_KEY = "__$PYCLS__";
 
+static void dobreak() {}
+
 QorePythonClass::QorePythonClass(const char* name) : QoreBuiltinClass(name, QDOM_UNCONTROLLED_API), pypgm(nullptr) {
+    if (!strcmp(name, "PyAbstractTest")) dobreak();
 }
 
 QorePythonClass::QorePythonClass(QorePythonProgram* pypgm, const char* name) : QoreBuiltinClass(name, QDOM_UNCONTROLLED_API), pypgm(pypgm) {
+    if (!strcmp(name, "PyAbstractTest")) dobreak();
     addMethod(nullptr, "memberGate", (q_external_method_t)memberGate, Public, QCF_NO_FLAGS, QDOM_UNCONTROLLED_API,
         autoTypeInfo, gateParamTypeInfo);
     addMethod(nullptr, "methodGate", (q_external_method_t)methodGate, Public, QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API,

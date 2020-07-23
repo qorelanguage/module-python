@@ -157,7 +157,7 @@ PythonQoreClass::PythonQoreClass(QorePythonProgram* pypgm, const char* module_na
         {Py_tp_doc, (void*)docstr},
         {Py_tp_dealloc, (void*)PythonQoreClass::py_dealloc},
         {Py_tp_repr, (void*)PythonQoreClass::py_repr},
-        {Py_tp_getattro, (void*)PyObject_GenericGetAttr},
+        {Py_tp_getattro, (void*)PythonQoreClass::py_getattro},
         {Py_tp_base, (void*)&PythonQoreObjectBase_Type},
         {Py_tp_alloc, (void*)PyType_GenericAlloc},
         {Py_tp_init, (void*)PythonQoreClass::py_init},
@@ -236,13 +236,8 @@ PythonQoreClass::PythonQoreClass(QorePythonProgram* pypgm, const char* module_na
     }
     py_static_meth_obj_vec.clear();
 
-    saveQoreClassPtr(&qcls);
-}
-
-void PythonQoreClass::saveQoreClassPtr(const QoreClass* qcls) {
-    assert(py_type->tp_dict);
     // add Qore class to type dictionary
-    QorePythonReferenceHolder qore_class(PyCapsule_New((void*)qcls, nullptr, nullptr));
+    QorePythonReferenceHolder qore_class(PyCapsule_New((void*)&qcls, nullptr, nullptr));
     PyDict_SetItemString(py_type->tp_dict, QCLASS_KEY, *qore_class);
 }
 
@@ -384,7 +379,7 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
             }
         }
     }
-    printd(5, "PythonQoreClass::exec_qore_method() %s::%s() obj: %p (%s) args: %s\n", m->getClassName(), m->getName(), obj, obj ? obj->getClassName() : "n/a", PyUnicode_AsUTF8(*argstr));
+    //printd(5, "PythonQoreClass::exec_qore_method() %s::%s() obj: %p (%s) args: %s\n", m->getClassName(), m->getName(), obj, obj ? obj->getClassName() : "n/a", PyUnicode_AsUTF8(*argstr));
     if (!obj) {
         // see if a static method with the same name is available
         ClassAccess access;
@@ -445,57 +440,126 @@ PyObject* PythonQoreClass::exec_qore_static_method(const QoreMethod& m, PyObject
 }
 
 int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
-    //QorePythonReferenceHolder selfstr(PyObject_Repr(self));
-    //QorePythonReferenceHolder argstr(PyObject_Repr(args));
+    assert(PyQoreObject_Check(self));
     assert(PyTuple_Check(args));
+    QorePythonReferenceHolder argstr(PyObject_Repr(args));
+    //printd(5, "PythonQoreClass::py_init() self: %p '%s' args: %p (%d: %s) kwds: %p\n", self, Py_TYPE(self)->tp_name, args, (int)PyTuple_Size(args), PyUnicode_AsUTF8(*argstr), kwds);
 
     QorePythonProgram* qore_python_pgm = QorePythonProgram::getExecutionContext();
 
     ExceptionSink xsink;
 
+    // the current Qore class
     const QoreClass* qcls;
+    // the Qore class to be constructed
+    const QoreClass* constructor_cls;
 
     PyTypeObject* type = Py_TYPE(self);
     if (!PyQoreObjectType_Check(type)) {
+        constructor_cls = findQoreClass(self);
         assert(type->tp_base);
         // create Qore type for Python type
         qcls = qore_python_pgm->getCreateQorePythonClass(&xsink, type);
         //printd(5, "PythonQoreClass::py_init() self: %p type: %s got context pypgm: %p\n", self, type->tp_name, qore_python_pgm);
     } else {
-        qcls = getQoreClass(type);
-        //printd(5, "PythonQoreClass::py_init() self: %p type: %s pypgm: %p\n", self, type->tp_name, qore_python_pgm);
+        constructor_cls = qcls = getQoreClass(type);
     }
 
     PyQoreObject* pyself = reinterpret_cast<PyQoreObject*>(self);
-    //printd(5, "PythonQoreClass::py_init() self: %p %s py_cls: '%s' qcls: '%s' args: %s\n", self, PyUnicode_AsUTF8(*selfstr), type->tp_name, qcls->getName(), PyUnicode_AsUTF8(*argstr));
-
     // returns a borrowed reference
     QoreObject* qobj = QorePythonImplicitQoreObjectHelper::getQoreObject();
+    //printd(5, "PythonQoreClass::py_init() self: %p py_cls: '%s' qcls: '%s' cq: '%s' qobj: %p args: %p\n", self, type->tp_name, qcls->getName(), constructor_cls->getName(), qobj, args);
     if (qobj) {
         qobj->tRef();
         pyself->qobj = qobj;
         return 0;
     }
 
-    ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args), &xsink);
+    if (constructor_cls->isAbstract()) {
+        return newQoreObject(xsink, pyself, new QoreObject(qcls, getProgram()), qcls, qore_python_pgm);
+    }
+
+    ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args, 0, true), &xsink);
     if (!xsink) {
         QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
         if (!xsink) {
-            ReferenceHolder<QoreObject> qobj(qcls->execConstructor(*qargs, &xsink), &xsink);
+            ReferenceHolder<QoreObject> qobj(constructor_cls->execConstructor(*qcls, *qargs, &xsink), &xsink);
             if (!xsink) {
-                qobj->tRef();
-                pyself->qobj = *qobj;
-                // save a strong reference to the Qore object
-                qore_python_pgm->saveQoreObjectFromPython(qobj.release(), xsink);
-                if (!xsink) {
-                    return 0;
-                }
+                //printd(5, "PythonQoreClass::py_init() self: %p created Qore %s object (args: %p %d): %p (%s)\n", self, qcls->getName(), *qargs, qargs ? (int)qargs->size() : 0, *qobj, qobj->getClassName());
+                return newQoreObject(xsink, pyself, qobj.release(), qcls, qore_python_pgm);
             }
         }
     }
 
     qore_python_pgm->raisePythonException(xsink);
     return -1;
+}
+
+int PythonQoreClass::newQoreObject(ExceptionSink& xsink, PyQoreObject* pyself, QoreObject* qobj, const QoreClass* qcls, QorePythonProgram* qore_python_pgm) {
+    qobj->tRef();
+    pyself->qobj = qobj;
+
+    // add private data for python class
+    Py_INCREF(pyself);
+    qobj->setPrivate(qcls->getID(), new QorePythonPrivateData((PyObject*)pyself));
+    // save a strong reference to the Qore object
+    qore_python_pgm->saveQoreObjectFromPython(qobj, xsink);
+    if (!xsink) {
+        return 0;
+    }
+
+    qore_python_pgm->raisePythonException(xsink);
+    return -1;
+}
+
+PyObject* PythonQoreClass::py_getattro(PyObject* self, PyObject* attr) {
+    // first try to get python attribute
+    PyObject* pyrv = PyObject_GenericGetAttr(self, attr);
+    if (pyrv) {
+        return pyrv;
+    }
+    // if that failed, then clear the error and try to get a Qore member
+    PyErr_Clear();
+
+    assert(PyQoreObject_Check(self));
+    assert(PyUnicode_Check(attr));
+    const QoreClass* qcls = findQoreClass(self);
+    if (!qcls) {
+        return nullptr;
+    }
+
+    QoreObject* obj = reinterpret_cast<PyQoreObject*>(self)->qobj;
+    const char* member = PyUnicode_AsUTF8(attr);
+    //printd(5, "PythonQoreClass::py_getattro() obj %p %s.%s\n", obj, qcls->getName(), member);
+    ExceptionSink xsink;
+    ValueHolder v(obj->evalMember(member, &xsink), &xsink);
+    if (xsink) {
+        qore_python_pgm->raisePythonException(xsink);
+        return nullptr;
+    }
+    QorePythonProgram* qore_python_pgm = QorePythonProgram::getExecutionContext();
+    QorePythonReferenceHolder rv(qore_python_pgm->getPythonValue(*v, &xsink));
+    if (xsink) {
+        qore_python_pgm->raisePythonException(xsink);
+        return nullptr;
+    }
+    return rv.release();
+}
+
+const QoreClass* PythonQoreClass::findQoreClass(PyObject* self) {
+    PyTypeObject* type = Py_TYPE(self);
+    // get base Qore class
+    while (!PyQoreObjectType_Check(type)) {
+        if (!type->tp_base) {
+            ExceptionSink xsink;
+            xsink.raiseException("QORE-ERROR", "cannot initialize Python class '%s' as a derived class of a Qore " \
+                "base class; no Qore base class found", Py_TYPE(self)->tp_name);
+            qore_python_pgm->raisePythonException(xsink);
+            return nullptr;
+        }
+        type = type->tp_base;
+    }
+    return getQoreClass(type);
 }
 
 const QoreClass* PythonQoreClass::getQoreClass(PyTypeObject* type) {

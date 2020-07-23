@@ -189,7 +189,7 @@ public:
     //! Returns a Qore list from a Python tuple
     /** must already have the Python thread context set
     */
-    DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, size_t offset = 0);
+    DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, size_t offset = 0, bool for_args = false);
 
     //! Returns a Qore hash from a Python dict
     /** must already have the Python thread context set
@@ -466,7 +466,7 @@ protected:
     DLLLOCAL QoreListNode* getQoreListFromList(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset);
     //! Returns a Qore list from a Python tuple
     DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset,
-        size_t offset = 0);
+        size_t offset = 0, bool for_args = false);
 
     DLLLOCAL static void execPythonConstructor(const QoreMethod& meth, PyObject* pycls, QoreObject* self,
         const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
