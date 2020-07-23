@@ -486,7 +486,7 @@ int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
             ReferenceHolder<QoreObject> qobj(constructor_cls->execConstructor(*qcls, *qargs, &xsink), &xsink);
             if (!xsink) {
                 //printd(5, "PythonQoreClass::py_init() self: %p created Qore %s object (args: %p %d): %p (%s)\n", self, qcls->getName(), *qargs, qargs ? (int)qargs->size() : 0, *qobj, qobj->getClassName());
-                return newQoreObject(xsink, pyself, qobj.release(), qcls, qore_python_pgm);
+                return newQoreObject(xsink, pyself, qobj.release(), qcls == constructor_cls ? nullptr : qcls, qore_python_pgm);
             }
         }
     }
@@ -499,9 +499,11 @@ int PythonQoreClass::newQoreObject(ExceptionSink& xsink, PyQoreObject* pyself, Q
     qobj->tRef();
     pyself->qobj = qobj;
 
-    // add private data for python class
-    Py_INCREF(pyself);
-    qobj->setPrivate(qcls->getID(), new QorePythonPrivateData((PyObject*)pyself));
+    if (qcls) {
+        // add private data for python class
+        Py_INCREF(pyself);
+        qobj->setPrivate(qcls->getID(), new QorePythonPrivateData((PyObject*)pyself));
+    }
     // save a strong reference to the Qore object
     qore_python_pgm->saveQoreObjectFromPython(qobj, xsink);
     if (!xsink) {
