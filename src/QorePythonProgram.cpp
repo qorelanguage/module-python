@@ -1095,15 +1095,20 @@ QoreListNode* QorePythonProgram::getQoreListFromList(ExceptionSink* xsink, PyObj
     return rv.release();
 }
 
-QoreListNode* QorePythonProgram::getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, size_t offset) {
+QoreListNode* QorePythonProgram::getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, size_t offset,
+    bool for_args) {
     pyobj_set_t rset;
     return getQoreListFromTuple(xsink, val, rset, offset);
 }
 
-QoreListNode* QorePythonProgram::getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset, size_t offset) {
+QoreListNode* QorePythonProgram::getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset,
+    size_t offset, bool for_args) {
     assert(PyTuple_Check(val));
-    ReferenceHolder<QoreListNode> rv(new QoreListNode(autoTypeInfo), xsink);
     Py_ssize_t len = PyTuple_Size(val);
+    if (for_args && !len) {
+        return nullptr;
+    }
+    ReferenceHolder<QoreListNode> rv(new QoreListNode(autoTypeInfo), xsink);
     for (Py_ssize_t i = offset; i < len; ++i) {
         ValueHolder qval(getQoreValue(xsink, PyTuple_GetItem(val, i), rset), xsink);
         if (*xsink || checkPythonException(xsink)) {
@@ -1222,9 +1227,15 @@ QoreValue QorePythonProgram::getQoreValue(ExceptionSink* xsink, PyObject* val) {
 }
 
 QoreValue QorePythonProgram::getQoreValue(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset) {
-    //printd(5, "QorePythonBase::getQoreValue() val: %p\n", val);
+    //printd(5, "QorePythonBase::getQoreValue() val: %p '%s'\n", val, Py_TYPE(val)->tp_name);
     if (!val || val == Py_None) {
         return QoreValue();
+    }
+
+    // if this is already a Qore object, then return it
+    if (PyQoreObject_Check(val)) {
+        PyQoreObject* pyobj = reinterpret_cast<PyQoreObject*>(val);
+        return pyobj->qobj->refSelf();
     }
 
     PyTypeObject* type = Py_TYPE(val);
@@ -1303,7 +1314,7 @@ QoreValue QorePythonProgram::getQoreValue(ExceptionSink* xsink, PyObject* val, p
 
     Py_INCREF(val);
     QoreObject* obj = new QoreObject(cls, qpgm, new QorePythonPrivateData(val));
-    //printd(5, "QorePythonProgram::getQoreValue() obj: %p cls: %p '%s'\n", obj, cls, cls->getName());
+    //printd(5, "QorePythonProgram::getQoreValue() obj: %p cls: %p '%s' id: %d\n", obj, cls, cls->getName(), cls->getID());
     return obj;
 }
 
@@ -1823,9 +1834,10 @@ QoreClass* QorePythonProgram::getCreateQorePythonClassIntern(ExceptionSink* xsin
     //printd(5, "QorePythonProgram::getCreateQorePythonClassIntern() class: '%s'\n", type->tp_name);
     // see if the Python type already represents a Qore class
     if (PyQoreObjectType_Check(type)) {
-        //printd(5, "QorePythonProgram::getCreateQorePythonClassIntern() class: '%s' is Qore\n", type->tp_name);
+        printd(5, "QorePythonProgram::getCreateQorePythonClassIntern() class: '%s' is Qore\n", type->tp_name);
         return const_cast<QoreClass*>(PythonQoreClass::getQoreClass(type));
     }
+    printd(5, "QorePythonProgram::getCreateQorePythonClassIntern() creating Qore class for Python class: '%s' \n", type->tp_name);
 
     clmap_t::iterator i = clmap.lower_bound(type);
     if (i != clmap.end() && i->first == type) {
@@ -1872,13 +1884,14 @@ QorePythonClass* QorePythonProgram::addClassToNamespaceIntern(ExceptionSink* xsi
     return setupQorePythonClass(xsink, ns, type, cls, flags);
 }
 
+static constexpr int static_meth_flags = QCF_USES_EXTRA_ARGS;
+static constexpr int normal_meth_flags = static_meth_flags | QCF_ABSTRACT_OVERRIDE_ALL;
+
 QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, QoreNamespace* ns, PyTypeObject* type, std::unique_ptr<QorePythonClass>& cls, int flags) {
     //printd(5, "QorePythonProgram::setupQorePythonClass() ns: '%s' cls: '%s' (%s) flags: %d\n", ns->getName(), cls->getName(), type->tp_name, flags);
     cls->addConstructor((void*)type, (q_external_constructor_t)execPythonConstructor, Public,
             QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API);
     cls->setDestructor((void*)type, (q_external_destructor_t)execPythonDestructor);
-
-    ns->addSystemClass(cls.get());
 
     // create Python mapping for QoreClass if necessary
     if (!PyQoreObjectType_Check(type)) {
@@ -1895,10 +1908,12 @@ QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, Q
         }
 
         //printd(5, "QorePythonProgram::setupQorePythonClass() %s parent: %s (bclass: %p)\n", type->tp_name, type->tp_base->tp_name, bclass);
-        cls->addBuiltinVirtualBaseClass(bclass);
+        cls->addBaseClass(bclass, true);
     }
 
     cls->addBuiltinVirtualBaseClass(QC_PYTHONBASEOBJECT);
+
+    ns->addSystemClass(cls.get());
 
     printd(5, "QorePythonProgram::setupQorePythonClass() %s methods: %p\n", type->tp_name,
         type->tp_methods);
@@ -1921,8 +1936,8 @@ QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, Q
                 assert(py_method);
                 cls->addObj(py_method);
                 cls->addStaticMethod((void*)py_method, keystr,
-                    (q_external_static_method_t)QorePythonProgram::execPythonStaticMethod,
-                    Public, QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API, autoTypeInfo);
+                    (q_external_static_method_t)QorePythonProgram::execPythonStaticMethod, Public, static_meth_flags,
+                    QDOM_UNCONTROLLED_API, autoTypeInfo);
                 printd(5, "QorePythonProgram::setupQorePythonClass() added static method " \
                     "%s.%s() (%s)\n", type->tp_name, keystr, Py_TYPE(value)->tp_name);
                 continue;
@@ -1935,8 +1950,8 @@ QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, Q
                     keystr = "_copy";
                 }
                 cls->addMethod((void*)value, keystr,
-                    (q_external_method_t)QorePythonProgram::execPythonNormalWrapperDescriptorMethod,
-                    Public, QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API, autoTypeInfo);
+                    (q_external_method_t)QorePythonProgram::execPythonNormalWrapperDescriptorMethod, Public,
+                    normal_meth_flags, QDOM_UNCONTROLLED_API, autoTypeInfo);
                 printd(5, "QorePythonProgram::setupQorePythonClass() added normal wrapper " \
                     "descriptor method %s.%s() (%s) %p: %d\n", type->tp_name, keystr, Py_TYPE(value)->tp_name, value,
                     value->ob_refcnt);
@@ -1950,8 +1965,8 @@ QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, Q
                     keystr = "_copy";
                 }
                 cls->addMethod((void*)value, keystr,
-                    (q_external_method_t)QorePythonProgram::execPythonNormalMethodDescriptorMethod,
-                    Public, QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API, autoTypeInfo);
+                    (q_external_method_t)QorePythonProgram::execPythonNormalMethodDescriptorMethod, Public,
+                    normal_meth_flags, QDOM_UNCONTROLLED_API, autoTypeInfo);
                 printd(5, "QorePythonProgram::setupQorePythonClass() added normal method " \
                     "descriptor method %s.%s() (%s) %p: %d\n", type->tp_name, keystr, Py_TYPE(value)->tp_name, value,
                     value->ob_refcnt);
@@ -1964,8 +1979,8 @@ QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, Q
                     keystr = "_copy";
                 }
                 cls->addMethod((void*)value, keystr,
-                    (q_external_method_t)QorePythonProgram::execPythonNormalClassMethodDescriptorMethod,
-                    Public, QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API, autoTypeInfo);
+                    (q_external_method_t)QorePythonProgram::execPythonNormalClassMethodDescriptorMethod, Public,
+                    normal_meth_flags, QDOM_UNCONTROLLED_API, autoTypeInfo);
                 printd(5, "QorePythonProgram::setupQorePythonClass() added normal "
                     "classmethod descriptor method %s.%s() (%s)\n", type->tp_name, keystr, Py_TYPE(value)->tp_name);
                 continue;
@@ -1978,8 +1993,8 @@ QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, Q
                     keystr = "_copy";
                 }
                 cls->addMethod((void*)value, keystr,
-                    (q_external_method_t)QorePythonProgram::execPythonNormalMethod, Public,
-                    QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API, autoTypeInfo);
+                    (q_external_method_t)QorePythonProgram::execPythonNormalMethod, Public, normal_meth_flags,
+                    QDOM_UNCONTROLLED_API, autoTypeInfo);
                 printd(5, "QorePythonProgram::setupQorePythonClass() added normal method " \
                     "%s.%s() (%s)\n", type->tp_name, keystr, Py_TYPE(value)->tp_name);
                 continue;
@@ -1988,8 +2003,8 @@ QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, Q
             if (PyCFunction_Check(value)) {
                 // do not need to save reference here
                 cls->addStaticMethod((void*)value, keystr,
-                    (q_external_static_method_t)QorePythonProgram::execPythonStaticCFunctionMethod,
-                    Public, QCF_USES_EXTRA_ARGS, QDOM_UNCONTROLLED_API, autoTypeInfo);
+                    (q_external_static_method_t)QorePythonProgram::execPythonStaticCFunctionMethod, Public,
+                    static_meth_flags, QDOM_UNCONTROLLED_API, autoTypeInfo);
                 printd(5, "QorePythonProgram::setupQorePythonClass() added static C function method " \
                     "%s.%s() (%s)\n", type->tp_name, keystr, Py_TYPE(value)->tp_name);
                 continue;
@@ -2073,6 +2088,9 @@ void QorePythonProgram::execPythonConstructor(const QoreMethod& meth, PyObject* 
     if (*xsink) {
         return;
     }
+
+    // check base class initialization
+
 
     self->setPrivate(meth.getClass()->getID(), new QorePythonPrivateData(pyobj.release()));
 }

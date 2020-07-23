@@ -53,13 +53,6 @@ public:
 
     DLLLOCAL static const QoreClass* getQoreClass(PyTypeObject* type);
 
-    // Python type methods
-    DLLLOCAL static int py_init(PyObject* self, PyObject* args, PyObject* kwds);
-    DLLLOCAL static PyObject* py_new(PyTypeObject* type, PyObject* args, PyObject* kw);
-    DLLLOCAL static void py_dealloc(PyQoreObject* self);
-    DLLLOCAL static PyObject* py_repr(PyObject* obj);
-    DLLLOCAL static void py_free(PyQoreObject* self);
-
 private:
     QoreString name;
     QoreString doc;
@@ -77,14 +70,28 @@ private:
 
     PyTypeObject* py_type;
 
-    DLLLOCAL void saveQoreClassPtr(const QoreClass* qcls);
-    DLLLOCAL void populateClass(QorePythonProgram* pypgm, const QoreClass& qcls, clsset_t& cls_set, cstrset_t& meth_set, bool skip_first = true);
+    DLLLOCAL void populateClass(QorePythonProgram* pypgm, const QoreClass& qcls, clsset_t& cls_set,
+        cstrset_t& meth_set, bool skip_first = true);
 
-    DLLLOCAL static PyObject* exec_qore_static_method(const QoreMethod& m, PyObject* args);
+    DLLLOCAL static int newQoreObject(ExceptionSink& xsink, PyQoreObject* pyself, QoreObject* qobj, const QoreClass* qcls, QorePythonProgram* qore_python_pgm);
+
+    // finds the Qore class for the Python type
+    DLLLOCAL static const QoreClass* findQoreClass(PyObject* self);
 
     // class methods
     DLLLOCAL static PyObject* exec_qore_method(PyObject* method_capsule, PyObject* args);
     DLLLOCAL static PyObject* exec_qore_static_method(PyObject* method_capsule, PyObject* args);
+
+    DLLLOCAL static PyObject* exec_qore_static_method(const QoreMethod& m, PyObject* args);
+
+    // Python type methods
+    DLLLOCAL static int py_init(PyObject* self, PyObject* args, PyObject* kwds);
+    DLLLOCAL static PyObject* py_new(PyTypeObject* type, PyObject* args, PyObject* kw);
+    DLLLOCAL static void py_dealloc(PyQoreObject* self);
+    DLLLOCAL static PyObject* py_repr(PyObject* obj);
+    DLLLOCAL static void py_free(PyQoreObject* self);
+    // get attribute
+    DLLLOCAL static PyObject* py_getattro(PyObject* self, PyObject* attr);
 };
 
 /*
