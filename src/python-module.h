@@ -130,6 +130,19 @@ protected:
     bool release_gil = true;
 };
 
+class QorePythonReleaseGilHelper {
+public:
+    DLLLOCAL QorePythonReleaseGilHelper() : _save(PyEval_SaveThread()) {
+    }
+
+    DLLLOCAL ~QorePythonReleaseGilHelper() {
+        PyEval_RestoreThread(_save);
+    }
+
+private:
+    PyThreadState* _save;
+};
+
 struct QorePythonThreadInfo {
     PyThreadState* t_state;
     PyGILState_STATE g_state;

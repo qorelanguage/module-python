@@ -141,7 +141,8 @@ bool PyQoreObjectType_Check(PyTypeObject* type) {
 PythonQoreClass::PythonQoreClass(QorePythonProgram* pypgm, PyTypeObject* type, const QoreClass& qcls) {
     Py_INCREF((PyObject*)type);
     py_type = type;
-    // do not save the qore class to the python class, as the python class may be a builtin class and the Qore class can be deleted afterwards
+    // do not save the qore class to the python class, as the python class may be a builtin class and the Qore class
+    // can be deleted afterwards
 }
 
 PythonQoreClass::PythonQoreClass(QorePythonProgram* pypgm, const char* module_name, const QoreClass& qcls) {
@@ -243,10 +244,6 @@ PythonQoreClass::PythonQoreClass(QorePythonProgram* pypgm, const char* module_na
 
 PythonQoreClass::~PythonQoreClass() {
     printd(5, "PythonQoreClass::~PythonQoreClass() this: %p '%s'\n", this, name.c_str());
-    /*
-    Py_DECREF(py_type->tp_dict);
-    py_type->tp_dict = nullptr;
-    */
     Py_DECREF(py_type);
 }
 
@@ -390,6 +387,7 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
             PyErr_SetString(PyExc_ValueError, desc.c_str());
             return nullptr;
         }
+
         return exec_qore_static_method(*static_meth, args);
     }
 
@@ -399,7 +397,11 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
 
     ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args, 1), &xsink);
     if (!xsink) {
-        ValueHolder rv(obj->evalMethod(*m, *qargs, &xsink), &xsink);
+        ValueHolder rv(&xsink);
+        {
+            QorePythonReleaseGilHelper prgh;
+            rv = obj->evalMethod(*m, *qargs, &xsink);
+        }
         QorePythonReferenceHolder py_rv(qore_python_pgm->getPythonValue(*rv, &xsink));
         if (!xsink) {
             return py_rv.release();
@@ -428,7 +430,11 @@ PyObject* PythonQoreClass::exec_qore_static_method(const QoreMethod& m, PyObject
 
     ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args, 0), &xsink);
     if (!xsink) {
-        ValueHolder rv(QoreObject::evalStaticMethod(m, m.getClass(), *qargs, &xsink), &xsink);
+        ValueHolder rv(&xsink);
+        {
+            QorePythonReleaseGilHelper prgh;
+            rv = QoreObject::evalStaticMethod(m, m.getClass(), *qargs, &xsink);
+        }
         QorePythonReferenceHolder py_rv(qore_python_pgm->getPythonValue(*rv, &xsink));
         if (!xsink) {
             return py_rv.release();
@@ -483,6 +489,7 @@ int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
     if (!xsink) {
         QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
         if (!xsink) {
+            QorePythonReleaseGilHelper prgh;
             ReferenceHolder<QoreObject> qobj(constructor_cls->execConstructor(*qcls, *qargs, &xsink), &xsink);
             if (!xsink) {
                 //printd(5, "PythonQoreClass::py_init() self: %p created Qore %s object (args: %p %d): %p (%s)\n", self, qcls->getName(), *qargs, qargs ? (int)qargs->size() : 0, *qobj, qobj->getClassName());
@@ -534,7 +541,11 @@ PyObject* PythonQoreClass::py_getattro(PyObject* self, PyObject* attr) {
     const char* member = PyUnicode_AsUTF8(attr);
     //printd(5, "PythonQoreClass::py_getattro() obj %p %s.%s\n", obj, qcls->getName(), member);
     ExceptionSink xsink;
-    ValueHolder v(obj->evalMember(member, &xsink), &xsink);
+    ValueHolder v(&xsink);
+    {
+        QorePythonReleaseGilHelper prgh;
+        obj->evalMember(member, &xsink);
+    }
     if (xsink) {
         qore_python_pgm->raisePythonException(xsink);
         return nullptr;
