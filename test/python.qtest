@@ -71,9 +71,9 @@ def test(*args):
             assertEq(1, obj.i);
 
             # test with no args to base class
-            assertThrows("TypeError", \p.callFunction(), "test");
+            assertThrows("builtins.TypeError", \p.callFunction(), "test");
             # test with too many args to Qore base class
-            assertThrows("TypeError", \p.callFunction(), ("test", 1, 2));
+            assertThrows("builtins.TypeError", \p.callFunction(), ("test", 1, 2));
         }
 
         {
@@ -321,17 +321,17 @@ def ctest(*args):
         }
 
         # test parse error handling
-        assertThrows("SyntaxError", "invalid syntax",
+        assertThrows("builtins.SyntaxError", "invalid syntax",
             sub () { PythonProgram pp("def test(int val):\n    return val + 1", "test.py"); });
 
         {
             PythonProgram pp("def test(val):\n    return val + 1", "test.py");
-            assertThrows("TypeError", \pp.callFunction(), ("test", 1, 2));
+            assertThrows("builtins.TypeError", \pp.callFunction(), ("test", 1, 2));
         }
 
         {
             PythonProgram pp("def test():\n    raise Exception('err', 'desc')", "test.py");
-            assertThrows("Exception", \pp.callFunction(), "test");
+            assertThrows("builtins.Exception", \pp.callFunction(), "test");
         }
 
         {
@@ -385,10 +385,10 @@ class test:
             assertEq(1, pp.callMethod("int", "bit_length", 1));
 
             assertThrows("NO-METHOD", \pp.callMethod(), ("test", "xxx"));
-            assertThrows("NameError", \pp.callMethod(), ("test", "normal", NOTHING, 1));
+            assertThrows("builtins.NameError", \pp.callMethod(), ("test", "normal", NOTHING, 1));
             assertThrows("NO-METHOD", \pp.callMethod(), ("test", "__name__"));
-            assertThrows("Exception", \pp.callMethod(), ("test", "do_ex"));
-            assertThrows("NameError", \pp.evalExpression(), "test()");
+            assertThrows("builtins.Exception", \pp.callMethod(), ("test", "do_ex"));
+            assertThrows("builtins.NameError", \pp.evalExpression(), "test()");
         }
 
         {
@@ -442,30 +442,30 @@ class test:
             assertEq(1, x.dostatic());
             assertEq(1, x.doit());
             assertEq(1, x.other());
-            assertThrows("TypeError", \x.doerr());
+            assertThrows("builtins.TypeError", \x.doerr());
             assertRegex("^<test.py.test object", x.__repr__());
-            assertThrows("TypeError", \x.__new__());
+            assertThrows("builtins.TypeError", \x.__new__());
             assertEq(Type::List, x.__reduce__().type());
             assertEq(Type::Object, x.__subclasshook__().type());
             assertEq(Type::List, x.__dir__().type());
             assertEq("test docs", x.__doc__);
             x.editdoc();
             assertEq(1, x.__doc__);
-            assertThrows("AttributeError", \x.edittype());
+            assertThrows("builtins.AttributeError", \x.edittype());
             assertEq(Type::Int, x.gettype().__basicsize__.type());
             assertEq(1, x.getattr("num"));
             x.delclassattr("dostatic");
             assertEq(1, x.dostatic());
             x.delclassattr("doit");
             assertEq(1, x.doit());
-            assertThrows("TypeError", \x.delparentclassattr(), "__repr__");
+            assertThrows("builtins.TypeError", \x.delparentclassattr(), "__repr__");
             assertRegex("^<test.py.test object", x.__repr__());
-            assertThrows("TypeError", \x.delparentclassattr(), "__sizeof__");
+            assertThrows("builtins.TypeError", \x.delparentclassattr(), "__sizeof__");
             assertEq(Type::Int, x.__sizeof__().type());
-            assertThrows("TypeError", \x.delparentclassattr(), "__subclasshook__");
+            assertThrows("builtins.TypeError", \x.delparentclassattr(), "__subclasshook__");
             assertEq(Type::Object, x.__subclasshook__().type());
-            assertThrows("TypeError", \x.delparentclassattr(), "__new__");
-            assertThrows("TypeError", \x.__new__());
+            assertThrows("builtins.TypeError", \x.delparentclassattr(), "__new__");
+            assertThrows("builtins.TypeError", \x.__new__());
 
             delete pp;
             assertThrows("PYTHON-ERROR", \x.dostatic());
