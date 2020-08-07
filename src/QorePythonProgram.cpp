@@ -1724,6 +1724,17 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
     }
 
     if (!*xsink) {
+        // get full exception class name
+        PyTypeObject* py_cls = Py_TYPE(*ex_value);
+        QoreString ex_name(py_cls->tp_name);
+        if (PyObject_HasAttrString(reinterpret_cast<PyObject*>(py_cls), "__module__")) {
+            QorePythonReferenceHolder ex_mod(PyObject_GetAttrString(reinterpret_cast<PyObject*>(py_cls), "__module__"));
+            if (PyUnicode_Check(*ex_mod)) {
+                ex_name.prepend(".");
+                ex_name.prepend(PyUnicode_AsUTF8(*ex_mod));
+            }
+        }
+
         // get description
         QorePythonReferenceHolder desc(PyObject_Str(*ex_value));
         ValueHolder qore_desc(getQoreValue(xsink, *desc), xsink);
@@ -1731,11 +1742,11 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
             QoreStringNodeValueHelper descstr(*qore_desc);
             if (use_loc) {
                 // check if we have a Qore exception
-                xsink->raiseExceptionArg(loc.get(), Py_TYPE(*ex_value)->tp_name, QoreValue(),
+                xsink->raiseExceptionArg(loc.get(), ex_name.c_str(), QoreValue(),
                     descstr.getReferencedValue(), callstack);
             } else {
                 // check if we have a Qore exception
-                xsink->raiseExceptionArg(Py_TYPE(*ex_value)->tp_name, QoreValue(), descstr.getReferencedValue(), callstack);
+                xsink->raiseExceptionArg(ex_name.c_str(), QoreValue(), descstr.getReferencedValue(), callstack);
             }
             return -1;
         }

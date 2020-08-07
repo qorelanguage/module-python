@@ -257,7 +257,7 @@ print(t.getTable().selectRow({"where": {"col1": "value"}}))
     @section python_exceptions Python Exception Handling
 
     Python exceptions are mapped to Qore exceptions as follows:
-    - \c err: the Python exception class name (ex: \c "SyntaxError")
+    - \c err: the fully-qualified Python exception class name (ex: \c "builtins.SyntaxError", \c "socket.timeout")
     - \c desc: the string description, if none, then the exception arguments converted to a string with \c repr()
     - \c arg: the Python exception object itself converted to a Qore value
 
