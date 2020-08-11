@@ -158,7 +158,7 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
     } else if (!strcmp(name_str, "__root__")) {
         ns = mod_pgm->getRootNS();
     } else {
-        ns = getModuleRootNs(name_str, mod_pgm->findNamespace("::"));
+        ns = getModuleRootNs(name_str, mod_pgm);
     }
     assert(ns);
     //printd(5, "QoreLoader::exec_module() found '%s' NS %p: '::%s'\n", name_str, ns, ns->getName());
@@ -172,23 +172,75 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
     return Py_None;
 }
 
-const QoreNamespace* QoreLoader::getModuleRootNs(const char* name, const QoreNamespace* root_ns) {
+const QoreNamespace* QoreLoader::getModuleRootNs(const char* name, QoreProgram* mod_pgm) {
+    ReferenceHolder<QoreHashNode> all_mod_info(MM.getModuleHash(), nullptr);
+    mod_dep_map_t mod_dep_map;
+
+    // otherwise look for a public namespace and then find the ealiest ancestor provided by the module
+    const RootQoreNamespace* root_ns = mod_pgm->getRootNS();
     QoreNamespaceConstIterator i(*root_ns);
     while (i.next()) {
         const QoreNamespace* ns = &i.get();
         const char* mod = ns->getModuleName();
         if (mod && !strcmp(mod, name)) {
+            printd(5, "QoreLoader::getModuleRootNs() found '%s'\n", name);
             // try to find parent ns
             while (true) {
                 const QoreNamespace* parent = ns->getParent();
-                mod = parent->getModuleName();
-                if (!mod || strcmp(mod, name)) {
+                if (!isModule(parent, name, *all_mod_info, mod_dep_map)) {
+                    printd(5, "QoreLoader::getModuleRootNs() invalid  parent '%s'\n", parent->getName());
                     break;
                 }
                 ns = parent;
+                printd(5, "QoreLoader::getModuleRootNs() got parent '%s'\n", ns->getName());
             }
+            printd(5, "QoreLoader::getModuleRootNs() returning '%s'\n", ns->getName());
             return ns;
         }
     }
     return nullptr;
+}
+
+bool QoreLoader::isModule(const QoreNamespace* parent, const char* name, const QoreHashNode* all_mod_info,
+        mod_dep_map_t& mod_dep_map) {
+    const char* mod = parent->getModuleName();
+    if (!mod) {
+        return false;
+    }
+    if (!strcmp(mod, name)) {
+        return true;
+    }
+
+    if (!all_mod_info) {
+        return false;
+    }
+
+    const QoreListNode* reexport_list = nullptr;
+
+    // see if we have the reexport list already
+    mod_dep_map_t::iterator i = mod_dep_map.lower_bound(mod);
+    if (i == mod_dep_map.end() || !strcmp(i->first, mod)) {
+        const QoreHashNode* mod_info = all_mod_info->getKeyValue(name).get<QoreHashNode>();
+        if (!mod_info) {
+            return false;
+        }
+        reexport_list = mod_info->getKeyValue("reexported-modules").get<QoreListNode>();
+        if (!reexport_list) {
+            return false;
+        }
+        mod_dep_map.insert(i, mod_dep_map_t::value_type(mod, reexport_list));
+    } else {
+        reexport_list = i->second;
+    }
+
+    ConstListIterator li(reexport_list);
+    while (li.next()) {
+        const QoreValue v = li.getValue();
+        if (v.getType() == NT_STRING && (*v.get<const QoreStringNode>() == mod)) {
+            return true;
+        }
+    }
+
+    //printd(5, "QoreLoader::isModule() NOT parent: '%s' mod: %s; not in reexport list\n", parent->getName(), mod ? mod : "n/a");
+    return false;
 }

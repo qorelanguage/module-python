@@ -199,7 +199,7 @@ public:
         return &obj;
     }
 
-    DLLLOCAL PyObject* operator*() {
+    DLLLOCAL PyObject* operator*() const {
         return obj;
     }
 

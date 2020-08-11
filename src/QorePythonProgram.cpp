@@ -28,6 +28,7 @@
 #include "QoreLoader.h"
 #include "PythonQoreClass.h"
 #include "QoreMetaPathFinder.h"
+#include "PythonCallableCallReferenceNode.h"
 
 #include <structmember.h>
 #include <frameobject.h>
@@ -701,7 +702,7 @@ void QorePythonProgram::raisePythonException(ExceptionSink& xsink) {
 
 // import Qore definitions to Python
 void QorePythonProgram::importQoreToPython(PyObject* mod, const QoreNamespace& ns, const char* mod_name) {
-    printd(5, "QorePythonProgram::importQoreToPython() mod: %p (%d) ns: %p '%s' mod name: '%s'\n", mod, Py_REFCNT(mod), &ns, ns.getName(), mod_name);
+    //printd(5, "QorePythonProgram::importQoreToPython() mod: %p (%d) ns: %p '%s' mod name: '%s'\n", mod, Py_REFCNT(mod), &ns, ns.getName(), mod_name);
 
     // import all functions
     QoreNamespaceFunctionIterator fi(ns);
@@ -742,7 +743,7 @@ void QorePythonProgram::importQoreToPython(PyObject* mod, const QoreNamespace& n
 }
 
 int QorePythonProgram::importQoreConstantToPython(PyObject* mod, const QoreExternalConstant& constant) {
-    printd(5, "QorePythonProgram::importQoreConstantToPython() %s\n", constant.getName());
+    //printd(5, "QorePythonProgram::importQoreConstantToPython() %s\n", constant.getName());
 
     ExceptionSink xsink;
     ValueHolder qoreval(constant.getReferencedValue(), &xsink);
@@ -770,14 +771,14 @@ int QorePythonProgram::importQoreClassToPython(PyObject* mod, const QoreClass& c
 }
 
 int QorePythonProgram::importQoreNamespaceToPython(PyObject* mod, const QoreNamespace& ns) {
-    printd(5, "QorePythonProgram::importQoreNamespaceToPython() %s\n", ns.getName());
+    //printd(5, "QorePythonProgram::importQoreNamespaceToPython() %s\n", ns.getName());
     assert(PyModule_Check(mod));
 
     QoreStringMaker nsname("%s.%s", PyModule_GetName(mod), ns.getName());
 
     // create a submodule
     QorePythonReferenceHolder new_mod(newModule(nsname.c_str(), &ns));
-    //printd(5, "QorePythonProgram::importQoreNamespaceToPython() (mod) created new module '%s'\n", nsname.c_str());
+    printd(5, "QorePythonProgram::importQoreNamespaceToPython() (mod) created new module '%s'\n", nsname.c_str());
     importQoreToPython(*new_mod, ns, nsname.c_str());
     if (PyObject_SetAttrString(mod, ns.getName(), *new_mod)) {
         return -1;
@@ -1213,6 +1214,20 @@ DateTimeNode* QorePythonProgram::getQoreDateTimeFromTime(PyObject* val) {
         PyDateTime_TIME_GET_MINUTE(val), PyDateTime_TIME_GET_SECOND(val), PyDateTime_TIME_GET_MICROSECOND(val));
 }
 
+ResolvedCallReferenceNode* QorePythonProgram::getQoreCallRefFromFunc(ExceptionSink* xsink, PyObject* val) {
+    assert(PyFunction_Check(val));
+    Py_INCREF(val);
+    return new PythonCallableCallReferenceNode(val);
+}
+
+ResolvedCallReferenceNode* QorePythonProgram::getQoreCallRefFromMethod(ExceptionSink* xsink, PyObject* val) {
+    assert(PyMethod_Check(val));
+    PyMethodObject* m = reinterpret_cast<PyMethodObject*>(val);
+    Py_INCREF(m->im_func);
+    Py_INCREF(m->im_self);
+    return new PythonCallableCallReferenceNode(m->im_func, m->im_self);
+}
+
 QoreValue QorePythonProgram::getQoreValue(ExceptionSink* xsink, QorePythonReferenceHolder& val) {
     return getQoreValue(xsink, *val);
 }
@@ -1306,6 +1321,14 @@ QoreValue QorePythonProgram::getQoreValue(ExceptionSink* xsink, PyObject* val, p
         return getQoreHashFromDict(xsink, val, rset);
     }
 
+    if (PyFunction_Check(val)) {
+        return getQoreCallRefFromFunc(xsink, val);
+    }
+
+    if (PyMethod_Check(val)) {
+        return getQoreCallRefFromMethod(xsink, val);
+    }
+
     QoreClass* cls = getCreateQorePythonClass(xsink, type);
     if (!cls) {
         assert(*xsink);
@@ -1344,6 +1367,7 @@ PyObject* QorePythonProgram::getPythonList(ExceptionSink* xsink, const QoreListN
 
 PyObject* QorePythonProgram::getPythonTupleValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset,
     PyObject* first) {
+    //printd(5, "QorePythonProgram::getPythonTupleValue() l: %d first: %p\n", l ? (int)l->size() : 0, first);
     bool has_list = (l && l->size() >= arg_offset);
 
     if (!first && !has_list) {
@@ -1582,6 +1606,7 @@ QoreValue QorePythonProgram::callInternal(ExceptionSink* xsink, PyObject* callab
     if (checkValid(xsink)) {
         return QoreValue();
     }
+    //printd(5, "QorePythonProgram::callInternal() f: %p args: %d (%d) self: %p\n", callable, args ? (int)args->size() : 0, (int)arg_offset, first);
     QorePythonReferenceHolder rv(callPythonInternal(xsink, callable, args, arg_offset, first));
     return *xsink ? QoreValue() : getQoreValue(xsink, rv.release());
 }

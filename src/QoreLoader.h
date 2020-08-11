@@ -31,6 +31,9 @@
 // forward references
 class PythonQoreClass;
 
+// reexport list map
+typedef std::map<const char*, const QoreListNode*, ltstr> mod_dep_map_t;
+
 class QoreLoader {
 public:
     //! initializer function
@@ -53,7 +56,11 @@ private:
     DLLLOCAL static QorePythonManualReferenceHolder loader_cls;
     DLLLOCAL static QorePythonManualReferenceHolder loader;
 
-    DLLLOCAL static const QoreNamespace* getModuleRootNs(const char* name, const QoreNamespace* root_ns);
+    DLLLOCAL static const QoreNamespace* getModuleRootNs(const char* name, QoreProgram* mod_pgm);
+
+    //! checks if "parent" is in the same module as "name" with a possible reexport list
+    DLLLOCAL static bool isModule(const QoreNamespace* parent, const char* name, const QoreHashNode* all_mod_info,
+        mod_dep_map_t& mod_dep_map);
 };
 
 #endif
