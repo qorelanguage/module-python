@@ -467,6 +467,10 @@ protected:
     //! Returns a Qore list from a Python tuple
     DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset,
         size_t offset = 0, bool for_args = false);
+    //! Returns a Qore call reference from a Python function
+    DLLLOCAL ResolvedCallReferenceNode* getQoreCallRefFromFunc(ExceptionSink* xsink, PyObject* val);
+    //! Returns a Qore call reference from a Python method
+    DLLLOCAL ResolvedCallReferenceNode* getQoreCallRefFromMethod(ExceptionSink* xsink, PyObject* val);
 
     DLLLOCAL static void execPythonConstructor(const QoreMethod& meth, PyObject* pycls, QoreObject* self,
         const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);

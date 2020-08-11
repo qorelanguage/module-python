@@ -455,6 +455,12 @@ int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
 
     ExceptionSink xsink;
 
+    QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
+    if (xsink) {
+        qore_python_pgm->raisePythonException(xsink);
+        return -1;
+    }
+
     // the current Qore class
     const QoreClass* qcls;
     // the Qore class to be constructed

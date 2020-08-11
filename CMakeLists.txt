@@ -46,11 +46,10 @@ set(QPP_SRC
 )
 
 set(CPP_SRC
-    # python module for Qore
     src/python-module.cpp
     src/QorePythonProgram.cpp
     src/QorePythonClass.cpp
-    # qoreloader module for Python
+    src/PythonCallableCallReferenceNode.cpp
     src/qoreloadermodule.cpp
     src/QoreMetaPathFinder.cpp
     src/QoreLoader.cpp

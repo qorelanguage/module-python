@@ -250,6 +250,7 @@ print(t.getTable().selectRow({"where": {"col1": "value"}}))
     |\c list|\c list
     |\c string|\c list
     |\c tuple|\c list
+    |\c function, \c method|\c code
 
     All other Python types are converted to a %Qore object using a dynamically-created class that wraps the Python
     type or class.
