@@ -43,7 +43,7 @@ QoreValue PythonCallableCallReferenceNode::execValue(const QoreListNode* args, E
 }
 
 int PythonCallableCallReferenceNode::getAsString(QoreString& str, int foff, ExceptionSink* xsink) const {
-    str.sprintf("python vallable %p", *val);
+    str.sprintf("python callable %p", *val);
     return 0;
 }
 
@@ -53,4 +53,3 @@ QoreString* PythonCallableCallReferenceNode::getAsString(bool& del, int foff, Ex
     getAsString(*rv, foff, xsink);
     return rv;
 }
-
