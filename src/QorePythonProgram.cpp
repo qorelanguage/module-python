@@ -518,7 +518,6 @@ void QorePythonProgram::releaseContext(const QorePythonThreadInfo& oldstate) con
     assert(python);
     assert(_qore_PyThreadState_IsCurrent(python));
     assert(python->gilstate_counter > 0);
-    assert(PyGILState_Check());
 
     --python->gilstate_counter;
 
