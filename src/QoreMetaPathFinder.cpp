@@ -231,6 +231,13 @@ PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& mname) {
     QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
     ExceptionSink xsink;
     if (ModuleManager::runTimeLoadModule(mname.c_str(), qore_python_pgm->getQoreProgram(), &xsink)) {
+        const char* err = xsink.getExceptionErr().get<const QoreStringNode>()->c_str();
+        const char* desc = xsink.getExceptionDesc().get<const QoreStringNode>()->c_str();
+        QoreFile f;
+        f.open("/tmp/err.txt", O_CREAT | O_WRONLY | O_TRUNC, 0644);
+        QoreStringMaker msg("%s: %s", err, desc);
+        f.write(msg.c_str(), msg.size(), &xsink);
+        f.close();
         // ignore exceptions and continue
         xsink.clear();
         return nullptr;
