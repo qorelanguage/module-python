@@ -43,12 +43,69 @@ class PythonTest inherits Test {
     }
 
     constructor() : Test("python test", "1.0") {
+        addTestCase("python callbacks", \pythonCallbackTest());
         addTestCase("python import", \pythonImportTest());
         addTestCase("object lifecycle", \objectLifecycleTest());
         addTestCase("basic test", \basicTest());
         addTestCase("import test", \importTest());
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
+    }
+
+    pythonCallbackTest() {
+        PythonProgram p("
+class c:
+    def __init__(self):
+        self.d = {
+            'x': 1,
+        }
+
+    def get(self):
+        return self.t
+
+    def t(self):
+        return self.d['x']
+
+    @classmethod
+    def tc():
+        return 2
+
+    @staticmethod
+    def sm():
+        return 3
+
+def get_method():
+    c0 = c()
+    return c0.get()
+
+def get_cm():
+    return c.tc
+
+def get_sm():
+    return c.sm
+        ", "test.py");
+
+        code c = p.callFunction("get_method");
+        assertEq(1, c());
+
+        Queue q();
+        code bg = auto sub (code c) {
+            q.push(c());
+        };
+        background bg(c);
+        assertEq(1, q.get());
+
+        c = p.callFunction("get_cm");
+        assertEq(2, c());
+
+        background bg(c);
+        assertEq(2, q.get());
+
+        c = p.callFunction("get_sm");
+        assertEq(3, c());
+
+        background bg(c);
+        assertEq(3, q.get());
     }
 
     pythonImportTest() {
