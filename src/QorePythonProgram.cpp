@@ -1216,7 +1216,8 @@ DateTimeNode* QorePythonProgram::getQoreDateTimeFromTime(PyObject* val) {
 ResolvedCallReferenceNode* QorePythonProgram::getQoreCallRefFromFunc(ExceptionSink* xsink, PyObject* val) {
     assert(PyFunction_Check(val));
     Py_INCREF(val);
-    return new PythonCallableCallReferenceNode(val);
+    ref();
+    return new PythonCallableCallReferenceNode(this, val);
 }
 
 ResolvedCallReferenceNode* QorePythonProgram::getQoreCallRefFromMethod(ExceptionSink* xsink, PyObject* val) {
@@ -1224,8 +1225,9 @@ ResolvedCallReferenceNode* QorePythonProgram::getQoreCallRefFromMethod(Exception
     PyMethodObject* m = reinterpret_cast<PyMethodObject*>(val);
     Py_INCREF(m->im_func);
     Py_INCREF(m->im_self);
+    ref();
     // NOTE: classmethods will have their "self" arg = the class / type
-    return new PythonCallableCallReferenceNode(m->im_func, PyType_Check(m->im_self) ? nullptr : m->im_self);
+    return new PythonCallableCallReferenceNode(this, m->im_func, PyType_Check(m->im_self) ? nullptr : m->im_self);
 }
 
 QoreValue QorePythonProgram::getQoreValue(ExceptionSink* xsink, QorePythonReferenceHolder& val) {

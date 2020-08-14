@@ -32,12 +32,11 @@
 #include "PythonCallableCallReferenceNode.h"
 #include "QorePythonProgram.h"
 
-PythonCallableCallReferenceNode::PythonCallableCallReferenceNode(PyObject* val, PyObject* self)
-        : val(val), self(self) {
+PythonCallableCallReferenceNode::PythonCallableCallReferenceNode(QorePythonProgram* pypgm, PyObject* val, PyObject* self)
+        : pypgm(pypgm, nullptr), val(val), self(self) {
 }
 
 QoreValue PythonCallableCallReferenceNode::execValue(const QoreListNode* args, ExceptionSink* xsink) const {
-    QorePythonProgram* pypgm = QorePythonProgram::getContext();
     //printd(5, "PythonCallableCallReferenceNode::execValue() f: %p self: %p\n", *val, *self);
     QorePythonGilHelper qpgh;
     return pypgm->callInternal(xsink, *val, args, 0, *self);
