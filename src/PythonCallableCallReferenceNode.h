@@ -34,11 +34,12 @@
 #define _QORE_QOREPYTHONCALLABLECALLREFERENCENODE_H
 
 #include "python-module.h"
+#include "QorePythonProgram.h"
 
 class PythonCallableCallReferenceNode : public ResolvedCallReferenceNode {
 public:
-    //! val and self must already be referenced before the call
-    DLLLOCAL PythonCallableCallReferenceNode(PyObject* val, PyObject* self = nullptr);
+    //! all args must already be referenced before the call
+    DLLLOCAL PythonCallableCallReferenceNode(QorePythonProgram* pypgm, PyObject* val, PyObject* self = nullptr);
 
     DLLLOCAL virtual QoreValue execValue(const QoreListNode* args, ExceptionSink* xsink) const;
 
@@ -53,6 +54,7 @@ public:
     }
 
 private:
+    mutable ReferenceHolder<QorePythonProgram> pypgm;
     QorePythonReferenceHolder val;
     QorePythonReferenceHolder self;
 };
