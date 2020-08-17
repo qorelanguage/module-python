@@ -111,6 +111,11 @@ PyObject* QoreLoader::getLoaderRef() {
     return *loader;
 }
 
+PyObject* QoreLoader::getLoader() {
+    assert(*loader);
+    return *loader;
+}
+
 void QoreLoader::dealloc(PyObject* self) {
     //PyObject_GC_UnTrack(self);
     Py_TYPE(self)->tp_free(self);
@@ -128,11 +133,12 @@ PyObject* QoreLoader::create_module(PyObject* self, PyObject* args) {
 }
 
 PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
+    assert(PyTuple_Check(args));
+#ifdef _QORE_PYTHON_DEBUG_EXEC_MODULE_ARGS
     QorePythonReferenceHolder argstr(PyObject_Repr(args));
     assert(PyUnicode_Check(*argstr));
-    //printd(5, "QoreLoader::exec_module() self: %p args: %s\n", self, PyUnicode_AsUTF8(*argstr));
-
-    assert(PyTuple_Check(args));
+    printd(5, "QoreLoader::exec_module() self: %p args: %s\n", self, PyUnicode_AsUTF8(*argstr));
+#endif
 
     // get module
     // returns a borrowed reference
@@ -147,25 +153,31 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
 
     printd(5, "QoreLoader::exec_module() mod: '%s'\n", name_str);
     QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
-    //QoreProgram* mod_pgm = QoreMetaPathFinder::getProgram(name_str);
     QoreProgram* mod_pgm = qore_python_pgm->getQoreProgram();
-    //printd(5, "QoreLoader::exec_module() qore_python_pgm: %p mod pgm: %p\n", qore_python_pgm, mod_pgm);
+    printd(5, "QoreLoader::exec_module() qore_python_pgm: %p mod pgm: %p\n", qore_python_pgm, mod_pgm);
 
     // get root namespace
     const QoreNamespace* ns;
     if (!strcmp(name_str, "qore")) {
         ns = mod_pgm->getQoreNS();
-    } else if (!strcmp(name_str, "__root__")) {
-        ns = mod_pgm->getRootNS();
     } else {
-        ns = getModuleRootNs(name_str, mod_pgm);
+        assert(!strncmp(name_str, "qore.", 5));
+        name_str += 5;
+        if (!strcmp(name_str, "__root__")) {
+            ns = mod_pgm->getRootNS();
+        } else {
+            ns = getModuleRootNs(name_str, mod_pgm);
+        }
     }
     assert(ns);
-    //printd(5, "QoreLoader::exec_module() found '%s' NS %p: '::%s'\n", name_str, ns, ns->getName());
+    printd(5, "QoreLoader::exec_module() found '%s' NS %p: '::%s'\n", name_str, ns, ns->getName());
 
     if (ns) {
         QoreProgramContextHelper pch(qore_python_pgm->getQoreProgram());
         qore_python_pgm->importQoreToPython(mod, *ns, name_str);
+        std::string nspath = ns->getPath();
+        QorePythonReferenceHolder py_path(PyUnicode_FromStringAndSize(nspath.c_str(), nspath.size()));
+        PyObject_SetAttrString(mod, "__path__", *py_path);
     }
 
     Py_INCREF(Py_None);

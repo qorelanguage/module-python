@@ -213,14 +213,33 @@ print(t.getTable().selectRow({"where": {"col1": "value"}}))
     When %Qore modules are imported, the lowest namespace created by the module is imported as the new Python module
     under the Python \c qore package.
 
-    See the next section about importing the entire root namespace.
+    See the next section about importing the special \c <tt><b>qore.__root__</b></tt> module.
+
+    @note Unlike <tt><b>qore.__root__</b></tt>, using any other submodule name other than <tt><b>__root__</b></tt>
+    after <tt><b>qore</b></tt> will cause a %Qore module to be loaded.  If the %Qore module cannot be found, an
+    appropriate exception is thrown.
 
     @subsection python_qore_root_imports qore.__root__ Module
 
     The special \c qore package has a special module called \c __root__ which represents the root namespace of the
     %Qore program object.
 
-    Importing \c qore.__root__ causes all symbols to be imported into the Python program.
+    Importing <tt><b>qore.__root__</b></tt> module causes all symbols to be imported into the Python program.
+
+    Because %Qore namespaces are imported as %Python modules, any existing %Qore namespace can be imported into a
+    %Python program using the <tt><b>qore.__root__</b></tt> module as in the following examples:
+
+    @code{.py}
+# import the ::Qore::Thread namespace
+import qore.__root__.Qore.Thread
+
+# import specific classes from the Qore library
+from qore.__root__.Qore.SQL import DatasourcePool, Datasource, SQLStatement
+    @endcode
+
+    @note Importing modules using <tt><b>qore.__root__</b></tt> does not cause any external %Qore modules to be
+    loaded; it just imports existing %Qore namespaces into the %Python program.  To load a %Qore module explicitly,
+    use a %Qore module name after <tt><b>qore</b></tt>.
 
     @section python_types Type Conversions Between Qore and Python
 

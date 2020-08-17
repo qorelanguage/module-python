@@ -152,14 +152,14 @@ PyObject* QoreMetaPathFinder::repr(PyObject* obj) {
 
 // class method functions
 PyObject* QoreMetaPathFinder::find_spec(PyObject* self, PyObject* args) {
-    /*
+#ifdef _QORE_PYTHON_DEBUG_FIND_SPEC_ARGS
     {
         // show args
         QorePythonReferenceHolder argstr(PyObject_Repr(args));
         assert(PyUnicode_Check(*argstr));
-        printd(5, "QoreMetaPathFinder::find_spec() args: %s\n", PyUnicode_AsUTF8(*argstr));
+        printd(0, "QoreMetaPathFinder::find_spec() args: %s\n", PyUnicode_AsUTF8(*argstr));
     }
-    */
+#endif
 
     // returns a borrowed reference
     PyObject* fullname = PyTuple_GetItem(args, 0);
@@ -178,8 +178,8 @@ PyObject* QoreMetaPathFinder::find_spec(PyObject* self, PyObject* args) {
     } else {
         QoreString mname(fname);
         if (mname.size() > 5 && mname.equalPartial("qore.")) {
-            mname.replace(0, 5, (const char*)nullptr);
-            PyObject* rv = tryLoadModule(mname);
+            //mname.replace(0, 5, (const char*)nullptr);
+            PyObject* rv = tryLoadModule(mname, mname.c_str() + 5);
             if (rv) {
                 return rv;
             }
@@ -202,9 +202,15 @@ PyObject* QoreMetaPathFinder::newModuleSpec(const QoreString& name, PyObject* lo
         PyTuple_SET_ITEM(*args, 1, loader);
     }
 
-    QorePythonReferenceHolder mod(PyObject_CallObject((PyObject*)*mod_spec_cls, *args));
-    assert(mod);
-    return mod.release();
+    QorePythonReferenceHolder kwargs(PyDict_New());
+    Py_INCREF(Py_True);
+    PyDict_SetItemString(*kwargs, "is_package", Py_True);
+    QorePythonReferenceHolder mod_spec(PyObject_Call((PyObject*)*mod_spec_cls, *args, *kwargs));
+
+    PyObject_SetAttrString(*mod_spec, "loader", QoreLoader::getLoader());
+
+    assert(mod_spec);
+    return mod_spec.release();
 }
 
 PyObject* QoreMetaPathFinder::getQorePackageModuleSpec() {
@@ -221,28 +227,46 @@ PyObject* QoreMetaPathFinder::getQorePackageModuleSpec() {
     return *qore_package;
 }
 
-PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& mname) {
-    printd(5, "QoreMetaPathFinder::tryLoadModule() load '%s'\n", mname.c_str());
+PyObject* QoreMetaPathFinder::getQoreRootModuleSpec(const QoreString& mname) {
+    QorePythonReferenceHolder mod_spec(newModuleSpec(mname, QoreLoader::getLoaderRef()));
 
-    if (mname == "__root__") {
-        return newModuleSpec(mname, QoreLoader::getLoaderRef());
+    QorePythonReferenceHolder search_locations(PyList_New(0));
+    // add namespaces as submodule search locations (NOTE: not functioanlly necessary it seems)
+    QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
+    const RootQoreNamespace* rns = qore_python_pgm->getQoreProgram()->getRootNS();
+    QoreNamespaceNamespaceIterator ni(*rns);
+    while (ni.next()) {
+        const QoreNamespace& ns = ni.get();
+        QoreStringMaker mod_name(ns.getName());
+        //printd(5, "QoreMetaPathFinder::getQoreRootModuleSpec(): adding '%s'\n", mod_name.c_str());
+        QorePythonReferenceHolder name(PyUnicode_FromStringAndSize(mod_name.c_str(), mod_name.size()));
+        PyList_Append(*search_locations, *name);
+    }
+    PyObject_SetAttrString(*mod_spec, "submodule_search_locations", *search_locations);
+
+    return mod_spec.release();
+}
+
+PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& full_name, const char* mod_name) {
+    //printd(5, "QoreMetaPathFinder::tryLoadModule() load '%s' (%s)\n", full_name.c_str(), mod_name);
+    if (!strcmp(mod_name, "__root__")) {
+        return getQoreRootModuleSpec(full_name);
     }
 
     QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
     ExceptionSink xsink;
-    if (ModuleManager::runTimeLoadModule(mname.c_str(), qore_python_pgm->getQoreProgram(), &xsink)) {
+    if (ModuleManager::runTimeLoadModule(mod_name, qore_python_pgm->getQoreProgram(), &xsink)) {
+#ifdef _QORE_PYTHON_DEBUG_MODULE_ERRORS
+        // the exception message is lost, to get it for debugging purposes, enable this block
         const char* err = xsink.getExceptionErr().get<const QoreStringNode>()->c_str();
         const char* desc = xsink.getExceptionDesc().get<const QoreStringNode>()->c_str();
-        QoreFile f;
-        f.open("/tmp/err.txt", O_CREAT | O_WRONLY | O_TRUNC, 0644);
-        QoreStringMaker msg("%s: %s", err, desc);
-        f.write(msg.c_str(), msg.size(), &xsink);
-        f.close();
+        printf("%s: %s\n", err, desc);
+#endif
         // ignore exceptions and continue
         xsink.clear();
         return nullptr;
     }
     assert(!xsink);
 
-    return newModuleSpec(mname, QoreLoader::getLoaderRef());
+    return newModuleSpec(full_name, QoreLoader::getLoaderRef());
 }

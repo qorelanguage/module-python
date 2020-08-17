@@ -44,6 +44,9 @@ public:
     //! returns the loader object with the reference count incremented
     DLLLOCAL static PyObject* getLoaderRef();
 
+    //! returns the loader object
+    DLLLOCAL static PyObject* getLoader();
+
     //! type functions
     DLLLOCAL static void dealloc(PyObject* self);
     DLLLOCAL static PyObject* repr(PyObject* obj);
