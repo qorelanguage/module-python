@@ -63,7 +63,8 @@ private:
     DLLLOCAL static QorePythonManualReferenceHolder mod_spec_cls;
 
     DLLLOCAL static PyObject* getQorePackageModuleSpec();
-    DLLLOCAL static PyObject* tryLoadModule(const QoreString& mname);
+    DLLLOCAL static PyObject* getQoreRootModuleSpec(const QoreString& mname);
+    DLLLOCAL static PyObject* tryLoadModule(const QoreString& full_name, const char* mod_name);
 };
 
 class PythonThreadStateHelper : QorePythonGilHelper {
