@@ -32,7 +32,7 @@
 static constexpr const char* QCLASS_KEY = "__$QCLS__";
 
 static int qore_exception_init(PyObject* self, PyObject* args, PyObject* kwds) {
-    QorePythonReferenceHolder argstr(PyObject_Repr(args));
+    //QorePythonReferenceHolder argstr(PyObject_Repr(args));
     //printd(5, "qore_exception_init() self: %p args: %s\n", self, PyUnicode_AsUTF8(*argstr));
 
     assert(PyTuple_Check(args));
@@ -354,8 +354,7 @@ PyObject* PythonQoreClass::wrap(QoreObject* obj) {
 }
 
 PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* args) {
-    QorePythonReferenceHolder argstr(PyObject_Repr(args));
-    assert(PyUnicode_Check(*argstr));
+    //QorePythonReferenceHolder argstr(PyObject_Repr(args));
     // get method
     const QoreMethod* m = reinterpret_cast<const QoreMethod*>(PyCapsule_GetPointer(method_capsule, nullptr));
     assert(PyTuple_Check(args));
@@ -413,12 +412,14 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
 }
 
 PyObject* PythonQoreClass::exec_qore_static_method(PyObject* method_capsule, PyObject* args) {
-    QorePythonReferenceHolder argstr(PyObject_Repr(args));
-    assert(PyUnicode_Check(*argstr));
     // get method
     const QoreMethod* m = reinterpret_cast<const QoreMethod*>(PyCapsule_GetPointer(method_capsule, nullptr));
     assert(PyTuple_Check(args));
+#if 0
+    QorePythonReferenceHolder argstr(PyObject_Repr(args));
+    assert(PyUnicode_Check(*argstr));
     printd(5, "PythonQoreClass::exec_qore_static_method() %s::%s() args: %s\n", m->getClassName(), m->getName(), PyUnicode_AsUTF8(*argstr));
+#endif
 
     return exec_qore_static_method(*m, args);
 }
@@ -448,7 +449,7 @@ PyObject* PythonQoreClass::exec_qore_static_method(const QoreMethod& m, PyObject
 int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
     assert(PyQoreObject_Check(self));
     assert(PyTuple_Check(args));
-    QorePythonReferenceHolder argstr(PyObject_Repr(args));
+    //QorePythonReferenceHolder argstr(PyObject_Repr(args));
     //printd(5, "PythonQoreClass::py_init() self: %p '%s' args: %p (%d: %s) kwds: %p\n", self, Py_TYPE(self)->tp_name, args, (int)PyTuple_Size(args), PyUnicode_AsUTF8(*argstr), kwds);
 
     QorePythonProgram* qore_python_pgm = QorePythonProgram::getExecutionContext();
@@ -479,7 +480,7 @@ int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
 
     PyQoreObject* pyself = reinterpret_cast<PyQoreObject*>(self);
     // returns a borrowed reference
-    QoreObject* qobj = QorePythonImplicitQoreObjectHelper::getQoreObject();
+    QoreObject* qobj = QorePythonImplicitQoreArgHelper::getQoreObject();
     //printd(5, "PythonQoreClass::py_init() self: %p py_cls: '%s' qcls: '%s' cq: '%s' qobj: %p args: %p\n", self, type->tp_name, qcls->getName(), constructor_cls->getName(), qobj, args);
     if (qobj) {
         qobj->tRef();

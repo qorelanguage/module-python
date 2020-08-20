@@ -29,6 +29,7 @@
 #include "PythonQoreClass.h"
 #include "QoreMetaPathFinder.h"
 #include "PythonCallableCallReferenceNode.h"
+#include "PythonQoreCallable.h"
 
 #include <structmember.h>
 #include <frameobject.h>
@@ -1447,6 +1448,11 @@ PyObject* QorePythonProgram::getPythonDateTime(ExceptionSink* xsink, const DateT
         dt->getSecond(), dt->getMicrosecond());
 }
 
+PyObject* QorePythonProgram::getPythonCallable(ExceptionSink* xsink, const ResolvedCallReferenceNode* call) {
+    QorePythonImplicitQoreArgHelper qpiqoh((void*)call);
+    return PyObject_CallObject((PyObject*)&PythonQoreCallable_Type, nullptr);
+}
+
 PyObject* QorePythonProgram::getPythonValue(QoreValue val, ExceptionSink* xsink) {
     //printd(5, "QorePythonProgram::getPythonValue() type '%s'\n", val.getFullTypeName());
     switch (val.getType()) {
@@ -1484,6 +1490,11 @@ PyObject* QorePythonProgram::getPythonValue(QoreValue val, ExceptionSink* xsink)
             return dt->isRelative()
                 ? getPythonDelta(xsink, dt)
                 : getPythonDateTime(xsink, dt);
+        }
+
+        case NT_RUNTIME_CLOSURE:
+        case NT_FUNCREF: {
+            return getPythonCallable(xsink, val.get<const ResolvedCallReferenceNode>());
         }
 
         case NT_OBJECT: {
@@ -2121,7 +2132,7 @@ void QorePythonProgram::execPythonConstructor(const QoreMethod& meth, PyObject* 
     assert(PyType_Check(pycls));
 
     // save Qore object for any Python class that needs it
-    QorePythonImplicitQoreObjectHelper qpiqoh(self);
+    QorePythonImplicitQoreArgHelper qpiqoh(self);
     QorePythonReferenceHolder pyobj(pypgm->callPythonInternal(xsink, pycls, args));
     if (*xsink) {
         return;

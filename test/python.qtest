@@ -83,6 +83,9 @@ def get_cm():
 
 def get_sm():
     return c.sm
+
+def test_code(code):
+    code(1)
         ", "test.py");
 
         code c = p.callFunction("get_method");
@@ -106,6 +109,13 @@ def get_sm():
 
         background bg(c);
         assertEq(3, q.get());
+
+        int i;
+        code inc = sub(int d) {
+            i += d;
+        };
+        p.callFunction("test_code", inc);
+        assertEq(1, i);
     }
 
     pythonImportTest() {

@@ -315,22 +315,26 @@ DLLLOCAL extern QoreNamespace PNS;
 DLLLOCAL extern int python_u_tld_key;
 DLLLOCAL extern int python_qobj_key;
 
-class QorePythonImplicitQoreObjectHelper {
+class QorePythonImplicitQoreArgHelper {
 public:
-    DLLLOCAL QorePythonImplicitQoreObjectHelper(QoreObject* obj)
-        : old_obj((QoreObject*)q_swap_thread_local_data(python_qobj_key, (void*)obj)) {
+    DLLLOCAL QorePythonImplicitQoreArgHelper(void* obj)
+        : old_ptr(q_swap_thread_local_data(python_qobj_key, (void*)obj)) {
     }
 
-    DLLLOCAL ~QorePythonImplicitQoreObjectHelper() {
-        q_swap_thread_local_data(python_qobj_key, (void*)old_obj);
+    DLLLOCAL ~QorePythonImplicitQoreArgHelper() {
+        q_swap_thread_local_data(python_qobj_key, old_ptr);
     }
 
     DLLLOCAL static QoreObject* getQoreObject() {
         return (QoreObject*)q_get_thread_local_data(python_qobj_key);
     }
 
+    DLLLOCAL static ResolvedCallReferenceNode* getQoreCallable() {
+        return (ResolvedCallReferenceNode*)q_get_thread_local_data(python_qobj_key);
+    }
+
 private:
-    QoreObject* old_obj;
+    void* old_ptr;
 };
 
 #endif
