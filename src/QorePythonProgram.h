@@ -323,6 +323,9 @@ public:
     //! Returns a Python string for the given Qore absolute date/time value
     DLLLOCAL static PyObject* getPythonDateTime(ExceptionSink* xsink, const DateTime* dt);
 
+    //! Returns a Python callable object for the given Qore closure / call reference
+    DLLLOCAL static PyObject* getPythonCallable(ExceptionSink* xsink, const ResolvedCallReferenceNode* call);
+
     //! Returns a new reference
     DLLLOCAL PyObject* getPythonValue(QoreValue val, ExceptionSink* xsink);
 

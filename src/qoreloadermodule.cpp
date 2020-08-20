@@ -24,6 +24,7 @@
 #include "QoreLoader.h"
 #include "QoreMetaPathFinder.h"
 #include "QorePythonProgram.h"
+#include "PythonQoreCallable.h"
 
 QorePythonProgram* qore_python_pgm = nullptr;
 
@@ -153,6 +154,10 @@ static int slot_qoreloader_exec(PyObject *m) {
         }
 
         if (PyType_Ready(&PythonQoreObjectBase_Type) < 0) {
+            return -1;
+        }
+
+        if (PyType_Ready(&PythonQoreCallable_Type) < 0) {
             return -1;
         }
 
