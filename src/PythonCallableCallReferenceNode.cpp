@@ -33,7 +33,7 @@
 #include "QorePythonProgram.h"
 
 PythonCallableCallReferenceNode::PythonCallableCallReferenceNode(QorePythonProgram* pypgm, PyObject* val, PyObject* self)
-        : pypgm(pypgm, nullptr), val(val), self(self) {
+        : pypgm(pypgm), val(val), self(self) {
 }
 
 QoreValue PythonCallableCallReferenceNode::execValue(const QoreListNode* args, ExceptionSink* xsink) const {

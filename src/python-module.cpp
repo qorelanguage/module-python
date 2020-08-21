@@ -174,6 +174,8 @@ static QoreStringNode* python_module_init() {
     // ensure that runtime version matches compiled version
     check_python_version();
 
+    init_global_qore_python_pgm();
+
     if (QorePythonProgram::staticInit()) {
         throw QoreStandardException("PYTHON-MODULE-ERROR", "failed to initialize \"python\" module");
     }
@@ -210,6 +212,10 @@ static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns) {
 }
 
 static void python_module_delete() {
+    if (qore_python_pgm) {
+        qore_python_pgm->doDeref();
+        qore_python_pgm = nullptr;
+    }
     if (python_needs_shutdown) {
         PyThreadState_Swap(nullptr);
         PyEval_AcquireThread(mainThreadState);

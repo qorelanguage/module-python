@@ -57,7 +57,7 @@ struct QorePythonThreadStateInfo {
     bool owns_state;
 };
 
-class QorePythonProgram : public AbstractPrivateData, public AbstractQoreProgramExternalData {
+class QorePythonProgram : public AbstractQoreProgramExternalData {
     friend class PythonModuleContextHelper;
 public:
     //! Python context using the main interpreter
@@ -83,8 +83,10 @@ public:
     }
 
     DLLLOCAL virtual void doDeref() {
+        printd(5, "QorePythonProgram::doDeref() this: %p\n", this);
         ExceptionSink xsink;
-        deref(&xsink);
+        deleteIntern(&xsink);
+        weakDeref();
         if (xsink) {
             throw QoreXSinkException(xsink);
         }
@@ -222,14 +224,6 @@ public:
         return qpgm;
     }
 
-    using AbstractPrivateData::deref;
-    DLLLOCAL virtual void deref(ExceptionSink* xsink) {
-        if (ROdereference()) {
-            deleteIntern(xsink);
-            delete this;
-        }
-    }
-
     //! Saves a unique string
     DLLLOCAL const char* saveString(const char* str) {
         std::string sstr = str;
@@ -292,6 +286,18 @@ public:
 
     //! Creates ot retrieves a QoreClass for the given Python type
     DLLLOCAL QoreClass* getCreateQorePythonClass(ExceptionSink* xsink, PyTypeObject* type, int flags = 0);
+
+    //! Increment the weak ref count
+    DLLLOCAL void weakRef() {
+        weak_refs.ROreference();
+    }
+
+    //! Decrement the weak ref count
+    DLLLOCAL void weakDeref() {
+        if (weak_refs.ROdereference()) {
+            delete this;
+        }
+    }
 
     //! Returns a Qore binary from a Python Bytes object
     DLLLOCAL static BinaryNode* getQoreBinaryFromBytes(PyObject* val);
@@ -409,6 +415,9 @@ protected:
 
     typedef std::vector<PyMethodDef*> meth_vec_t;
     meth_vec_t meth_vec;
+
+    //! for weak refs
+    QoreReferenceCounter weak_refs;
 
     //! Saves Qore objects in thread-local data
     DLLLOCAL int saveQoreObjectFromPythonDefault(const QoreValue& rv, ExceptionSink& xsink);
@@ -531,6 +540,43 @@ protected:
 
     //! Creates a QoreProgram object owned by this object
     DLLLOCAL void createQoreProgram();
+};
+
+class QorePythonProgramData : public AbstractPrivateData, public QorePythonProgram {
+public:
+   DLLLOCAL QorePythonProgramData(const QoreString& source_code, const QoreString& source_label, int start,
+        ExceptionSink* xsink) : QorePythonProgram(source_code, source_label, start, xsink) {
+        //printd(5, "QorePythonProgramData::QorePythonProgramData() this: %p\n", this);
+    }
+
+    using AbstractPrivateData::deref;
+    DLLLOCAL virtual void deref(ExceptionSink* xsink) {
+        if (ROdereference()) {
+            deleteIntern(xsink);
+            weakDeref();
+        }
+    }
+
+private:
+    DLLLOCAL ~QorePythonProgramData() {
+    }
+};
+
+class QorePythonProgramWeakReferenceHolder {
+public:
+    DLLLOCAL QorePythonProgramWeakReferenceHolder(QorePythonProgram* py_pgm) : py_pgm(py_pgm) {
+    }
+
+    DLLLOCAL ~QorePythonProgramWeakReferenceHolder() {
+        py_pgm->weakDeref();
+    }
+
+    DLLLOCAL QorePythonProgram* operator->() {
+        return py_pgm;
+    }
+
+private:
+    QorePythonProgram* py_pgm;
 };
 
 class PythonModuleContextHelper {
