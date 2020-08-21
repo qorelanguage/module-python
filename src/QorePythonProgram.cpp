@@ -232,6 +232,8 @@ void QorePythonProgram::createQoreProgram() {
     pyns = PNS.copy();
     qpgm->getRootNS()->addNamespace(pyns);
     qpgm->setExternalData(QORE_PYTHON_MODULE_NAME, this);
+
+    //printd(5, "QorePythonProgram::createQoreProgram() this: %p pgm: %p rootns: %p\n", this, qpgm, qpgm->getRootNS());
 }
 
 QorePythonProgram* QorePythonProgram::getExecutionContext() {
@@ -272,7 +274,7 @@ int QorePythonProgram::staticInit() {
 }
 
 void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
-    printd(0, "QorePythonProgram::deleteIntern() this: %p\n", this);
+    //printd(5, "QorePythonProgram::deleteIntern() this: %p\n", this);
 
     if (qpgm && owns_qore_program_ref) {
         // remove the external data before dereferencing

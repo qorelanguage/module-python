@@ -57,18 +57,7 @@ struct QorePythonThreadStateInfo {
     bool owns_state;
 };
 
-class QorePythonProgramDebugBase {
-public:
-    DLLLOCAL QorePythonProgramDebugBase() {
-        printd(0, "QorePythonProgramDebugBase::QorePythonProgramDebugBase() this: %p\n", this);
-    }
-
-    DLLLOCAL ~QorePythonProgramDebugBase() {
-        printd(0, "QorePythonProgramDebugBase::~QorePythonProgramDebugBase() this: %p\n", this);
-    }
-};
-
-class QorePythonProgram : /*public AbstractPrivateData,*/ public AbstractQoreProgramExternalData, QorePythonProgramDebugBase {
+class QorePythonProgram : public AbstractQoreProgramExternalData {
     friend class PythonModuleContextHelper;
 public:
     //! Python context using the main interpreter
@@ -94,13 +83,10 @@ public:
     }
 
     DLLLOCAL virtual void doDeref() {
-        //printd(0, "QorePythonProgram::doDeref() this: %p %d -> %d\n", this, reference_count(), reference_count() - 1);
-        printd(0, "QorePythonProgram::doDeref() this: %p\n", this);
+        printd(5, "QorePythonProgram::doDeref() this: %p\n", this);
         ExceptionSink xsink;
-        // XXX
         deleteIntern(&xsink);
         weakDeref();
-        //deref(&xsink);
         if (xsink) {
             throw QoreXSinkException(xsink);
         }
@@ -556,11 +542,11 @@ protected:
     DLLLOCAL void createQoreProgram();
 };
 
-class QorePythonProgramData : public QorePythonProgram, public AbstractPrivateData {
+class QorePythonProgramData : public AbstractPrivateData, public QorePythonProgram {
 public:
    DLLLOCAL QorePythonProgramData(const QoreString& source_code, const QoreString& source_label, int start,
         ExceptionSink* xsink) : QorePythonProgram(source_code, source_label, start, xsink) {
-        printd(0, "QorePythonProgramData::QorePythonProgramData() this: %p\n", this);
+        //printd(5, "QorePythonProgramData::QorePythonProgramData() this: %p\n", this);
     }
 
     using AbstractPrivateData::deref;

@@ -44,6 +44,8 @@ PythonProgram::constructor(string source_code, string source_label) {
     if (*xsink) {
         return;
     }
+
+    //printd(5, "PythonProgram::constructor() created %p\n", *pp);
     self->setPrivate(CID_PYTHONPROGRAM, pp.release());
 }
 
