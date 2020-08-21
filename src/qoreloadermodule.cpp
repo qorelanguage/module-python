@@ -95,8 +95,7 @@ void qoreloader_free(void* obj) {
         printd(5, "qoreloader_free() obj: %p qore_needs_shutdown: %d\n", obj, qore_needs_shutdown);
 
         if (qore_python_pgm) {
-            ExceptionSink xsink;
-            qore_python_pgm->deref(&xsink);
+            qore_python_pgm->doDeref();
             qore_python_pgm = nullptr;
         }
 
@@ -144,14 +143,7 @@ static int slot_qoreloader_exec(PyObject *m) {
             }
         }
 
-        if (!qore_python_pgm) {
-            // save and restore the Python thread state while initializing the Qore python module
-            PythonThreadStateHelper ptsh;
-
-            QoreThreadAttachHelper attach_helper;
-            attach_helper.attach();
-            qore_python_pgm = new QorePythonProgram;
-        }
+        init_global_qore_python_pgm();
 
         if (PyType_Ready(&PythonQoreObjectBase_Type) < 0) {
             return -1;
@@ -173,6 +165,17 @@ static int slot_qoreloader_exec(PyObject *m) {
     QoreMetaPathFinder::setupModules();
 
     return 0;
+}
+
+void init_global_qore_python_pgm() {
+    if (!qore_python_pgm) {
+        // save and restore the Python thread state while initializing the Qore python module
+        PythonThreadStateHelper ptsh;
+
+        QoreThreadAttachHelper attach_helper;
+        attach_helper.attach();
+        qore_python_pgm = new QorePythonProgram;
+    }
 }
 
 PyMODINIT_FUNC PyInit_qoreloader() {

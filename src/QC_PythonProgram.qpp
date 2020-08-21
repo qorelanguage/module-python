@@ -27,7 +27,7 @@
 //! Program for embedding and executing Python code
 /**
 */
-qclass PythonProgram [arg=QorePythonProgram* pp; ns=Python; dom=EMBEDDED_LOGIC];
+qclass PythonProgram [arg=QorePythonProgramData* pp; ns=Python; dom=EMBEDDED_LOGIC];
 
 //! Creates the object and parses and runs the given source code
 /** @param source_code the Python source to parse and compile
@@ -39,7 +39,7 @@ qclass PythonProgram [arg=QorePythonProgram* pp; ns=Python; dom=EMBEDDED_LOGIC];
     - Exceptions parsing, compiling, or running the Python code are thrown according to @ref python_exceptions
 */
 PythonProgram::constructor(string source_code, string source_label) {
-    ReferenceHolder<QorePythonProgram> pp(new QorePythonProgram(*source_code, *source_label, Py_file_input, xsink),
+    ReferenceHolder<QorePythonProgramData> pp(new QorePythonProgramData(*source_code, *source_label, Py_file_input, xsink),
         xsink);
     if (*xsink) {
         return;

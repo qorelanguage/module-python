@@ -272,7 +272,7 @@ int QorePythonProgram::staticInit() {
 }
 
 void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
-    printd(5, "QorePythonProgram::deleteIntern() this: %p\n", this);
+    printd(0, "QorePythonProgram::deleteIntern() this: %p\n", this);
 
     if (qpgm && owns_qore_program_ref) {
         // remove the external data before dereferencing
@@ -291,7 +291,7 @@ void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
         assert(interpreter);
     }
 
-    if ((interpreter && owns_interpreter) || module || python_code || !py_cls_map.empty() || !meth_vec.empty()) {
+    if ((interpreter && owns_interpreter)/* || module || python_code || !py_cls_map.empty() || !meth_vec.empty()*/) {
         {
             QorePythonHelper qph(this);
 
@@ -1217,7 +1217,7 @@ DateTimeNode* QorePythonProgram::getQoreDateTimeFromTime(PyObject* val) {
 ResolvedCallReferenceNode* QorePythonProgram::getQoreCallRefFromFunc(ExceptionSink* xsink, PyObject* val) {
     assert(PyFunction_Check(val));
     Py_INCREF(val);
-    ref();
+    weakRef();
     return new PythonCallableCallReferenceNode(this, val);
 }
 
@@ -1226,7 +1226,7 @@ ResolvedCallReferenceNode* QorePythonProgram::getQoreCallRefFromMethod(Exception
     PyMethodObject* m = reinterpret_cast<PyMethodObject*>(val);
     Py_INCREF(m->im_func);
     Py_INCREF(m->im_self);
-    ref();
+    weakRef();
     // NOTE: classmethods will have their "self" arg = the class / type
     return new PythonCallableCallReferenceNode(this, m->im_func, PyType_Check(m->im_self) ? nullptr : m->im_self);
 }

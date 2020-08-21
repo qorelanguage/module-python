@@ -54,7 +54,7 @@ public:
     }
 
 private:
-    mutable ReferenceHolder<QorePythonProgram> pypgm;
+    mutable QorePythonProgramWeakReferenceHolder pypgm;
     QorePythonReferenceHolder val;
     QorePythonReferenceHolder self;
 };
