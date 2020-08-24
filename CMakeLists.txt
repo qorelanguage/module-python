@@ -17,12 +17,8 @@ if (UNIX AND NOT APPLE)
     set(LINUX TRUE)
 endif()
 
-if (LINUX)
-    # thread-state mamangement only works on Linux with Python 3.6
-    set(MIN_PY_MINOR_VER 6)
-else()
-    set(MIN_PY_MINOR_VER 7)
-endif()
+# thread-state mamangement only works witb Python 3.7+
+set(MIN_PY_MINOR_VER 7)
 
 find_package(Qore 0.9.5 REQUIRED)
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)

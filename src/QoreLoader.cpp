@@ -169,10 +169,9 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
             ns = getModuleRootNs(name_str, mod_pgm);
         }
     }
-    assert(ns);
-    printd(5, "QoreLoader::exec_module() found '%s' NS %p: '::%s'\n", name_str, ns, ns->getName());
 
     if (ns) {
+        printd(5, "QoreLoader::exec_module() found '%s' NS %p: '::%s'\n", name_str, ns, ns->getName());
         QoreProgramContextHelper pch(qore_python_pgm->getQoreProgram());
         qore_python_pgm->importQoreToPython(mod, *ns, name_str);
         std::string nspath = ns->getPath();
@@ -189,26 +188,43 @@ const QoreNamespace* QoreLoader::getModuleRootNs(const char* name, QoreProgram* 
     mod_dep_map_t mod_dep_map;
 
     // otherwise look for a public namespace and then find the ealiest ancestor provided by the module
-    const RootQoreNamespace* root_ns = mod_pgm->getRootNS();
-    QoreNamespaceConstIterator i(*root_ns);
+    const QoreNamespace* root_ns = mod_pgm->getRootNS();
+    const QoreNamespace* rv = getModuleRootNsIntern(name, *root_ns, *all_mod_info, mod_dep_map, true);
+    if (!rv) {
+        rv = getModuleRootNsIntern(name, *root_ns, *all_mod_info, mod_dep_map, false);
+    }
+    return rv;
+}
+
+const QoreNamespace* QoreLoader::getModuleRootNsIntern(const char* name, const QoreNamespace& root_ns,
+        const QoreHashNode* all_mod_info, mod_dep_map_t& mod_dep_map, bool check_mod) {
+    QoreNamespaceConstIterator i(root_ns);
     while (i.next()) {
         const QoreNamespace* ns = &i.get();
-        const char* mod = ns->getModuleName();
-        if (mod && !strcmp(mod, name)) {
-            printd(5, "QoreLoader::getModuleRootNs() found '%s'\n", name);
-            // try to find parent ns
-            while (true) {
-                const QoreNamespace* parent = ns->getParent();
-                if (!isModule(parent, name, *all_mod_info, mod_dep_map)) {
-                    printd(5, "QoreLoader::getModuleRootNs() invalid  parent '%s'\n", parent->getName());
-                    break;
-                }
-                ns = parent;
-                printd(5, "QoreLoader::getModuleRootNs() got parent '%s'\n", ns->getName());
+        if (!check_mod) {
+            if (!strcmp(ns->getName(), name)) {
+                return ns;
             }
-            printd(5, "QoreLoader::getModuleRootNs() returning '%s'\n", ns->getName());
-            return ns;
+            continue;
         }
+
+        const char* mod = ns->getModuleName();
+        if (!mod || strcmp(mod, name)) {
+            continue;
+        }
+        //printd(5, "QoreLoader::getModuleRootNs('%s') found\n", name);
+        // try to find parent ns
+        while (true) {
+            const QoreNamespace* parent = ns->getParent();
+            if (!isModule(parent, name, all_mod_info, mod_dep_map)) {
+                //printd(5, "QoreLoader::getModuleRootNs('%s') invalid parent '%s'\n", name, parent->getName());
+                break;
+            }
+            ns = parent;
+            //printd(5, "QoreLoader::getModuleRootNs('%s') got parent '%s'\n", name, ns->getName());
+        }
+        //printd(5, "QoreLoader::getModuleRootNs('%s') returning '%s'\n", name, ns->getName());
+        return ns;
     }
     return nullptr;
 }

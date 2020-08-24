@@ -27,6 +27,8 @@
 #include <pystate.h>
 #include <dynamic_annotations.h>
 
+#error unimplemented - cannot support Python < 3.7
+
 #define _Py_atomic_load_relaxed(ATOMIC_VAL) \
     _Py_atomic_load_explicit(ATOMIC_VAL, _Py_memory_order_relaxed)
 
@@ -168,6 +170,17 @@ DLLLOCAL extern int autoTLSkey;
 DLLLOCAL static void _qore_PyGILState_SetThisThreadState(PyThreadState* state) {
     PyThread_set_key_value(autoTLSkey, (void*)state);
 }
+
+/*
+DLLLOCAL static bool _qore_PyCeval_GetGilLockedStatus() {
+}
+
+DLLLOCAL static PyThreadState* _qore_PyCeval_GetThreadState() {
+}
+
+DLLLOCAL static PyThreadState* _qore_PyCeval_SwapThreadState(PyThreadState* gil_state) {
+}
+*/
 
 #define _QORE_PYTHON_REENABLE_GIL_CHECK { assert(!_PyGILState_check_enabled); _PyGILState_check_enabled = 1; }
 

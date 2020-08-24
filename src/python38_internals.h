@@ -313,6 +313,36 @@ _Py_ANNOTATE_MEMORY_ORDER(const volatile void *address, _Py_memory_order order)
         _Py_ANNOTATE_IGNORE_READS_END(); \
         result; \
     })
+
+#define _Py_atomic_store_explicit(ATOMIC_VAL, NEW_VAL, ORDER) \
+    __extension__ ({ \
+        __typeof__(ATOMIC_VAL) atomic_val = ATOMIC_VAL; \
+        __typeof__(atomic_val->_value) new_val = NEW_VAL;\
+        volatile __typeof__(new_val) *volatile_data = &atomic_val->_value; \
+        _Py_memory_order order = ORDER; \
+        _Py_ANNOTATE_MEMORY_ORDER(atomic_val, order); \
+        \
+        /* Perform the operation. */ \
+        _Py_ANNOTATE_IGNORE_WRITES_BEGIN(); \
+        switch(order) { \
+        case _Py_memory_order_release: \
+            _Py_atomic_signal_fence(_Py_memory_order_release); \
+            /* fallthrough */ \
+        case _Py_memory_order_relaxed: \
+            *volatile_data = new_val; \
+            break; \
+        \
+        case _Py_memory_order_acquire: \
+        case _Py_memory_order_acq_rel: \
+        case _Py_memory_order_seq_cst: \
+            __asm__ volatile("xchg %0, %1" \
+                         : "+r"(new_val) \
+                         : "m"(atomic_val->_value) \
+                         : "memory"); \
+            break; \
+        } \
+        _Py_ANNOTATE_IGNORE_WRITES_END(); \
+    })
 #elif defined(__GNUC__) && (defined(__arm__))
 # include <atomic>
 
@@ -337,17 +367,48 @@ typedef enum _Py_memory_order {
 
 #define _Py_atomic_load_explicit(ATOMIC_VAL, ORDER)   \
     atomic_load_explicit(&(ATOMIC_VAL)->_value, ORDER)
+
+#define atomic_store_explicit(PTR, VAL, MO)                             \
+  __extension__                                                         \
+  ({                                                                    \
+    __auto_type __atomic_store_ptr = (PTR);                             \
+    __typeof__ (*__atomic_store_ptr) __atomic_store_tmp = (VAL);        \
+    __atomic_store (__atomic_store_ptr, &__atomic_store_tmp, (MO));     \
+  })
+
+#define _Py_atomic_store_explicit(ATOMIC_VAL, NEW_VAL, ORDER)   \
+    atomic_store_explicit(&(ATOMIC_VAL)->_value, NEW_VAL, ORDER)
 #endif
 
 #define _Py_atomic_load_relaxed(ATOMIC_VAL) \
     _Py_atomic_load_explicit((ATOMIC_VAL), _Py_memory_order_relaxed)
 
+#define _Py_atomic_store_relaxed(ATOMIC_VAL, NEW_VAL) \
+    _Py_atomic_store_explicit((ATOMIC_VAL), (NEW_VAL), _Py_memory_order_relaxed)
+
+// equivalent to: PyThreadState_GET() == _PyThreadState_GET() == _PyRuntimeState_GetThreadState(&_PyRuntime.gilstate.tstate_current)
 DLLLOCAL static PyThreadState* _qore_PyRuntimeGILState_GetThreadState() {
     return reinterpret_cast<PyThreadState*>(_Py_atomic_load_relaxed(&_PyRuntime.gilstate.tstate_current));
 }
 
 DLLLOCAL static void _qore_PyGILState_SetThisThreadState(PyThreadState* state) {
     PyThread_tss_set(&_PyRuntime.gilstate.autoTSSkey, (void*)state);
+}
+
+DLLLOCAL static bool _qore_PyCeval_GetGilLockedStatus() {
+    return (bool)(_Py_atomic_load_relaxed(&_PyRuntime.ceval.gil.locked));
+}
+
+DLLLOCAL static PyThreadState* _qore_PyCeval_GetThreadState() {
+    return reinterpret_cast<PyThreadState*>(_Py_atomic_load_relaxed(&_PyRuntime.ceval.gil.last_holder));
+}
+
+DLLLOCAL static PyThreadState* _qore_PyCeval_SwapThreadState(PyThreadState* gil_state) {
+    PyThreadState* old = reinterpret_cast<PyThreadState*>(_Py_atomic_load_relaxed(&_PyRuntime.ceval.gil.last_holder));
+    if (old != gil_state) {
+        _Py_atomic_store_relaxed(&_PyRuntime.ceval.gil.last_holder, (uintptr_t)gil_state);
+    }
+    return old;
 }
 
 #define _QORE_PYTHON_REENABLE_GIL_CHECK { assert(!_PyRuntime.gilstate.check_enabled); _PyRuntime.gilstate.check_enabled = 1; }

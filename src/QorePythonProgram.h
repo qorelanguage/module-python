@@ -357,6 +357,12 @@ public:
     //! Delete thread local data when a thread terminates
     DLLLOCAL static void pythonThreadCleanup(void*);
 
+    //! Does this thread hold the GIL?
+    DLLLOCAL static bool haveGil();
+
+    //! Does this thread hold the GIL with the given thread state?
+    DLLLOCAL static bool haveGil(PyThreadState* tstate);
+
 protected:
     PyInterpreterState* interpreter;
     QorePythonReferenceHolder module;
@@ -405,6 +411,15 @@ protected:
     //! map of QorePythonProgram objects to thread states for the current thread
     typedef std::map<const QorePythonProgram*, py_tid_map_t> py_thr_map_t;
     DLLLOCAL static py_thr_map_t py_thr_map;
+    //! for lookups from TID to thread state
+    typedef std::set<PyThreadState*> py_thr_set_t;
+    typedef std::map<int, py_thr_set_t> py_global_tid_map_t;
+    DLLLOCAL static py_global_tid_map_t py_global_tid_map;
+
+    // for local program thread management
+    mutable int pgm_thr_cnt = 0;
+    mutable int pgm_thr_waiting = 0;
+    mutable QoreCondition pgm_thr_cond;
 
     // call reference for saving object references
     mutable ReferenceHolder<ResolvedCallReferenceNode> save_object_callback;
@@ -484,6 +499,9 @@ protected:
     //! Returns a Qore call reference from a Python method
     DLLLOCAL ResolvedCallReferenceNode* getQoreCallRefFromMethod(ExceptionSink* xsink, PyObject* val);
 
+    //! Waits for all threads to complete; must be called in the py_thr_lck lock
+    DLLLOCAL void waitForThreadsIntern();
+
     DLLLOCAL static void execPythonConstructor(const QoreMethod& meth, PyObject* pycls, QoreObject* self,
         const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
     DLLLOCAL static void execPythonDestructor(const QorePythonClass& thisclass, PyObject* pycls, QoreObject* self,
@@ -526,8 +544,41 @@ protected:
     DLLLOCAL int createInterpreter(ExceptionSink* xsink);
 
     //! Returns the Python thread state for this interpreter
-    DLLLOCAL PyThreadState* getThreadState() const {
+    DLLLOCAL PyThreadState* getAcquireThreadState() const {
         AutoLocker al(py_thr_lck);
+        ++pgm_thr_cnt;
+        return getThreadStateIntern();
+    }
+
+    //! Returns the Python thread state for this interpreter; releases the thread context
+    DLLLOCAL PyThreadState* getReleaseThreadState() const {
+        AutoLocker al(py_thr_lck);
+        PyThreadState* python = getThreadStateIntern();
+#if 0
+        // XXX DEBUG
+        if (!python) {
+            py_thr_map_t::iterator i = py_thr_map.find(this);
+            if (i == py_thr_map.end()) {
+                printd(0, "QorePythonProgram::releaseContext() ERROR missing pgm: %p\n", this);
+            } else {
+                for (auto& i : i->second) {
+                    printd(0, "QorePythonProgram::releaseContext() this: %p ERROR missing TID: {TID %d, {%p, own: %d}}\n", this,
+                        i.first, i.second.state, i.second.owns_state);
+                }
+            }
+        }
+        // XXX DEBUG
+#endif
+        assert(python);
+
+        if (!--pgm_thr_cnt && pgm_thr_waiting) {
+            pgm_thr_cond.signal();
+        }
+        return python;
+    }
+
+    //! Returns the Python thread state for this interpreter; py_thr_lck must be held
+    DLLLOCAL PyThreadState* getThreadStateIntern() const {
         py_thr_map_t::iterator i = py_thr_map.find(this);
         if (i == py_thr_map.end()) {
             return nullptr;
@@ -572,6 +623,10 @@ public:
     }
 
     DLLLOCAL QorePythonProgram* operator->() {
+        return py_pgm;
+    }
+
+    DLLLOCAL QorePythonProgram* operator*() {
         return py_pgm;
     }
 

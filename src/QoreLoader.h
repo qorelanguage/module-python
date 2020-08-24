@@ -61,6 +61,9 @@ private:
 
     DLLLOCAL static const QoreNamespace* getModuleRootNs(const char* name, QoreProgram* mod_pgm);
 
+    DLLLOCAL static const QoreNamespace* getModuleRootNsIntern(const char* name, const QoreNamespace& root_ns,
+        const QoreHashNode* all_mod_info, mod_dep_map_t& mod_dep_map, bool check_mod);
+
     //! checks if "parent" is in the same module as "name" with a possible reexport list
     DLLLOCAL static bool isModule(const QoreNamespace* parent, const char* name, const QoreHashNode* all_mod_info,
         mod_dep_map_t& mod_dep_map);

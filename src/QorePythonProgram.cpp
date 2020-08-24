@@ -78,6 +78,7 @@ static bool _qore_PyThreadState_IsCurrent(PyThreadState* tstate) {
 
 // static member declarations
 QorePythonProgram::py_thr_map_t QorePythonProgram::py_thr_map;
+QorePythonProgram::py_global_tid_map_t QorePythonProgram::py_global_tid_map;
 QoreThreadLock QorePythonProgram::py_thr_lck;
 
 QorePythonProgram::QorePythonProgram() : save_object_callback(nullptr) {
@@ -99,7 +100,9 @@ QorePythonProgram::QorePythonProgram() : save_object_callback(nullptr) {
     // insert thread state into thread map
     AutoLocker al(py_thr_lck);
     assert(py_thr_map.find(this) == py_thr_map.end());
-    py_thr_map[this] = {{gettid(), {python, false}}};
+    int tid = gettid();
+    py_thr_map[this] = {{tid, {python, false}}};
+    py_global_tid_map[tid].insert(python);
 }
 
 QorePythonProgram::QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns) : qpgm(qpgm), pyns(pyns), save_object_callback(nullptr) {
@@ -273,6 +276,14 @@ int QorePythonProgram::staticInit() {
     return 0;
 }
 
+void QorePythonProgram::waitForThreadsIntern() {
+    while (pgm_thr_cnt) {
+        ++pgm_thr_waiting;
+        pgm_thr_cond.wait(py_thr_lck);
+        --pgm_thr_waiting;
+    }
+}
+
 void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
     //printd(5, "QorePythonProgram::deleteIntern() this: %p\n", this);
 
@@ -287,8 +298,21 @@ void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
     {
         AutoLocker al(py_thr_lck);
 
+        // wait for threads to complete before deleting entries
+        waitForThreadsIntern();
+
         py_thr_map_t::iterator i = py_thr_map.find(this);
         assert(i != py_thr_map.end());
+        //printd(5, "QorePythonProgram::deleteIntern() this: %p removing all thread states for pgm (delta: %d)\n", this, (int)i->second.size());
+        for (auto& ti : i->second) {
+            //printd(5, "QorePythonProgram::deleteIntern() this: %p removing TID %d\n", this, ti.first);
+            py_global_tid_map_t::iterator gi = py_global_tid_map.find(ti.first);
+            assert(gi != py_global_tid_map.end());
+            py_thr_set_t::iterator thr_i = gi->second.find(ti.second.state);
+            if (thr_i != gi->second.end()) {
+                gi->second.erase(thr_i);
+            }
+        }
         py_thr_map.erase(i);
         assert(interpreter);
     }
@@ -398,12 +422,14 @@ QoreValue QorePythonProgram::eval(ExceptionSink* xsink, const QoreString& source
 
 void QorePythonProgram::pythonThreadCleanup(void*) {
     int tid = gettid();
+    //printd(5, "QorePythonProgram::pythonThreadCleanup()\n");
     AutoLocker al(py_thr_lck);
 
     // delete all thread states for the tid
     for (auto& i : py_thr_map) {
         py_tid_map_t::iterator ti = i.second.find(tid);
         if (ti != i.second.end()) {
+            //printd(5, "QorePythonProgram::pythonThreadCleanup() deleting state %p for TID %d", ti->second, tid);
             /*
             if (ti->second.owns_state) {
                 printd(5, "QorePythonProgram::pythonThreadCleanup() deleting thread state %p for TID %d", ti->second, tid);
@@ -416,6 +442,43 @@ void QorePythonProgram::pythonThreadCleanup(void*) {
             i.second.erase(ti);
         }
     }
+
+    // delete reverse lookups
+    py_global_tid_map_t::iterator gi = py_global_tid_map.find(tid);
+    if (gi != py_global_tid_map.end()) {
+        //printd(5, "QorePythonProgram::pythonThreadCleanup() deleting global info for TID %d", tid);
+        py_global_tid_map.erase(gi);
+    }
+    //printd(5, "QorePythonProgram::pythonThreadCleanup() done\n");
+}
+
+bool QorePythonProgram::haveGil() {
+    if (!_qore_PyCeval_GetGilLockedStatus()) {
+        return false;
+    }
+
+    PyThreadState* tstate = _qore_PyCeval_GetThreadState();
+    if (!tstate) {
+        return false;
+    }
+
+    int tid = gettid();
+    AutoLocker al(py_thr_lck);
+
+    py_global_tid_map_t::iterator i = py_global_tid_map.find(tid);
+    if (i != py_global_tid_map.end()) {
+        return i->second.find(tstate) != i->second.end();
+    }
+    return false;
+}
+
+bool QorePythonProgram::haveGil(PyThreadState* check_tstate) {
+    if (!_qore_PyCeval_GetGilLockedStatus()) {
+        return false;
+    }
+
+    PyThreadState* tstate = _qore_PyCeval_GetThreadState();
+    return tstate == check_tstate;
 }
 
 int QorePythonProgram::createInterpreter(ExceptionSink* xsink) {
@@ -441,11 +504,22 @@ int QorePythonProgram::createInterpreter(ExceptionSink* xsink) {
     // save thread state
     int tid = gettid();
     AutoLocker al(py_thr_lck);
-    py_thr_map_t::iterator ti = py_thr_map.lower_bound(this);
-    if (ti == py_thr_map.end() || ti->first != this) {
-        py_thr_map.insert(ti, {this, {{tid, {python, true}}}});
-    } else {
-        ti->second[tid] = {python, true};
+    {
+        py_thr_map_t::iterator ti = py_thr_map.lower_bound(this);
+        if (ti == py_thr_map.end() || ti->first != this) {
+            py_thr_map.insert(ti, {this, {{tid, {python, true}}}});
+        } else {
+            ti->second[tid] = {python, true};
+        }
+    }
+    {
+        py_global_tid_map_t::iterator i = py_global_tid_map.lower_bound(tid);
+        if (i == py_global_tid_map.end() || i->first != tid) {
+            py_global_tid_map.insert(i, {tid, {python}});
+        } else {
+            i->second.insert(python);
+        }
+        //printd(5, "QorePythonProgram::createInterpreter() inserted TID %d -> %p\n", tid, python);
     }
 
     //printd(5, "QorePythonProgram::createInterpreter() this: %p\n", this);
@@ -454,95 +528,125 @@ int QorePythonProgram::createInterpreter(ExceptionSink* xsink) {
 
 QorePythonThreadInfo QorePythonProgram::setContext() const {
     if (!valid) {
-        return {nullptr, PyGILState_UNLOCKED, false};
+        return {nullptr, nullptr, nullptr, PyGILState_UNLOCKED, false};
     }
     assert(interpreter);
-    PyThreadState* python = getThreadState();
+    PyThreadState* python = getAcquireThreadState();
     // create new thread state if necessary
     if (!python) {
         python = PyThreadState_New(interpreter);
-        //printd(5, "QorePythonProgram::setContext() created new thread context: %p (dm %p py_thr_map %p size: %d)\n", python, &dm, &py_thr_map, (int)py_thr_map.size());
+        //printd(5, "QorePythonProgram::setContext() this: %p created new thread context: %p (py_thr_map: %p size: %d)\n", this, python, &py_thr_map, (int)py_thr_map.size());
         assert(python);
-        //assert(!python->gilstate_counter);
+        assert(python->gilstate_counter == 1);
         // the thread state will be deleted when the thread terminates or the interpreter is deleted
+        int tid = gettid();
         AutoLocker al(py_thr_lck);
-        py_thr_map_t::iterator i = py_thr_map.find(this);
-        if (i == py_thr_map.end()) {
-            py_thr_map[this] = {{gettid(), {python, owns_interpreter}}};
-        } else {
-            assert(i->second.find(gettid()) == i->second.end());
-            i->second[gettid()] = {python, owns_interpreter};
+        {
+            py_thr_map_t::iterator i = py_thr_map.find(this);
+            if (i == py_thr_map.end()) {
+                py_thr_map[this] = {{tid, {python, owns_interpreter}}};
+            } else {
+                assert(i->second.find(tid) == i->second.end());
+                i->second[tid] = {python, owns_interpreter};
+            }
+            assert(py_thr_map.find(this) != py_thr_map.end());
+        }
+        {
+            py_global_tid_map_t::iterator i = py_global_tid_map.lower_bound(tid);
+            if (i == py_global_tid_map.end() || i->first != tid) {
+                py_global_tid_map.insert(i, {tid, py_thr_set_t {python,}});
+            } else {
+                i->second.insert(python);
+            }
+            //printd(5, "QorePythonProgram::setContext() inserted TID %d -> %p\n", tid, python);
         }
         //printd(5, "QorePythonProgram::setContext() this: %p\n", this);
     }
 
-    //printd(5, "QorePythonProgram::setContext() got thread context: %p (GIL: %d) refs: %d\n", python, PyGILState_Check(), python->gilstate_counter);
+    //printd(5, "QorePythonProgram::setContext() got thread context: %p (GIL: %d hG: %d) refs: %d\n", python, PyGILState_Check(), haveGil(), python->gilstate_counter);
 
     PyGILState_STATE g_state;
-    PyThreadState* t_state;
+    // the TSS state needs to be restored in any case
+    PyThreadState* tss_state = PyGILState_GetThisThreadState();
+    PyThreadState* t_state, * ceval_state;
 
-    if (PyGILState_Check()) {
-        t_state = _qore_PyRuntimeGILState_GetThreadState();
-
-        // set new thread state
+    // set new TSS thread state
+    if (tss_state != python) {
         _qore_PyGILState_SetThisThreadState(python);
+    }
 
-        if (t_state != python) {
-            PyThreadState_Swap(python);
-        }
+    if (haveGil()) {
+        // set GIL context
+        ceval_state = _qore_PyCeval_SwapThreadState(python);
+
         g_state = PyGILState_LOCKED;
     } else {
         //assert(!_qore_PyRuntimeGILState_GetThreadState());
         //assert(!PyGILState_GetThisThreadState());
 
-        // set new thread state
-        _qore_PyGILState_SetThisThreadState(python);
 
-        t_state = nullptr;
+        ceval_state = nullptr;
         PyEval_RestoreThread(python);
         g_state = PyGILState_UNLOCKED;
     }
 
+    t_state = _qore_PyRuntimeGILState_GetThreadState();
+
+    if (t_state != python) {
+        PyThreadState_Swap(python);
+    }
+
     assert(PyGILState_Check());
+    assert(haveGil(python));
+    assert(_qore_PyCeval_GetThreadState() == python);
+    assert(_qore_PyRuntimeGILState_GetThreadState() == python);
+    // TSS state
+    assert(PyGILState_GetThisThreadState() == python);
 
     //printd(5, "QorePythonProgram::setContext() old thread context: %p\n", t_state);
 
     ++python->gilstate_counter;
 
-    return {t_state, g_state, true};
+    return {tss_state, t_state, ceval_state, g_state, true};
 }
 
 void QorePythonProgram::releaseContext(const QorePythonThreadInfo& oldstate) const {
     if (!oldstate.valid) {
         return;
     }
+
     //struct _gilstate_runtime_state* gilstate = &_PyRuntime.gilstate;
-    PyThreadState* python = getThreadState();
+    PyThreadState* python = getReleaseThreadState();
     assert(python);
     assert(_qore_PyThreadState_IsCurrent(python));
-    assert(python->gilstate_counter > 0);
+
+    /*
+    // restore the old state
+    if (oldstate.ceval_state != python) {
+        // set GIL context
+        _qore_PyCeval_SwapThreadState(oldstate.ceval_state);
+    }
+    */
 
     --python->gilstate_counter;
 
     //printd(5, "QorePythonProgram::releaseContext() t_state: %p g_state: %d\n", oldstate.t_state, oldstate.g_state);
 
     if (oldstate.g_state == PyGILState_UNLOCKED) {
-        if (!oldstate.t_state) {
-            PyEval_ReleaseThread(python);
-        } else {
-            assert(false);
-        }
+        PyEval_ReleaseThread(python);
         assert(!PyGILState_Check());
-        PyThreadState* state = PyGILState_GetThisThreadState();
-        if (state) {
-            _qore_PyGILState_SetThisThreadState(nullptr);
-        }
+        assert(!haveGil());
     } else {
         // restore old thread context; GIL still held
-        if (python != oldstate.t_state) {
-            _qore_PyGILState_SetThisThreadState(oldstate.t_state);
-            PyThreadState_Swap(oldstate.t_state);
-        }
+        assert(haveGil());
+    }
+
+    if (python != oldstate.t_state) {
+        PyThreadState_Swap(oldstate.t_state);
+    }
+    // set new TSS thread state
+    if (oldstate.tss_state != python) {
+        _qore_PyGILState_SetThisThreadState(oldstate.tss_state);
     }
 }
 
@@ -1524,6 +1628,7 @@ PyObject* QorePythonProgram::getPythonValue(QoreValue val, ExceptionSink* xsink)
 }
 
 QoreValue QorePythonProgram::callFunction(ExceptionSink* xsink, const QoreString& func_name, const QoreListNode* args, size_t arg_offset) {
+    assert(!haveGil());
     TempEncodingHelper fname(func_name, QCS_UTF8, xsink);
     if (*xsink) {
         xsink->appendLastDescription(" (while processing the \"func_name\" argument)");
@@ -1536,20 +1641,26 @@ QoreValue QorePythonProgram::callFunction(ExceptionSink* xsink, const QoreString
         return QoreValue();
     }
 
-    QorePythonHelper qph(this);
-    if (checkValid(xsink)) {
-        return QoreValue();
-    }
+    ValueHolder rv(xsink);
+    {
+        QorePythonHelper qph(this);
+        if (checkValid(xsink)) {
+            return QoreValue();
+        }
 
-    // returns a borrowed reference
-    PyObject* py_func = PyDict_GetItemString(module_dict, fname->c_str());
-    if (!py_func || !PyFunction_Check(py_func)) {
-        xsink->raiseException("NO-FUNCTION", "cannot find function '%s'", fname->c_str());
-        return QoreValue();
-    }
+        // returns a borrowed reference
+        PyObject* py_func = PyDict_GetItemString(module_dict, fname->c_str());
+        if (!py_func || !PyFunction_Check(py_func)) {
+            xsink->raiseException("NO-FUNCTION", "cannot find function '%s'", fname->c_str());
+            return QoreValue();
+        }
 
-    //printd(5, "QorePythonProgram::callFunction() this: %p %s()\n", this, func_name.c_str());
-    return callInternal(xsink, py_func, args, arg_offset);
+        //printd(5, "QorePythonProgram::callFunction() this: %p %s()\n", this, func_name.c_str());
+        //return callInternal(xsink, py_func, args, arg_offset);
+        rv = callInternal(xsink, py_func, args, arg_offset);
+    }
+    assert(!haveGil());
+    return rv.release();
 }
 
 QoreValue QorePythonProgram::callMethod(ExceptionSink* xsink, const QoreString& class_name,

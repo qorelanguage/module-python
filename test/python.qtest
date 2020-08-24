@@ -13,6 +13,7 @@
 %try-module json
 %define NO_JSON
 %endtry
+%requires WebSocketClient
 
 %exec-class PythonTest
 
@@ -43,6 +44,7 @@ class PythonTest inherits Test {
     }
 
     constructor() : Test("python test", "1.0") {
+        addTestCase("thread test", \threadTest());
         addTestCase("python callbacks", \pythonCallbackTest());
         addTestCase("python import", \pythonImportTest());
         addTestCase("object lifecycle", \objectLifecycleTest());
@@ -50,6 +52,159 @@ class PythonTest inherits Test {
         addTestCase("import test", \importTest());
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
+    }
+
+    threadTest() {
+        {
+            string src = "
+class test:
+    def __init__(self):
+        self.a = 0
+        self.cnt = 0
+
+    def test(self, v):
+        for i in range(10):
+            self.a += v
+            self.cnt += 1
+
+    def info(self):
+        return {
+            'a': self.a,
+            'cnt': self.cnt,
+        }
+
+def get():
+    return test()
+";
+            PythonProgram p0(src, "test.py");
+            PythonProgram p1(src, "test.py");
+
+            object py_obj0 = p0.callFunction("get");
+            object py_obj1 = p1.callFunction("get");
+            ThreadPool tp();
+            code test0 = sub () {
+                map py_obj0.test(1), xrange(9);
+            };
+            code test1 = sub () {
+                map py_obj1.test(1), xrange(9);
+            };
+            map tp.submit(test0), xrange(9);
+            map tp.submit(test1), xrange(9);
+            tp.stopWait();
+            hash<auto> info = py_obj0.info();
+            assertEq(1000, info.a);
+            assertEq(1000, info.cnt);
+            info = py_obj1.info();
+            assertEq(1000, info.a);
+            assertEq(1000, info.cnt);
+        }
+
+        {
+            string py_src = "
+from qore.__root__ import TestApi, SubApi
+
+class PySub(SubApi):
+    def __init__(self, parent):
+        super(PySub, self).__init__(parent)
+
+    def callbackImpl(self, msg):
+        return self.parent.process('py-' + msg)
+
+class PyTest(TestApi):
+    def __init__(self):
+        super(PyTest, self).__init__()
+
+    def getImpl(self):
+        return PySub(self)
+";
+
+            Program p0(PO_NEW_STYLE);
+            p0.importClass("TestApi");
+            p0.importClass("SubApi");
+            p0.issueModuleCmd("python", "parse python.py " + py_src);
+            p0.issueModuleCmd("python", "export-class PyTest");
+
+            Program p1(PO_NEW_STYLE);
+            p1.importClass("TestApi");
+            p1.importClass("SubApi");
+            p1.issueModuleCmd("python", "parse python.py " + py_src);
+            p1.issueModuleCmd("python", "export-class PyTest");
+
+            Class c0 = Class::forName(p0, "PyTest");
+            Class c1 = Class::forName(p1, "PyTest");
+
+            TestApi testapi0 = c0.newObject();
+            TestApi testapi1 = c1.newObject();
+
+            ThreadPool tp();
+            int cnt = 0;
+            code test0 = sub () {
+                SubApi s = testapi0.get();
+                map cnt += s.callback("msg"), xrange(99);
+            };
+            code test1 = sub () {
+                SubApi s = testapi1.get();
+                map cnt += s.callback("msg"), xrange(99);
+            };
+            map tp.submit(test0), xrange(9);
+            map tp.submit(test1), xrange(9);
+            tp.stopWait();
+            assertEq(12000, cnt);
+        }
+
+        {
+            PythonProgram p("
+from qore.HttpServer import HttpServer
+from qore.WebSocketHandler import WebSocketHandler, WebSocketConnection
+from qore.__root__.Qore import printf, vprintf
+
+class PyWsConnection(WebSocketConnection):
+    def __init__(self, handler):
+        super(PyWsConnection, self).__init__(handler)
+
+    def gotMessage(self, msg):
+        self.send('default response')
+
+class MyWebSocketHandler(WebSocketHandler):
+    def __init__(self):
+        super(MyWebSocketHandler, self).__init__()
+
+    def getConnectionImpl(self, cx, hdr, cid):
+        return PyWsConnection(self)
+
+    def logError(self, fmt, *args):
+        vprintf(fmt + '\\n', args)
+
+def log(fmt, *args):
+    #vprintf(fmt + '\\n', args)
+    pass
+
+hs = HttpServer(log, log)
+ws = MyWebSocketHandler()
+hs.setDefaultHandler('ws', ws)
+port = hs.addListener(0)['port']
+
+def get_port():
+    global port
+    return port
+
+def stop():
+    global hs
+    hs.stop()
+            ", "ws.py");
+
+            int port = p.callFunction("get_port");
+            assertGt(0, port);
+            Queue q();
+            code callback = sub (data msg) {
+                q.push(msg);
+            };
+            WebSocketClient wsc(callback, {"url": "ws://localhost:" + port});
+            wsc.connect();
+            wsc.send("test");
+            assertEq("default response", q.get(10s));
+            p.callFunction("stop");
+        }
     }
 
     pythonCallbackTest() {
@@ -226,22 +381,41 @@ def py_test_func(i):
 
             p.evalStatementKeep("
 class PyAbstractTest(x.AbstractTest):
-    def __init__(self):
-        super(PyAbstractTest, self).__init__()
+    def __init__(self, other):
+        super(PyAbstractTest, self).__init__(other)
 
     def get(self):
         return 3
 
     def getpy(self):
         return 4
+
+    def get_other(self):
+        return self.other.get()
+
+class PyOther(x.Other):
+    def __init__(self):
+        super(PyOther, self).__init__()
+
+    def get2(self):
+        return self.get() + 1
+
+    def get3(self):
+        return self.other2.get()
 ", "new3.py");
 
             p.evalStatementKeep("
 def py_abstract_test(x = 0):
-    t = PyAbstractTest()
+    t = PyAbstractTest(None)
     if (x):
         return t.getpy()
     return t.get()
+
+def py_get_abstract(other):
+    return PyAbstractTest(other)
+
+def py_get_other():
+    return PyOther()
 ", "new4.py");
 
             assertEq(3, p.callFunction("py_abstract_test"));
@@ -249,6 +423,22 @@ def py_abstract_test(x = 0):
 
             assertEq(3, call_bg("py_abstract_test"));
             assertEq(4, call_bg("py_abstract_test", 1));
+
+            Other other = p.callFunction("py_get_other");
+            assertEq(2, cast<object>(other).get2());
+            assertEq(3, cast<object>(other).get3());
+            object obj = p.callFunction("py_get_abstract", other);
+            assertEq(1, obj.get_other());
+
+            code call_other_bg = auto sub () {
+                Queue q();
+                background (sub () {
+                    q.push(obj.get_other());
+                })();
+                return q.get();
+            };
+
+            assertEq(1, call_other_bg());
         }
 
         {
@@ -628,6 +818,16 @@ public namespace Test {
     }
 
     public class AbstractTest {
+        public {
+            Other other;
+        }
+
+        constructor(*Other other) {
+            if (other) {
+                self.other = other;
+            }
+        }
+
         abstract int get();
 
         int addOneNormal(int x) {
@@ -636,6 +836,16 @@ public namespace Test {
 
         static int addOne(int x) {
             return x + 1;
+        }
+    }
+
+    class Other {
+        public {
+            Other2 other2();
+        }
+
+        int get() {
+            return 1;
         }
     }
 
@@ -658,6 +868,40 @@ public namespace Test {
     }
 }
 
+class Other2 {
+    int get() {
+        return 3;
+    }
+}
+
 public int sub test() {
     return 99;
+}
+
+class SubApi {
+    public {
+        TestApi parent;
+    }
+
+    constructor(TestApi parent) {
+        self.parent = parent;
+    }
+
+    int callback(string msg) {
+        return callbackImpl(msg);
+    }
+
+    abstract int callbackImpl(string msg);
+}
+
+class TestApi {
+    SubApi get() {
+        return getImpl();
+    }
+
+    int process(string msg) {
+        return msg.size();
+    }
+
+    abstract SubApi getImpl();
 }
