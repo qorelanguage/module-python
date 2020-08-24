@@ -79,49 +79,9 @@ DLLLOCAL void _qore_PyGILState_SetThisThreadState(PyThreadState* state);
 */
 class QorePythonGilHelper {
 public:
-    DLLLOCAL QorePythonGilHelper(PyThreadState* new_thread_state = mainThreadState)
-        : new_thread_state(new_thread_state), state(_qore_PyRuntimeGILState_GetThreadState()),
-            t_state(PyGILState_GetThisThreadState()),
-            release_gil(!PyGILState_Check()) {
-        assert(new_thread_state);
-        if (release_gil) {
-            PyEval_AcquireThread(new_thread_state);
-            assert(PyThreadState_Get() == new_thread_state);
-        } else {
-            PyThreadState_Swap(new_thread_state);
-        }
-        // set this thread state
-        _qore_PyGILState_SetThisThreadState(new_thread_state);
-        assert(PyGILState_GetThisThreadState() == new_thread_state);
-        assert(PyGILState_Check());
-    }
+    DLLLOCAL QorePythonGilHelper(PyThreadState* new_thread_state = mainThreadState);
 
-    DLLLOCAL ~QorePythonGilHelper() {
-        if (PyGILState_Check()) {
-            // restore the old TLD state
-            _qore_PyGILState_SetThisThreadState(t_state);
-
-            if (release_gil) {
-                // swap back to the mainThreadState before releasing the GIL
-                PyThreadState* state = PyThreadState_Get();
-                if (state != new_thread_state) {
-                    assert(state->gilstate_counter == 1);
-                    --state->gilstate_counter;
-                    PyThreadState_Swap(new_thread_state);
-                }
-
-                // release the GIL
-                PyEval_ReleaseThread(new_thread_state);
-                assert(!PyGILState_Check());
-            } else {
-                PyThreadState_Swap(state);
-            }
-        } else {
-            PyEval_AcquireThread(state);
-        }
-
-        _qore_PyGILState_SetThisThreadState(t_state);
-    }
+    DLLLOCAL ~QorePythonGilHelper();
 
 protected:
     PyThreadState* new_thread_state;
@@ -144,7 +104,9 @@ private:
 };
 
 struct QorePythonThreadInfo {
+    PyThreadState* tss_state;
     PyThreadState* t_state;
+    PyThreadState* ceval_state;
     PyGILState_STATE g_state;
     bool valid;
 };

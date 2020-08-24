@@ -187,6 +187,7 @@ static QoreStringNode* python_module_init() {
         assert(!_qore_PyRuntimeGILState_GetThreadState());
         _qore_PyGILState_SetThisThreadState(nullptr);
         assert(!PyGILState_GetThisThreadState());
+        assert(!QorePythonProgram::haveGil());
     }
 
     PNS.addSystemClass(initPythonProgramClass(PNS));
@@ -209,6 +210,7 @@ static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns) {
     }
 
     assert(!PyGILState_Check());
+    assert(!QorePythonProgram::haveGil());
 }
 
 static void python_module_delete() {
@@ -377,4 +379,48 @@ QorePythonHelper::~QorePythonHelper() {
     new_pypgm->releaseContext(old_state);
     q_swap_thread_local_data(python_u_tld_key, (void*)old_pgm);
     //printd(5, "QorePythonHelper::~QorePythonHelper() restored old: %p\n", old_pgm);
+}
+
+QorePythonGilHelper::QorePythonGilHelper(PyThreadState* new_thread_state)
+    : new_thread_state(new_thread_state), state(_qore_PyRuntimeGILState_GetThreadState()),
+        t_state(PyGILState_GetThisThreadState()),
+        release_gil(!PyGILState_Check()) {
+    assert(new_thread_state);
+    if (release_gil) {
+        PyEval_AcquireThread(new_thread_state);
+        assert(PyThreadState_Get() == new_thread_state);
+    } else {
+        PyThreadState_Swap(new_thread_state);
+    }
+    // set this thread state
+    _qore_PyGILState_SetThisThreadState(new_thread_state);
+    assert(PyGILState_GetThisThreadState() == new_thread_state);
+    assert(PyGILState_Check());
+}
+
+QorePythonGilHelper::~QorePythonGilHelper() {
+    if (PyGILState_Check()) {
+        // restore the old TLD state
+        _qore_PyGILState_SetThisThreadState(t_state);
+
+        if (release_gil) {
+            // swap back to the mainThreadState before releasing the GIL
+            PyThreadState* state = PyThreadState_Get();
+            if (state != new_thread_state) {
+                assert(state->gilstate_counter == 1);
+                --state->gilstate_counter;
+                PyThreadState_Swap(new_thread_state);
+            }
+
+            // release the GIL
+            PyEval_ReleaseThread(new_thread_state);
+            assert(!PyGILState_Check());
+        } else {
+            PyThreadState_Swap(state);
+        }
+    } else {
+        PyEval_AcquireThread(state);
+    }
+
+    _qore_PyGILState_SetThisThreadState(t_state);
 }
