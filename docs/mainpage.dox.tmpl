@@ -192,6 +192,16 @@ p.issueModuleCmd("python", "import-ns MyQoreNamespace MyPythonModule");
 p.issueModuleCmd("python", "alias MyPythonModule.MySubModule1.MySubModule2.MyApi MyApi");
     @endcode
 
+    @section python_threads_and_stack Python Threading and Stack Management
+
+    This module implements support for multiple Python interpreters along with multithreading by managing the %Python
+    interpreter thread state manually.
+
+    Additionally, the Python recusion limit is also set automatically depending on the current thread stack size set
+    in %Qore.
+
+    This is done to avoid crashes due to stack exhaustion in combination %Qore and %Python code.
+
     @section python_qoreloader_module qoreloader Module
 
     The %Qore python module can also be aliased or symlinked to \c "qoreloader.so" and placed in the Python module

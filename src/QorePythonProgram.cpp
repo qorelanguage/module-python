@@ -523,7 +523,31 @@ int QorePythonProgram::createInterpreter(ExceptionSink* xsink) {
     }
 
     //printd(5, "QorePythonProgram::createInterpreter() this: %p\n", this);
-    return 0;
+    return setRecursionLimit(xsink);
+}
+
+int QorePythonProgram::setRecursionLimit(ExceptionSink* xsink) {
+    QorePythonReferenceHolder sys(PyImport_ImportModule("sys"));
+    if (!sys) {
+        if (!checkPythonException(xsink)) {
+            xsink->raiseException("PYTHON-ERROR", "cannot load the 'sys' module");
+        }
+        return -1;
+    }
+    if (!PyObject_HasAttrString(*sys, "setrecursionlimit")) {
+        xsink->raiseException("PYTHON-ERROR", "'sys.setrecursionlimit' not found");
+        return -1;
+    }
+
+    QorePythonReferenceHolder func(PyObject_GetAttrString(*sys, "setrecursionlimit"));
+    assert(PyCFunction_Check(*func));
+    //printd(5, "QorePythonProgram::setRecursionLimit() setrecursionlimit: %s\n", Py_TYPE(*func)->tp_name);
+
+    int64 lim = (int64)q_thread_get_stack_size() / PYTHON_STACK_FACTOR;
+    QorePythonReferenceHolder py_args(PyTuple_New(1));
+    PyTuple_SET_ITEM(*py_args, 0, PyLong_FromLongLong(lim));
+    QorePythonReferenceHolder return_value(PyCFunction_Call(*func, *py_args, nullptr));
+    return checkPythonException(xsink);
 }
 
 QorePythonThreadInfo QorePythonProgram::setContext() const {
