@@ -52,6 +52,9 @@ class PythonQoreClass;
 #define IF_OTHER (1 << 1)
 #define IF_ALL   (IF_CLASS | IF_OTHER)
 
+//! best guess at the ratio of stack size / x = python recursion limit to avoid crashes
+constexpr int PYTHON_STACK_FACTOR = 6000;
+
 struct QorePythonThreadStateInfo {
     PyThreadState* state;
     bool owns_state;
@@ -298,6 +301,9 @@ public:
             delete this;
         }
     }
+
+    //! Sets the Python recursion limit according to the current default thread stack size
+    DLLLOCAL int setRecursionLimit(ExceptionSink* xsink);
 
     //! Returns a Qore binary from a Python Bytes object
     DLLLOCAL static BinaryNode* getQoreBinaryFromBytes(PyObject* val);
