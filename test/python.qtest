@@ -44,6 +44,7 @@ class PythonTest inherits Test {
     }
 
     constructor() : Test("python test", "1.0") {
+        addTestCase("stack test", \stackTest());
         addTestCase("thread test", \threadTest());
         addTestCase("python callbacks", \pythonCallbackTest());
         addTestCase("python import", \pythonImportTest());
@@ -52,6 +53,30 @@ class PythonTest inherits Test {
         addTestCase("import test", \importTest());
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
+    }
+
+    stackTest() {
+        PythonProgram p("
+def f():
+    return f()", "");
+
+        assertThrows("builtins.RecursionError", \p.callFunction(), "f");
+        assertThrows("builtins.RecursionError", sub () {
+            Queue q();
+            code doit = sub () {
+                try {
+                    p.callFunction("f");
+                    q.push();
+                } catch (hash<ExceptionInfo> ex) {
+                    q.push(ex);
+                }
+            };
+            background doit();
+            *hash<ExceptionInfo> ex = q.get();
+            if (ex) {
+                throw ex.err, ex.desc, ex.arg;
+            }
+        });
     }
 
     threadTest() {

@@ -56,8 +56,6 @@ DLLLOCAL extern qore_classid_t CID_PYTHONBASEOBJECT;
 #if PY_MAJOR_VERSION >= 3
 #if PY_MINOR_VERSION == 8
 #include "python38_internals.h"
-#elif PY_MINOR_VERSION == 6
-#include "python36_internals.h"
 #elif PY_MINOR_VERSION == 7
 #include "python37_internals.h"
 #else
@@ -66,8 +64,19 @@ DLLLOCAL extern qore_classid_t CID_PYTHONBASEOBJECT;
 #endif
 #endif
 
-DLLLOCAL PyThreadState* _qore_PyRuntimeGILState_GetThreadState();
-DLLLOCAL void _qore_PyGILState_SetThisThreadState(PyThreadState* state);
+/** Thread State Locations:
+    - _PyRuntime.gilstate.tstate_current - must only be modified while holding the GIL
+        read: _qore_PyRuntimeGILState_GetThreadState (_PyThreadState_GET)
+        write: PyThreadState_Swap
+
+    - _PyRuntime.ceval.gil.last_holder - must only be modified while holding the GIL
+        read: _qore_PyCeval_GetThreadState()
+        write: _qore_PyCeval_SwapThreadState()
+
+    - TSS thread state - thread local
+        read: PyGILState_GetThisThreadState()
+        write: _qore_PyGILState_SetThisThreadState()
+*/
 
 //! acquires the GIL and sets the main interpreter thread context
 /** This class is used when a new interpreter context is created.
@@ -82,6 +91,8 @@ public:
     DLLLOCAL QorePythonGilHelper(PyThreadState* new_thread_state = mainThreadState);
 
     DLLLOCAL ~QorePythonGilHelper();
+
+    DLLLOCAL void set(PyThreadState* other_state);
 
 protected:
     PyThreadState* new_thread_state;
@@ -108,6 +119,7 @@ struct QorePythonThreadInfo {
     PyThreadState* t_state;
     PyThreadState* ceval_state;
     PyGILState_STATE g_state;
+    int recursion_depth;
     bool valid;
 };
 

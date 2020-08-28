@@ -367,7 +367,7 @@ public:
     DLLLOCAL static bool haveGil();
 
     //! Does this thread hold the GIL with the given thread state?
-    DLLLOCAL static bool haveGil(PyThreadState* tstate);
+    DLLLOCAL static bool haveGilUnlocked(PyThreadState* tstate);
 
 protected:
     PyInterpreterState* interpreter;
@@ -547,7 +547,7 @@ protected:
     DLLLOCAL void deleteIntern(ExceptionSink* xsink);
 
     //! the GIL must be held when this function is called
-    DLLLOCAL int createInterpreter(ExceptionSink* xsink);
+    DLLLOCAL int createInterpreter(QorePythonGilHelper& qpgh, ExceptionSink* xsink);
 
     //! Returns the Python thread state for this interpreter
     DLLLOCAL PyThreadState* getAcquireThreadState() const {
