@@ -58,16 +58,6 @@ static strvec_t get_dot_path_list(const std::string str) {
     return rv;
 }
 
-// from Python internal code
-bool _qore_PyGILState_Check() {
-    PyThreadState* tstate = _qore_PyRuntimeGILState_GetThreadState();
-    if (tstate == NULL) {
-        return false;
-    }
-
-    return (tstate == PyGILState_GetThisThreadState());
-}
-
 #ifdef DEBUG
 // from Python internal code
 static bool _qore_PyThreadState_IsCurrent(PyThreadState* tstate) {
@@ -110,7 +100,7 @@ QorePythonProgram::QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns) : q
     QorePythonGilHelper qpgh;
 
     //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
-    if (createInterpreter(nullptr)) {
+    if (createInterpreter(qpgh, nullptr)) {
         valid = false;
     }
 
@@ -161,7 +151,7 @@ QorePythonProgram::QorePythonProgram(const QoreString& source_code, const QoreSt
     QorePythonGilHelper qpgh;
 
     //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
-    if (createInterpreter(xsink)) {
+    if (createInterpreter(qpgh, xsink)) {
         return;
     }
 
@@ -341,7 +331,11 @@ void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
             valid = false;
         }
         if (interpreter && owns_interpreter) {
+            // grab the GIL with the main thread lock
             QorePythonGilHelper pgh;
+
+            // enforce serialization
+            AutoLocker al(py_thr_lck);
 
             PyInterpreterState_Clear(interpreter);
             PyInterpreterState_Delete(interpreter);
@@ -472,7 +466,7 @@ bool QorePythonProgram::haveGil() {
     return false;
 }
 
-bool QorePythonProgram::haveGil(PyThreadState* check_tstate) {
+bool QorePythonProgram::haveGilUnlocked(PyThreadState* check_tstate) {
     if (!_qore_PyCeval_GetGilLockedStatus()) {
         return false;
     }
@@ -481,22 +475,28 @@ bool QorePythonProgram::haveGil(PyThreadState* check_tstate) {
     return tstate == check_tstate;
 }
 
-int QorePythonProgram::createInterpreter(ExceptionSink* xsink) {
+int QorePythonProgram::createInterpreter(QorePythonGilHelper& qpgh, ExceptionSink* xsink) {
     assert(PyGILState_Check());
-    PyThreadState* python = Py_NewInterpreter();
-    if (!python) {
-        if (xsink) {
-            xsink->raiseException("PYTHON-COMPILE-ERROR", "error creating the Python subinterpreter");
+    PyThreadState* python;
+    {
+        // enforce serialization
+        AutoLocker al(py_thr_lck);
+
+        python = Py_NewInterpreter();
+        if (!python) {
+            if (xsink) {
+                xsink->raiseException("PYTHON-COMPILE-ERROR", "error creating the Python subinterpreter");
+            }
+            return -1;
         }
-        return -1;
+        assert(python->gilstate_counter == 1);
+        //printd(5, "QorePythonProgram::createInterpreter() created thead state: %p\n", python);
+
+        // NOTE: we have to reenable PyGILState_Check() here
+        _QORE_PYTHON_REENABLE_GIL_CHECK
+
+        qpgh.set(python);
     }
-    assert(python->gilstate_counter == 1);
-    //printd(5, "QorePythonProgram::createInterpreter() created thead state: %p\n", python);
-
-    // NOTE: we have to reenable PyGILState_Check() here
-    _QORE_PYTHON_REENABLE_GIL_CHECK
-
-    _qore_PyGILState_SetThisThreadState(python);
 
     interpreter = python->interp;
     owns_interpreter = true;
@@ -552,13 +552,15 @@ int QorePythonProgram::setRecursionLimit(ExceptionSink* xsink) {
 
 QorePythonThreadInfo QorePythonProgram::setContext() const {
     if (!valid) {
-        return {nullptr, nullptr, nullptr, PyGILState_UNLOCKED, false};
+        return {nullptr, nullptr, nullptr, PyGILState_UNLOCKED, 0, false};
     }
+
     assert(interpreter);
     PyThreadState* python = getAcquireThreadState();
     // create new thread state if necessary
     if (!python) {
         python = PyThreadState_New(interpreter);
+
         //printd(5, "QorePythonProgram::setContext() this: %p created new thread context: %p (py_thr_map: %p size: %d)\n", this, python, &py_thr_map, (int)py_thr_map.size());
         assert(python);
         assert(python->gilstate_counter == 1);
@@ -605,10 +607,6 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
 
         g_state = PyGILState_LOCKED;
     } else {
-        //assert(!_qore_PyRuntimeGILState_GetThreadState());
-        //assert(!PyGILState_GetThisThreadState());
-
-
         ceval_state = nullptr;
         PyEval_RestoreThread(python);
         g_state = PyGILState_UNLOCKED;
@@ -618,10 +616,12 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
 
     if (t_state != python) {
         PyThreadState_Swap(python);
+        --t_state->gilstate_counter;
     }
 
+    // now we have the GIL
     assert(PyGILState_Check());
-    assert(haveGil(python));
+    assert(haveGilUnlocked(python));
     assert(_qore_PyCeval_GetThreadState() == python);
     assert(_qore_PyRuntimeGILState_GetThreadState() == python);
     // TSS state
@@ -631,7 +631,13 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
 
     ++python->gilstate_counter;
 
-    return {tss_state, t_state, ceval_state, g_state, true};
+    // calculate new recursion depth
+    int recursion_depth = python->recursion_depth;
+    int new_recursion_depth = q_thread_stack_used() / PYTHON_STACK_FACTOR;
+    //printd(5, "QorePythonProgram::setContext() ewcursion_depth: %d -> %d\n", python->recursion_depth, new_recursion_depth);
+    python->recursion_depth = new_recursion_depth;
+
+    return {tss_state, t_state, ceval_state, g_state, recursion_depth, true};
 }
 
 void QorePythonProgram::releaseContext(const QorePythonThreadInfo& oldstate) const {
@@ -644,13 +650,16 @@ void QorePythonProgram::releaseContext(const QorePythonThreadInfo& oldstate) con
     assert(python);
     assert(_qore_PyThreadState_IsCurrent(python));
 
-    /*
+    //printd(5, "QorePythonProgram::releaseContext() rd: %d -> ord: %d\n", python->recursion_depth, oldstate.recursion_depth);
+
+    // restore recursion depth
+    python->recursion_depth = oldstate.recursion_depth;
+
     // restore the old state
     if (oldstate.ceval_state != python) {
         // set GIL context
         _qore_PyCeval_SwapThreadState(oldstate.ceval_state);
     }
-    */
 
     --python->gilstate_counter;
 
@@ -658,16 +667,19 @@ void QorePythonProgram::releaseContext(const QorePythonThreadInfo& oldstate) con
 
     if (oldstate.g_state == PyGILState_UNLOCKED) {
         PyEval_ReleaseThread(python);
-        assert(!PyGILState_Check());
+        // NOTE we cannot assert !PyGILState_Check() here, as we have released the GIL, and another thread may have
+        // created a new interpreter, which will temporarily disbale the GIL check, which would cause
+        // PyGILState_Check() to return 1
         assert(!haveGil());
     } else {
         // restore old thread context; GIL still held
         assert(haveGil());
+
+        if (python != oldstate.t_state) {
+            PyThreadState_Swap(oldstate.t_state);
+        }
     }
 
-    if (python != oldstate.t_state) {
-        PyThreadState_Swap(oldstate.t_state);
-    }
     // set new TSS thread state
     if (oldstate.tss_state != python) {
         _qore_PyGILState_SetThisThreadState(oldstate.tss_state);

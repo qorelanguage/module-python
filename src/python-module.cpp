@@ -381,17 +381,25 @@ QorePythonHelper::~QorePythonHelper() {
     //printd(5, "QorePythonHelper::~QorePythonHelper() restored old: %p\n", old_pgm);
 }
 
+static bool _qore_has_gil() {
+    return (_qore_PyCeval_GetGilLockedStatus() && _qore_PyCeval_GetThreadState() == PyGILState_GetThisThreadState());
+}
+
 QorePythonGilHelper::QorePythonGilHelper(PyThreadState* new_thread_state)
     : new_thread_state(new_thread_state), state(_qore_PyRuntimeGILState_GetThreadState()),
         t_state(PyGILState_GetThisThreadState()),
-        release_gil(!PyGILState_Check()) {
+        release_gil(!_qore_has_gil()) {
     assert(new_thread_state);
     if (release_gil) {
         PyEval_AcquireThread(new_thread_state);
         assert(PyThreadState_Get() == new_thread_state);
     } else {
-        PyThreadState_Swap(new_thread_state);
+        assert(t_state == _qore_PyCeval_GetThreadState());
     }
+
+    ++new_thread_state->gilstate_counter;
+    PyThreadState_Swap(new_thread_state);
+
     // set this thread state
     _qore_PyGILState_SetThisThreadState(new_thread_state);
     assert(PyGILState_GetThisThreadState() == new_thread_state);
@@ -399,28 +407,31 @@ QorePythonGilHelper::QorePythonGilHelper(PyThreadState* new_thread_state)
 }
 
 QorePythonGilHelper::~QorePythonGilHelper() {
-    if (PyGILState_Check()) {
-        // restore the old TLD state
-        _qore_PyGILState_SetThisThreadState(t_state);
+    assert(_qore_has_gil());
 
-        if (release_gil) {
-            // swap back to the mainThreadState before releasing the GIL
-            PyThreadState* state = PyThreadState_Get();
-            if (state != new_thread_state) {
-                assert(state->gilstate_counter == 1);
-                --state->gilstate_counter;
-                PyThreadState_Swap(new_thread_state);
-            }
+    --new_thread_state->gilstate_counter;
 
-            // release the GIL
-            PyEval_ReleaseThread(new_thread_state);
-            assert(!PyGILState_Check());
-        } else {
-            PyThreadState_Swap(state);
-        }
+    if (release_gil) {
+        PyThreadState_Swap(new_thread_state);
+        _qore_PyCeval_SwapThreadState(new_thread_state);
+        _qore_PyGILState_SetThisThreadState(new_thread_state);
+        // release the GIL
+        PyEval_ReleaseThread(new_thread_state);
     } else {
-        PyEval_AcquireThread(state);
+        PyThreadState_Swap(state);
+        _qore_PyCeval_SwapThreadState(t_state);
+        _qore_PyGILState_SetThisThreadState(t_state);
     }
 
+    // restore the old TLD state
     _qore_PyGILState_SetThisThreadState(t_state);
+}
+
+void QorePythonGilHelper::set(PyThreadState* other_state) {
+    // as this is called after creating a new interpreter, we cannot assert that we hold the GIL here
+    assert(_qore_PyCeval_GetGilLockedStatus() && _qore_PyCeval_GetThreadState());
+
+    PyThreadState_Swap(other_state);
+    _qore_PyCeval_SwapThreadState(other_state);
+    _qore_PyGILState_SetThisThreadState(other_state);
 }
