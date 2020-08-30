@@ -248,7 +248,7 @@ PyObject* QoreMetaPathFinder::getQoreRootModuleSpec(const QoreString& mname) {
 }
 
 PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& full_name, const char* mod_name) {
-    printd(0, "QoreMetaPathFinder::tryLoadModule() load '%s' (%s)\n", full_name.c_str(), mod_name);
+    //printd(5, "QoreMetaPathFinder::tryLoadModule() load '%s' (%s)\n", full_name.c_str(), mod_name);
     if (!strcmp(mod_name, "__root__")) {
         return getQoreRootModuleSpec(full_name);
     }

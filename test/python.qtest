@@ -64,14 +64,17 @@ class PythonTest inherits Test {
         testSkip("no jni module");
 %endif
         PythonProgram p("
-import qore.__jni__.org.qore.lang.restclient.RestClient as JavaRestClient
+import qoreloader
+qoreloader.load_java('org.qore.jni.Hash')
+from qore.__root__.Jni.org.qore.jni import Hash
 
 def test():
-    rest = JavaRestClient({'url': 'https://localhost:8011/path'})
-    return rest.getHTTPVersion()
+    return Hash()
 ", "test.py");
 
-        assertEq("1.1", p.callFunction("test"));
+        object h = p.callFunction("test");
+        h.put("a", 1);
+        assertEq(1, h.get("a"));
     }
 
     stackTest() {

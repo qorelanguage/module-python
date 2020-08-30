@@ -257,7 +257,7 @@ PyObject* qoreloader_load_java(PyObject* self, PyObject* args) {
             return nullptr;
         }
     }
-    printd(0, "qoreloader_load_java() jni module loaded: import '%s' pgm: %p\n", name_str, qpgm);
+    //printd(5, "qoreloader_load_java() jni module loaded: import '%s' pgm: %p\n", name_str, qpgm);
 
     if (MM.runTimeLoadModule("jni", qpgm, &xsink)) {
         qore_python_pgm->raisePythonException(xsink);
