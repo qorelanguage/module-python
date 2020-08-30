@@ -35,7 +35,7 @@ struct PyQoreObject {
 
 class PythonQoreClass {
 public:
-    DLLLOCAL PythonQoreClass(QorePythonProgram* pypgm, const char* module_name, const QoreClass& qcls);
+    DLLLOCAL PythonQoreClass(QorePythonProgram* pypgm, const char* module_name, const QoreClass& qcls, py_cls_map_t::iterator i);
 
     //! called for pure Python types to allow them to be extended in Qore
     DLLLOCAL PythonQoreClass(QorePythonProgram* pypgm, PyTypeObject* type, const QoreClass& qcls);
@@ -82,7 +82,7 @@ private:
     DLLLOCAL static PyObject* exec_qore_method(PyObject* method_capsule, PyObject* args);
     DLLLOCAL static PyObject* exec_qore_static_method(PyObject* method_capsule, PyObject* args);
 
-    DLLLOCAL static PyObject* exec_qore_static_method(const QoreMethod& m, PyObject* args);
+    DLLLOCAL static PyObject* exec_qore_static_method(const QoreMethod& m, PyObject* args, size_t offset = 0);
 
     // Python type methods
     DLLLOCAL static int py_init(PyObject* self, PyObject* args, PyObject* kwds);

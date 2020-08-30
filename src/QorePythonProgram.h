@@ -341,6 +341,15 @@ public:
     //! Returns a new reference
     DLLLOCAL PyObject* getPythonValue(QoreValue val, ExceptionSink* xsink);
 
+    //! Inserts a new class in the map
+    DLLLOCAL void insertClass(py_cls_map_t::iterator i, const QoreClass* qcls, PythonQoreClass* pycls) {
+        py_cls_map.insert(i, py_cls_map_t::value_type(qcls, pycls));
+    }
+
+    DLLLOCAL void insertClass(const QoreClass* qcls, PythonQoreClass* pycls) {
+        py_cls_map.insert(py_cls_map_t::value_type(qcls, pycls));
+    }
+
     //! Returns a c string for the given python unicode value
     DLLLOCAL static const char* getCString(PyObject* obj) {
         assert(PyUnicode_Check(obj));
@@ -431,7 +440,6 @@ protected:
     mutable ReferenceHolder<ResolvedCallReferenceNode> save_object_callback;
 
     //! Map of Qore classes to Python classes
-    typedef std::map<const QoreClass*, PythonQoreClass*> py_cls_map_t;
     py_cls_map_t py_cls_map;
 
     typedef std::vector<PyMethodDef*> meth_vec_t;

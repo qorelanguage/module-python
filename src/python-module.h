@@ -314,4 +314,7 @@ private:
     void* old_ptr;
 };
 
+class PythonQoreClass;
+typedef std::map<const QoreClass*, PythonQoreClass*> py_cls_map_t;
+
 #endif
