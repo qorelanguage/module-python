@@ -231,7 +231,7 @@ PyObject* QoreMetaPathFinder::getQoreRootModuleSpec(const QoreString& mname) {
     QorePythonReferenceHolder mod_spec(newModuleSpec(mname, QoreLoader::getLoaderRef()));
 
     QorePythonReferenceHolder search_locations(PyList_New(0));
-    // add namespaces as submodule search locations (NOTE: not functioanlly necessary it seems)
+    // add namespaces as submodule search locations (NOTE: not functionally necessary it seems)
     QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
     const RootQoreNamespace* rns = qore_python_pgm->getQoreProgram()->getRootNS();
     QoreNamespaceNamespaceIterator ni(*rns);
@@ -248,7 +248,7 @@ PyObject* QoreMetaPathFinder::getQoreRootModuleSpec(const QoreString& mname) {
 }
 
 PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& full_name, const char* mod_name) {
-    //printd(5, "QoreMetaPathFinder::tryLoadModule() load '%s' (%s)\n", full_name.c_str(), mod_name);
+    printd(0, "QoreMetaPathFinder::tryLoadModule() load '%s' (%s)\n", full_name.c_str(), mod_name);
     if (!strcmp(mod_name, "__root__")) {
         return getQoreRootModuleSpec(full_name);
     }

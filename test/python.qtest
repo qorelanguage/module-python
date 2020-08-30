@@ -14,6 +14,9 @@
 %define NO_JSON
 %endtry
 %requires WebSocketClient
+%try-module jni
+%define NO_JAVA
+%endtry
 
 %exec-class PythonTest
 
@@ -44,6 +47,7 @@ class PythonTest inherits Test {
     }
 
     constructor() : Test("python test", "1.0") {
+        addTestCase("java test", \javaTest());
         addTestCase("stack test", \stackTest());
         addTestCase("thread test", \threadTest());
         addTestCase("python callbacks", \pythonCallbackTest());
@@ -53,6 +57,21 @@ class PythonTest inherits Test {
         addTestCase("import test", \importTest());
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
+    }
+
+    javaTest() {
+%ifdef NO_JAVA
+        testSkip("no jni module");
+%endif
+        PythonProgram p("
+import qore.__jni__.org.qore.lang.restclient.RestClient as JavaRestClient
+
+def test():
+    rest = JavaRestClient({'url': 'https://localhost:8011/path'})
+    return rest.getHTTPVersion()
+", "test.py");
+
+        assertEq("1.1", p.callFunction("test"));
     }
 
     stackTest() {

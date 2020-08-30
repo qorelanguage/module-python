@@ -396,10 +396,6 @@ DLLLOCAL static PyThreadState* _qore_PyCeval_SwapThreadState(PyThreadState* gil_
     return old;
 }
 
-DLLLOCAL static pthread_mutex_t* _qore_PyCeval_GetGILLock() {
-    return &_PyRuntime.ceval.gil.mutex;
-}
-
 #define _QORE_PYTHON_REENABLE_GIL_CHECK { assert(!_PyRuntime.gilstate.check_enabled); _PyRuntime.gilstate.check_enabled = 1; }
 
 #endif
