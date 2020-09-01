@@ -35,7 +35,8 @@ struct PyQoreObject {
 
 class PythonQoreClass {
 public:
-    DLLLOCAL PythonQoreClass(QorePythonProgram* pypgm, const char* module_name, const QoreClass& qcls, py_cls_map_t::iterator i);
+    DLLLOCAL PythonQoreClass(QorePythonProgram* pypgm, const char* module_name, const QoreClass& qcls,
+        py_cls_map_t::iterator i);
 
     //! called for pure Python types to allow them to be extended in Qore
     DLLLOCAL PythonQoreClass(QorePythonProgram* pypgm, PyTypeObject* type, const QoreClass& qcls);
@@ -73,7 +74,8 @@ private:
     DLLLOCAL void populateClass(QorePythonProgram* pypgm, const QoreClass& qcls, clsset_t& cls_set,
         cstrset_t& meth_set, bool skip_first = true);
 
-    DLLLOCAL static int newQoreObject(ExceptionSink& xsink, PyQoreObject* pyself, QoreObject* qobj, const QoreClass* qcls, QorePythonProgram* qore_python_pgm);
+    DLLLOCAL static int newQoreObject(ExceptionSink& xsink, PyQoreObject* pyself, QoreObject* qobj,
+        const QoreClass* qcls, QorePythonProgram* qore_python_pgm);
 
     // finds the Qore class for the Python type
     DLLLOCAL static const QoreClass* findQoreClass(PyObject* self);

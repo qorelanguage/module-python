@@ -47,6 +47,7 @@ class PythonTest inherits Test {
     }
 
     constructor() : Test("python test", "1.0") {
+        addTestCase("qore test", \qoreTest());
         addTestCase("java test", \javaTest());
         addTestCase("stack test", \stackTest());
         addTestCase("thread test", \threadTest());
@@ -57,6 +58,39 @@ class PythonTest inherits Test {
         addTestCase("import test", \importTest());
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
+    }
+
+    qoreTest() {
+        hash<string, object> object_cache;
+        code callback = sub (object obj) {
+            # save object in object cache, so it doesn't go out of scope
+            object_cache{obj.uniqueHash()} = obj;
+        };
+        PythonProgram p("", "");
+        p.importNamespace("::Test", "x");
+        p.setSaveObjectCallback(callback);
+        p.evalStatementKeep("
+from qore.__root__.Test import Other
+
+class PyTest:
+    def __init__(self):
+        self.mydict = {
+            'other': Other(),
+        }
+
+    def get(self, attr, meth, *argv):
+        return getattr(self.mydict[attr], meth)(*argv)
+
+def test():
+    return PyTest()", "test.py");
+        p.setSaveObjectCallback();
+
+        object obj = p.callFunction("test");
+        assertEq(1, obj.get("other", "get"));
+
+        Queue q();
+        background q.push(obj.get("other", "get"));
+        assertEq(1, q.get());
     }
 
     javaTest() {

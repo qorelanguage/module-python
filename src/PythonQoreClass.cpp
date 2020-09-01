@@ -491,7 +491,7 @@ int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
     // returns a borrowed reference
     QoreObject* qobj = QorePythonImplicitQoreArgHelper::getQoreObject();
     printd(5, "PythonQoreClass::py_init() self: %p py_cls: '%s' qcls: '%s' cq: '%s' qobj: %p args: %p\n", self, type->tp_name, qcls->getName(), constructor_cls->getName(), qobj, args);
-    if (qobj) {
+    if (qobj && qobj->getClass() == qcls) {
         qobj->tRef();
         pyself->qobj = qobj;
         return 0;
