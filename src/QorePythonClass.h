@@ -45,11 +45,9 @@ public:
 
     DLLLOCAL QorePythonClass(QorePythonProgram* pypgm, const char* name);
 
-    DLLLOCAL QorePythonClass(const QorePythonClass& old) : QoreBuiltinClass(old), pypgm(old.pypgm) {
-    }
+    DLLLOCAL QorePythonClass(const QorePythonClass& old);
 
-    DLLLOCAL virtual ~QorePythonClass() {
-    }
+    DLLLOCAL virtual ~QorePythonClass();
 
     //! Called when a class is copied for import
     DLLLOCAL virtual QoreClass* copyImport() {
@@ -101,7 +99,7 @@ public:
         const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
 
 private:
-    QorePythonProgram* pypgm;
+    QorePythonProgram* pypgm = nullptr;
 
     // map of builtin members: name -> member
     typedef std::map<std::string, PyMemberDef*> mem_map_t;
