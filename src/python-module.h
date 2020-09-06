@@ -54,7 +54,9 @@ DLLLOCAL extern qore_classid_t CID_PYTHONBASEOBJECT;
 #include <internal/pycore_pystate.h>
 #else
 #if PY_MAJOR_VERSION >= 3
-#if PY_MINOR_VERSION == 8
+#if PY_MINOR_VERSION == 9
+#include "python39_internals.h"
+#elif PY_MINOR_VERSION == 8
 #include "python38_internals.h"
 #elif PY_MINOR_VERSION == 7
 #include "python37_internals.h"

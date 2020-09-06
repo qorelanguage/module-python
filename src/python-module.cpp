@@ -84,12 +84,11 @@ static bool python_needs_shutdown = false;
 int python_u_tld_key = -1;
 int python_qobj_key = -1;
 
-#ifdef NEED_PYTHON_36_TLS_KEY
-#ifndef __linux__
-#error Python TLS key prediction required when linking with Python 3.6 only works on Linux
+sig_vec_t sig_vec = {
+#ifndef Q_WINDOWS
+    SIGSEGV, SIGBUS
 #endif
-int autoTLSkey;
-#endif
+};
 
 static void check_python_version() {
     QorePythonReferenceHolder mod(PyImport_ImportModule("sys"));
@@ -142,17 +141,16 @@ static void check_python_version() {
     //printd(5, "python runtime version OK: %ld.%ld.x =~ '%s'\n", major, minor, PY_VERSION);
 }
 
-static QoreStringNode* python_module_init() {
-#ifdef NEED_PYTHON_36_TLS_KEY
-    // Python 3.6 does not expose its thread-local key in the API, but we can determine the value by creating and
-    // destroying a thread-local key before we call Py_Initialize()
-    pthread_key_t k;
-    pthread_key_create(&k, nullptr);
-    //printd(5, "python_module_init() got Python 3.6 thread-local key: %d\n", k);
-    autoTLSkey = k;
-    pthread_key_delete(k);
-#endif
+static void python_module_shutdown() {
+    if (python_needs_shutdown) {
+        PyThreadState_Swap(nullptr);
+        PyEval_AcquireThread(mainThreadState);
+        _qore_PyGILState_SetThisThreadState(mainThreadState);
+        Py_Finalize();
+    }
+}
 
+static QoreStringNode* python_module_init() {
     // initialize python library; do not register signal handlers
     if (!Py_IsInitialized()) {
         if (PyImport_AppendInittab("qoreloader", PyInit_qoreloader) == -1) {
@@ -161,12 +159,33 @@ static QoreStringNode* python_module_init() {
 
         Py_InitializeEx(0);
         python_needs_shutdown = true;
-    } else {
-#ifdef NEED_PYTHON_36_TLS_KEY
-        throw QoreStandardException("PYTHON-MODULE-ERROR", "cannot use the \"python\" module when liked with Python " \
-            "3.6 when not initialized by Qore");
-#endif
+        //printd(5, "python_module_init() Python initialized\n");
     }
+
+#ifndef Q_WINDOWS
+    {
+        sig_vec_t new_sig_vec;
+        for (int sig : sig_vec) {
+            QoreStringNode *err = qore_reassign_signal(sig, QORE_PYTHON_MODULE_NAME);
+            if (err) {
+                // ignore errors; already assigned to another module
+                err->deref();
+            }
+            new_sig_vec.push_back(sig);
+        }
+        if (!new_sig_vec.empty()) {
+            sigset_t mask;
+            // setup signal mask
+            sigemptyset(&mask);
+            for (auto& sig : new_sig_vec) {
+                //printd(LogLevel, "python_module_init() unblocking signal %d\n", sig);
+                sigaddset(&mask, sig);
+            }
+            // unblock threads
+            pthread_sigmask(SIG_UNBLOCK, &mask, 0);
+        }
+    }
+#endif
 
     python_u_tld_key = q_get_unique_thread_local_data_key();
     python_qobj_key = q_get_unique_thread_local_data_key();
@@ -218,12 +237,7 @@ static void python_module_delete() {
         qore_python_pgm->doDeref();
         qore_python_pgm = nullptr;
     }
-    if (python_needs_shutdown) {
-        PyThreadState_Swap(nullptr);
-        PyEval_AcquireThread(mainThreadState);
-        _qore_PyGILState_SetThisThreadState(mainThreadState);
-        Py_Finalize();
-    }
+    python_module_shutdown();
 }
 
 static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink) {
