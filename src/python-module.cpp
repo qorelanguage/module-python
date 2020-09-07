@@ -99,7 +99,7 @@ static bool python_needs_shutdown = false;
 int python_u_tld_key = -1;
 int python_qobj_key = -1;
 
-sig_vec_t sig_vec = {
+static sig_vec_t sig_vec = {
 #ifndef Q_WINDOWS
     SIGSEGV, SIGBUS
 #endif
