@@ -162,7 +162,9 @@ static void python_module_shutdown() {
         PyEval_AcquireThread(mainThreadState);
         _qore_PyGILState_SetThisThreadState(mainThreadState);
         int rc = Py_FinalizeEx();
-        printd(0, "python_module_shutdown() rc: %d\n", rc);
+        if (rc) {
+            printd(0, "Unkown error shutting down Python: rc: %d\n", rc);
+        }
         python_needs_shutdown = false;
     }
 }
@@ -232,7 +234,7 @@ static QoreStringNode* python_module_init_intern(bool repeat) {
 
         Py_InitializeEx(0);
         python_needs_shutdown = true;
-        printd(0, "python_module_init() Python initialized\n");
+        //printd(5, "python_module_init() Python initialized\n");
     }
 
     if (!repeat) {
