@@ -55,6 +55,7 @@ PythonProgram::constructor(string source_code, string source_label) {
 PythonProgram::destructor() {
     //printd(5, "Qore PythonProgram::destructor() this: %p\n", pp);
     pp->destructor(xsink);
+    pp->deref(xsink);
 }
 
 //! Runs the program
@@ -308,4 +309,3 @@ static PythonProgram::setSaveObjectCallback(*code save_object_callback) [dom=PRO
     assert(pypgm);
     pypgm->setSaveObjectCallback(save_object_callback);
 }
-

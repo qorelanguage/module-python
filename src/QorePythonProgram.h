@@ -378,6 +378,12 @@ public:
     //! Does this thread hold the GIL with the given thread state?
     DLLLOCAL static bool haveGilUnlocked(PyThreadState* tstate);
 
+    //! Returns the program count
+    DLLLOCAL static int getProgramCount() {
+        AutoLocker al(py_thr_lck);
+        return pgm_count;
+    }
+
 protected:
     PyInterpreterState* interpreter;
     QorePythonReferenceHolder module;
@@ -430,6 +436,9 @@ protected:
     typedef std::set<PyThreadState*> py_thr_set_t;
     typedef std::map<int, py_thr_set_t> py_global_tid_map_t;
     DLLLOCAL static py_global_tid_map_t py_global_tid_map;
+
+    //! number of program objects; writable only in the py_thr_lck lock
+    DLLLOCAL static unsigned pgm_count;
 
     // for local program thread management
     mutable int pgm_thr_cnt = 0;
