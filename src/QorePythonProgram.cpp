@@ -70,6 +70,7 @@ static bool _qore_PyThreadState_IsCurrent(PyThreadState* tstate) {
 QorePythonProgram::py_thr_map_t QorePythonProgram::py_thr_map;
 QorePythonProgram::py_global_tid_map_t QorePythonProgram::py_global_tid_map;
 QoreThreadLock QorePythonProgram::py_thr_lck;
+unsigned QorePythonProgram::pgm_count = 0;
 
 QorePythonProgram::QorePythonProgram() : save_object_callback(nullptr) {
     printd(5, "QorePythonProgram::QorePythonProgram() this: %p\n", this);
@@ -93,6 +94,7 @@ QorePythonProgram::QorePythonProgram() : save_object_callback(nullptr) {
     int tid = gettid();
     py_thr_map[this] = {{tid, {python, false}}};
     py_global_tid_map[tid].insert(python);
+    ++pgm_count;
 }
 
 QorePythonProgram::QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns) : qpgm(qpgm), pyns(pyns), save_object_callback(nullptr) {
@@ -287,24 +289,28 @@ void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
     // remove all thread states; the objects will be deleted by Python when the interpreter is destroyed
     {
         AutoLocker al(py_thr_lck);
+        if (interpreter) {
 
-        // wait for threads to complete before deleting entries
-        waitForThreadsIntern();
+            // wait for threads to complete before deleting entries
+            waitForThreadsIntern();
 
-        py_thr_map_t::iterator i = py_thr_map.find(this);
-        assert(i != py_thr_map.end());
-        //printd(5, "QorePythonProgram::deleteIntern() this: %p removing all thread states for pgm (delta: %d)\n", this, (int)i->second.size());
-        for (auto& ti : i->second) {
-            //printd(5, "QorePythonProgram::deleteIntern() this: %p removing TID %d\n", this, ti.first);
-            py_global_tid_map_t::iterator gi = py_global_tid_map.find(ti.first);
-            assert(gi != py_global_tid_map.end());
-            py_thr_set_t::iterator thr_i = gi->second.find(ti.second.state);
-            if (thr_i != gi->second.end()) {
-                gi->second.erase(thr_i);
+            py_thr_map_t::iterator i = py_thr_map.find(this);
+            assert(i != py_thr_map.end());
+            //printd(5, "QorePythonProgram::deleteIntern() this: %p removing all thread states for pgm (delta: %d)\n", this, (int)i->second.size());
+            for (auto& ti : i->second) {
+                //printd(5, "QorePythonProgram::deleteIntern() this: %p removing TID %d\n", this, ti.first);
+                py_global_tid_map_t::iterator gi = py_global_tid_map.find(ti.first);
+                assert(gi != py_global_tid_map.end());
+                py_thr_set_t::iterator thr_i = gi->second.find(ti.second.state);
+                if (thr_i != gi->second.end()) {
+                    gi->second.erase(thr_i);
+                }
             }
+            py_thr_map.erase(i);
+
+            assert(pgm_count > 0);
+            --pgm_count;
         }
-        py_thr_map.erase(i);
-        assert(interpreter);
     }
 
     if ((interpreter && owns_interpreter)/* || module || python_code || !py_cls_map.empty() || !meth_vec.empty()*/) {
@@ -521,6 +527,8 @@ int QorePythonProgram::createInterpreter(QorePythonGilHelper& qpgh, ExceptionSin
         }
         //printd(5, "QorePythonProgram::createInterpreter() inserted TID %d -> %p\n", tid, python);
     }
+
+    ++pgm_count;
 
     //printd(5, "QorePythonProgram::createInterpreter() this: %p\n", this);
     return setRecursionLimit(xsink);

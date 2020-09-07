@@ -28,6 +28,8 @@ static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns);
 static void python_module_delete();
 static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink);
 
+static QoreStringNode* python_module_init_intern(bool repeat);
+
 // module declaration for Qore 0.9.5+
 void python_qore_module_desc(QoreModuleInfo& mod_info) {
     mod_info.name = QORE_PYTHON_MODULE_NAME;
@@ -66,17 +68,30 @@ static void py_mc_parse(ExceptionSink* xsink, QoreString& arg, QorePythonProgram
 static void py_mc_export_class(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 static void py_mc_export_func(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 static void py_mc_add_module_path(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
+static void py_mc_reset_python(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
+
+struct qore_python_cmd_info_t {
+    qore_python_module_cmd_t cmd;
+    bool requires_arg = true;
+
+    DLLLOCAL qore_python_cmd_info_t(qore_python_module_cmd_t cmd, bool requires_arg)
+        : cmd(cmd), requires_arg(requires_arg) {
+    }
+};
 
 // module cmds
-typedef std::map<std::string, qore_python_module_cmd_t> mcmap_t;
+typedef std::map<std::string, qore_python_cmd_info_t> mcmap_t;
 static mcmap_t mcmap = {
-    {"import", py_mc_import},
-    {"import-ns", py_mc_import_ns},
-    {"alias", py_mc_alias},
-    {"parse", py_mc_parse},
-    {"export-class", py_mc_export_class},
-    {"export-func", py_mc_export_func},
-    {"add-module-path", py_mc_add_module_path},
+    {"import", qore_python_cmd_info_t(py_mc_import, true)},
+    {"import-ns", qore_python_cmd_info_t(py_mc_import_ns, true)},
+    {"alias", qore_python_cmd_info_t(py_mc_alias, true)},
+    {"parse", qore_python_cmd_info_t(py_mc_parse, true)},
+    {"export-class", qore_python_cmd_info_t(py_mc_export_class, true)},
+    {"export-func", qore_python_cmd_info_t(py_mc_export_func, true)},
+    {"add-module-path", qore_python_cmd_info_t(py_mc_add_module_path, true)},
+#if 0
+    {"reset-python", qore_python_cmd_info_t(py_mc_reset_python, false)},
+#endif
 };
 
 static bool python_needs_shutdown = false;
@@ -146,11 +161,69 @@ static void python_module_shutdown() {
         PyThreadState_Swap(nullptr);
         PyEval_AcquireThread(mainThreadState);
         _qore_PyGILState_SetThisThreadState(mainThreadState);
-        Py_Finalize();
+        int rc = Py_FinalizeEx();
+        printd(0, "python_module_shutdown() rc: %d\n", rc);
+        python_needs_shutdown = false;
     }
 }
 
+#if 0
+// does not work with modules like tensorflow that do not unload cleanly
+int q_reset_python(ExceptionSink* xsink) {
+    if (!python_needs_shutdown) {
+        xsink->raiseException("PYTHON-RESET-ERROR", "The module was loaded into an existing Python process and " \
+            "therefore cannot be reset externally");
+        return -1;
+    }
+
+    unsigned cnt = QorePythonProgram::getProgramCount();
+    if (cnt) {
+        if (cnt <= 2) {
+            QoreProgram* pgm = getProgram();
+            if (pgm) {
+                QorePythonProgramData* pypgm = static_cast<QorePythonProgramData*>(pgm->removeExternalData(QORE_PYTHON_MODULE_NAME));
+                if (pypgm) {
+                    pypgm->destructor(xsink);
+                    pypgm->weakDeref();
+                    if (*xsink) {
+                        return -1;
+                    }
+                    --cnt;
+                }
+            }
+        }
+
+        if (cnt == 1 && qore_python_pgm) {
+            qore_python_pgm->destructor(xsink);
+            qore_python_pgm->weakDeref();
+            qore_python_pgm = nullptr;
+            --cnt;
+        }
+
+        if (cnt) {
+            xsink->raiseException("PYTHON-RESET-ERROR", "Cannot reset the Python library with %d Python program%s " \
+                "still valid", cnt, cnt == 1 ? "" : "s");
+            return -1;
+        }
+    }
+
+    python_module_shutdown();
+
+    SimpleRefHolder<QoreStringNode> err(python_module_init_intern(true));
+    if (err) {
+        xsink->raiseException("PYTHON-RESET-ERROR", err.release());
+        return -1;
+    }
+
+    return 0;
+}
+#endif
+
 static QoreStringNode* python_module_init() {
+    return python_module_init_intern(false);
+}
+
+static QoreStringNode* python_module_init_intern(bool repeat) {
     // initialize python library; do not register signal handlers
     if (!Py_IsInitialized()) {
         if (PyImport_AppendInittab("qoreloader", PyInit_qoreloader) == -1) {
@@ -159,11 +232,11 @@ static QoreStringNode* python_module_init() {
 
         Py_InitializeEx(0);
         python_needs_shutdown = true;
-        //printd(5, "python_module_init() Python initialized\n");
+        printd(0, "python_module_init() Python initialized\n");
     }
 
+    if (!repeat) {
 #ifndef Q_WINDOWS
-    {
         sig_vec_t new_sig_vec;
         for (int sig : sig_vec) {
             QoreStringNode *err = qore_reassign_signal(sig, QORE_PYTHON_MODULE_NAME);
@@ -184,11 +257,11 @@ static QoreStringNode* python_module_init() {
             // unblock threads
             pthread_sigmask(SIG_UNBLOCK, &mask, 0);
         }
-    }
 #endif
 
-    python_u_tld_key = q_get_unique_thread_local_data_key();
-    python_qobj_key = q_get_unique_thread_local_data_key();
+        python_u_tld_key = q_get_unique_thread_local_data_key();
+        python_qobj_key = q_get_unique_thread_local_data_key();
+    }
 
     // ensure that runtime version matches compiled version
     check_python_version();
@@ -209,12 +282,14 @@ static QoreStringNode* python_module_init() {
         assert(!QorePythonProgram::haveGil());
     }
 
-    PNS.addSystemClass(initPythonProgramClass(PNS));
+    if (!repeat) {
+        PNS.addSystemClass(initPythonProgramClass(PNS));
 
-    tclist.push(QorePythonProgram::pythonThreadCleanup, nullptr);
+        tclist.push(QorePythonProgram::pythonThreadCleanup, nullptr);
 
-    QC_PYTHONBASEOBJECT = new QorePythonClass("__qore_base__");
-    CID_PYTHONBASEOBJECT = QC_PYTHONBASEOBJECT->getID();
+        QC_PYTHONBASEOBJECT = new QorePythonClass("__qore_base__");
+        CID_PYTHONBASEOBJECT = QC_PYTHONBASEOBJECT->getID();
+    }
 
     return nullptr;
 }
@@ -244,18 +319,18 @@ static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink)
     //printd(5, "python_module_parse_cmd() cmd: '%s'\n", cmd.c_str());
 
     const char* p = strchr(cmd.c_str(), ' ');
-
-    if (!p) {
-        xsink->raiseException("PYTHON-PARSE-COMMAND-ERROR", "missing command name in parse command: '%s'", cmd.c_str());
-        return;
+    QoreString str;
+    QoreString arg;
+    if (p) {
+        QoreString nstr(&cmd, p - cmd.c_str());
+        str = nstr;
+        arg = cmd;
+        arg.replace(0, p - cmd.c_str() + 1, (const char*)0);
+        arg.trim();
+    } else {
+        str = cmd;
+        str.trim();
     }
-
-    QoreString str(&cmd, p - cmd.c_str());
-
-    QoreString arg(cmd);
-
-    arg.replace(0, p - cmd.c_str() + 1, (const char*)0);
-    arg.trim();
 
     mcmap_t::const_iterator i = mcmap.find(str.c_str());
     if (i == mcmap.end()) {
@@ -270,6 +345,18 @@ static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink)
         return;
     }
 
+    if (i->second.requires_arg) {
+        if (arg.empty()) {
+            xsink->raiseException("PYTHON-PARSE-COMMAND-ERROR", "missing argument / command name in parse command: '%s'", cmd.c_str());
+            return;
+        }
+    } else {
+        if (!arg.empty()) {
+            xsink->raiseException("PYTHON-PARSE-COMMAND-ERROR", "extra argument / command name in parse command: '%s'", cmd.c_str());
+            return;
+        }
+    }
+
     QoreProgram* pgm = getProgram();
     QorePythonProgram* pypgm = static_cast<QorePythonProgram*>(pgm->getExternalData(QORE_PYTHON_MODULE_NAME));
     //printd(5, "parse-cmd '%s' pypgm: %p pythonns: %p\n", arg.c_str(), pypgm, pypgm->getPythonNamespace());
@@ -280,7 +367,7 @@ static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink)
         pgm->addFeature(QORE_PYTHON_MODULE_NAME);
     }
 
-    i->second(xsink, arg, pypgm);
+    i->second.cmd(xsink, arg, pypgm);
 }
 
 // %module-cmd(python) import
@@ -383,6 +470,13 @@ static void py_mc_export_func(ExceptionSink* xsink, QoreString& arg, QorePythonP
 static void py_mc_add_module_path(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
     pypgm->addModulePath(xsink, arg);
 }
+
+#if 0
+// %module-cmd(python) reset-python
+static void py_mc_reset_python(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
+    q_reset_python(xsink);
+}
+#endif
 
 QorePythonHelper::QorePythonHelper(const QorePythonProgram* pypgm)
     : old_pgm(q_swap_thread_local_data(python_u_tld_key, (void*)pypgm)), old_state(pypgm->setContext()), new_pypgm(pypgm) {

@@ -319,4 +319,8 @@ private:
 class PythonQoreClass;
 typedef std::map<const QoreClass*, PythonQoreClass*> py_cls_map_t;
 
+#if 0
+DLLLOCAL int q_reset_python(ExceptionSink* xsink);
+#endif
+
 #endif
