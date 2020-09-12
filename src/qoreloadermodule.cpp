@@ -51,7 +51,7 @@ thread_local QoreThreadAttacher qoreThreadAttacher;
 
 PyTypeObject PythonQoreObjectBase_Type = {
     PyVarObject_HEAD_INIT(nullptr, 0)
-#if !defined(__clang__) && __GNUC__ < 6
+#if !defined(__clang__) && __GNUC__ < 8
     // g++ 5.4.0 does not accept the short-form initialization below :(
     "PythonQoreObjectBase",         // tp_name
     0,                              // tp_basicsize

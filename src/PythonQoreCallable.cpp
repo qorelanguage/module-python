@@ -31,7 +31,7 @@ static void qore_callable_free(PyQoreCallable* self);
 
 PyTypeObject PythonQoreCallable_Type = {
     PyVarObject_HEAD_INIT(nullptr, 0)
-#if !defined(__clang__) && __GNUC__ < 6
+#if !defined(__clang__) && __GNUC__ < 8
     // g++ 5.4.0 does not accept the short-form initialization below :(
     "QoreCallable",                 // tp_name
     sizeof(PyQoreCallable),         // tp_basicsize
