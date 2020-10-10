@@ -187,13 +187,13 @@ def get():
             object py_obj1 = p1.callFunction("get");
             ThreadPool tp();
             code test0 = sub () {
-                map py_obj0.test(1), xrange(9);
+                map py_obj0.test(1), xrange(10);
             };
             code test1 = sub () {
-                map py_obj1.test(1), xrange(9);
+                map py_obj1.test(1), xrange(10);
             };
-            map tp.submit(test0), xrange(9);
-            map tp.submit(test1), xrange(9);
+            map tp.submit(test0), xrange(10);
+            map tp.submit(test1), xrange(10);
             tp.stopWait();
             hash<auto> info = py_obj0.info();
             assertEq(1000, info.a);
@@ -244,14 +244,14 @@ class PyTest(TestApi):
             int cnt = 0;
             code test0 = sub () {
                 SubApi s = testapi0.get();
-                map cnt += s.callback("msg"), xrange(99);
+                map cnt += s.callback("msg"), xrange(100);
             };
             code test1 = sub () {
                 SubApi s = testapi1.get();
-                map cnt += s.callback("msg"), xrange(99);
+                map cnt += s.callback("msg"), xrange(100);
             };
-            map tp.submit(test0), xrange(9);
-            map tp.submit(test1), xrange(9);
+            map tp.submit(test0), xrange(10);
+            map tp.submit(test1), xrange(10);
             tp.stopWait();
             assertEq(12000, cnt);
         }
