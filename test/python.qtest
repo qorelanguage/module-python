@@ -48,7 +48,6 @@ class PythonTest inherits Test {
 
     constructor() : Test("python test", "1.0") {
         addTestCase("exception test", \exceptionTest());
-        /*
         addTestCase("qore test", \qoreTest());
         addTestCase("java test", \javaTest());
         addTestCase("stack test", \stackTest());
@@ -58,7 +57,6 @@ class PythonTest inherits Test {
         addTestCase("object lifecycle", \objectLifecycleTest());
         addTestCase("basic test", \basicTest());
         addTestCase("import test", \importTest());
-        */
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
     }
