@@ -47,6 +47,7 @@ class PythonTest inherits Test {
     }
 
     constructor() : Test("python test", "1.0") {
+        addTestCase("exception test", \exceptionTest());
         addTestCase("qore test", \qoreTest());
         addTestCase("java test", \javaTest());
         addTestCase("stack test", \stackTest());
@@ -58,6 +59,28 @@ class PythonTest inherits Test {
         addTestCase("import test", \importTest());
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
+    }
+
+    exceptionTest() {
+        PythonProgram p("
+def t1():
+    t2()
+
+def t2():
+    t3()
+
+def t3():
+    raise Exception('err', 'desc')
+", "test.py");
+
+        try {
+            p.callFunction("t1");
+            assertTrue(False);
+        } catch (hash<ExceptionInfo> ex) {
+            assertEq("t3", ex.callstack[0].function);
+            assertEq("t2", ex.callstack[1].function);
+            assertEq("t1", ex.callstack[2].function);
+        }
     }
 
     qoreTest() {
@@ -164,13 +187,13 @@ def get():
             object py_obj1 = p1.callFunction("get");
             ThreadPool tp();
             code test0 = sub () {
-                map py_obj0.test(1), xrange(9);
+                map py_obj0.test(1), xrange(10);
             };
             code test1 = sub () {
-                map py_obj1.test(1), xrange(9);
+                map py_obj1.test(1), xrange(10);
             };
-            map tp.submit(test0), xrange(9);
-            map tp.submit(test1), xrange(9);
+            map tp.submit(test0), xrange(10);
+            map tp.submit(test1), xrange(10);
             tp.stopWait();
             hash<auto> info = py_obj0.info();
             assertEq(1000, info.a);
@@ -221,14 +244,14 @@ class PyTest(TestApi):
             int cnt = 0;
             code test0 = sub () {
                 SubApi s = testapi0.get();
-                map cnt += s.callback("msg"), xrange(99);
+                map cnt += s.callback("msg"), xrange(100);
             };
             code test1 = sub () {
                 SubApi s = testapi1.get();
-                map cnt += s.callback("msg"), xrange(99);
+                map cnt += s.callback("msg"), xrange(100);
             };
-            map tp.submit(test0), xrange(9);
-            map tp.submit(test1), xrange(9);
+            map tp.submit(test0), xrange(10);
+            map tp.submit(test1), xrange(10);
             tp.stopWait();
             assertEq(12000, cnt);
         }

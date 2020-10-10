@@ -72,6 +72,8 @@ QorePythonProgram::py_global_tid_map_t QorePythonProgram::py_global_tid_map;
 QoreThreadLock QorePythonProgram::py_thr_lck;
 unsigned QorePythonProgram::pgm_count = 0;
 
+QorePythonReferenceHolder QorePythonProgram::extract_tb;
+
 QorePythonProgram::QorePythonProgram() : save_object_callback(nullptr) {
     printd(5, "QorePythonProgram::QorePythonProgram() this: %p\n", this);
     assert(PyGILState_Check());
@@ -265,6 +267,16 @@ QorePythonProgram* QorePythonProgram::getContext() {
 
 int QorePythonProgram::staticInit() {
     PyDateTime_IMPORT;
+    QorePythonReferenceHolder traceback_mod(PyImport_ImportModule("traceback"));
+    if (!traceback_mod) {
+        PyErr_Clear();
+        return -1;
+    }
+    extract_tb = PyObject_GetAttrString(*traceback_mod, "extract_tb");
+    if (!extract_tb || !PyCallable_Check(*extract_tb)) {
+        PyErr_Clear();
+        return -1;
+    }
     return 0;
 }
 
@@ -1831,6 +1843,7 @@ void QorePythonProgram::clearPythonException() {
     PyErr_Fetch(ex_type.getRef(), ex_value.getRef(), traceback.getRef());
 }
 
+static void breakit() {}
 int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
     // returns a borrowed reference
     PyObject* ex = PyErr_Occurred();
@@ -1838,6 +1851,7 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
         //printd(5, "QorePythonProgram::checkPythonException() no error\n");
         return 0;
     }
+    breakit();
 
     QorePythonReferenceHolder ex_type, ex_value, traceback;
     PyErr_Fetch(ex_type.getRef(), ex_value.getRef(), traceback.getRef());
@@ -1867,17 +1881,33 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
     bool use_loc;
     if (PyTraceBack_Check(*traceback)) {
         PyTracebackObject* tb = reinterpret_cast<PyTracebackObject*>(*traceback);
+
+        int depth = 0;
+        PyTracebackObject* tb1 = tb;
+        while (tb1) {
+            ++depth;
+            tb1 = tb1->tb_next;
+        }
+        while (tb->tb_next && depth > 0) {
+            --depth;
+            tb = tb->tb_next;
+        }
+
         PyFrameObject* frame = tb->tb_frame;
+        const char* funcname = nullptr;
         while (frame) {
             int line = PyCode_Addr2Line(frame->f_code, frame->f_lasti);
             const char* filename = getCString(frame->f_code->co_filename);
-            const char* funcname = getCString(frame->f_code->co_name);
             if (frame == tb->tb_frame) {
                 loc.set(filename, line, line, nullptr, 0, QORE_PYTHON_LANG_NAME);
             } else {
                 callstack.add(CT_USER, filename, line, line, funcname, QORE_PYTHON_LANG_NAME);
             }
+            funcname = getCString(frame->f_code->co_name);
             frame = frame->f_back;
+        }
+        if (funcname) {
+            callstack.add(CT_BUILTIN, "unknown", -1, -1, funcname, "c++");
         }
         use_loc = true;
     } else {
