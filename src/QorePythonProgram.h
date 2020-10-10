@@ -440,6 +440,9 @@ protected:
     //! number of program objects; writable only in the py_thr_lck lock
     DLLLOCAL static unsigned pgm_count;
 
+    //! traceback.extract_tb() method
+    DLLLOCAL static QorePythonReferenceHolder extract_tb;
+
     // for local program thread management
     mutable int pgm_thr_cnt = 0;
     mutable int pgm_thr_waiting = 0;
