@@ -47,9 +47,10 @@ class PythonTest inherits Test {
     }
 
     constructor() : Test("python test", "1.0") {
+        addTestCase("java test", \javaTest());
+        /*
         addTestCase("exception test", \exceptionTest());
         addTestCase("qore test", \qoreTest());
-        addTestCase("java test", \javaTest());
         addTestCase("stack test", \stackTest());
         addTestCase("thread test", \threadTest());
         addTestCase("python callbacks", \pythonCallbackTest());
@@ -57,6 +58,7 @@ class PythonTest inherits Test {
         addTestCase("object lifecycle", \objectLifecycleTest());
         addTestCase("basic test", \basicTest());
         addTestCase("import test", \importTest());
+        */
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
     }
@@ -120,7 +122,23 @@ def test():
 %ifdef NO_JAVA
         testSkip("no jni module");
 %endif
-        PythonProgram p("
+        {
+            # Java wildcard import test
+            PythonProgram p("
+import qoreloader
+from java.org.qore.jni import Hash
+
+def test():
+    return Hash()
+", "test.py");
+
+            object h = p.callFunction("test");
+            h.put("a", 1);
+            assertEq(1, h.get("a"));
+        }
+
+        {
+            PythonProgram p("
 import qoreloader
 qoreloader.load_java('org.qore.jni.Hash')
 from qore.__root__.Jni.org.qore.jni import Hash
@@ -129,9 +147,10 @@ def test():
     return Hash()
 ", "test.py");
 
-        object h = p.callFunction("test");
-        h.put("a", 1);
-        assertEq(1, h.get("a"));
+            object h = p.callFunction("test");
+            h.put("a", 1);
+            assertEq(1, h.get("a"));
+        }
     }
 
     stackTest() {

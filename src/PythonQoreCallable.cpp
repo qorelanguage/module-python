@@ -93,7 +93,7 @@ int qore_callable_init(PyObject* self, PyObject* args, PyObject* kwds) {
     assert(PyQoreCallable_Check(self));
     assert(PyTuple_Check(args));
 
-    QorePythonReferenceHolder argstr(PyObject_Repr(args));
+    //QorePythonReferenceHolder argstr(PyObject_Repr(args));
     //printd(5, "qore_callable_init() self: %p '%s' args: %p (%d: %s) kwds: %p\n", self, Py_TYPE(self)->tp_name, args, (int)PyTuple_Size(args), PyUnicode_AsUTF8(*argstr), kwds);
 
     Py_ssize_t size = PyTuple_Size(args);

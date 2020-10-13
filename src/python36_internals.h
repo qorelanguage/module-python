@@ -152,7 +152,7 @@ typedef enum _Py_memory_order {
     atomic_load_explicit(&(ATOMIC_VAL)->_value, ORDER)
 #endif
 
-DLLLOCAL static int
+DLLLOCAL static inline int
 PyThread_set_key_value(int key, void *value)
 {
     int fail;
@@ -160,14 +160,14 @@ PyThread_set_key_value(int key, void *value)
     return fail ? -1 : 0;
 }
 
-DLLLOCAL static PyThreadState* _qore_PyRuntimeGILState_GetThreadState() {
+DLLLOCAL static inline PyThreadState* _qore_PyRuntimeGILState_GetThreadState() {
     return reinterpret_cast<PyThreadState*>(_Py_atomic_load_relaxed(&_PyThreadState_Current));
 }
 
 #define NEED_PYTHON_36_TLS_KEY
 DLLLOCAL extern int autoTLSkey;
 
-DLLLOCAL static void _qore_PyGILState_SetThisThreadState(PyThreadState* state) {
+DLLLOCAL static inline void _qore_PyGILState_SetThisThreadState(PyThreadState* state) {
     PyThread_set_key_value(autoTLSkey, (void*)state);
 }
 

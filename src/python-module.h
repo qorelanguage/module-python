@@ -319,6 +319,12 @@ private:
 class PythonQoreClass;
 typedef std::map<const QoreClass*, PythonQoreClass*> py_cls_map_t;
 
+//! called from Python only; if it returns nullptr, a Python exception is raised
+int load_jni_module(QorePythonProgram* qore_python_pgm);
+
+//! called from Python only; if it returns nullptr, a Python exception is raised
+DLLLOCAL int do_jni_module_import(QorePythonProgram* qore_python_pgm, const char* name_str);
+
 #if 0
 DLLLOCAL int q_reset_python(ExceptionSink* xsink);
 #endif

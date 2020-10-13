@@ -350,6 +350,9 @@ public:
         py_cls_map.insert(py_cls_map_t::value_type(qcls, pycls));
     }
 
+    //! Creates a new module or package
+    DLLLOCAL PyObject* newModule(const char* name, const QoreNamespace* ns_pkg = nullptr);
+
     //! Returns a c string for the given python unicode value
     DLLLOCAL static const char* getCString(PyObject* obj) {
         assert(PyUnicode_Check(obj));
@@ -500,9 +503,6 @@ protected:
 
     //! Saves the module in sys.modules
     DLLLOCAL int saveModule(const char* name, PyObject* mod);
-
-    //! Creates a new module or package
-    DLLLOCAL PyObject* newModule(const char* name, const QoreNamespace* ns_pkg = nullptr);
 
     //! Creates a new module package with an explicit path name
     DLLLOCAL PyObject* newModule(const char* name, const char* path);

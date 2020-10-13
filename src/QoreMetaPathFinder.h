@@ -53,18 +53,22 @@ public:
     DLLLOCAL static PyObject* find_spec(PyObject* self, PyObject* args);
 
     //! Retuns a new module spec object
-    /** @param name the name of the new module
+    /** @param qore qore or java loader
+        @param name the name of the new module
         @param loader either nullptr (None will be used) or an already-referenced loader
     */
-    DLLLOCAL static PyObject* newModuleSpec(const QoreString& name, PyObject* loader = nullptr);
+    DLLLOCAL static PyObject* newModuleSpec(bool qore, const QoreString& name, PyObject* loader = nullptr);
 
 private:
     DLLLOCAL static QorePythonManualReferenceHolder qore_package;
+    DLLLOCAL static QorePythonManualReferenceHolder java_package;
     DLLLOCAL static QorePythonManualReferenceHolder mod_spec_cls;
 
     DLLLOCAL static PyObject* getQorePackageModuleSpec();
+    DLLLOCAL static PyObject* getJavaPackageModuleSpec();
     DLLLOCAL static PyObject* getQoreRootModuleSpec(const QoreString& mname);
     DLLLOCAL static PyObject* tryLoadModule(const QoreString& full_name, const char* mod_name);
+    DLLLOCAL static PyObject* getJavaNamespaceModule(const QoreString& full_name, const char* mod_name);
 };
 
 class PythonThreadStateHelper : QorePythonGilHelper {
