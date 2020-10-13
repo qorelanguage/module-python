@@ -387,23 +387,23 @@ typedef enum _Py_memory_order {
     _Py_atomic_store_explicit((ATOMIC_VAL), (NEW_VAL), _Py_memory_order_relaxed)
 
 // equivalent to: PyThreadState_GET() == _PyThreadState_GET() == _PyRuntimeState_GetThreadState(&_PyRuntime.gilstate.tstate_current)
-DLLLOCAL static PyThreadState* _qore_PyRuntimeGILState_GetThreadState() {
+DLLLOCAL static inline PyThreadState* _qore_PyRuntimeGILState_GetThreadState() {
     return reinterpret_cast<PyThreadState*>(_Py_atomic_load_relaxed(&_PyRuntime.gilstate.tstate_current));
 }
 
-DLLLOCAL static void _qore_PyGILState_SetThisThreadState(PyThreadState* state) {
+DLLLOCAL static inline void _qore_PyGILState_SetThisThreadState(PyThreadState* state) {
     PyThread_tss_set(&_PyRuntime.gilstate.autoTSSkey, (void*)state);
 }
 
-DLLLOCAL static bool _qore_PyCeval_GetGilLockedStatus() {
+DLLLOCAL static inline bool _qore_PyCeval_GetGilLockedStatus() {
     return (bool)(_Py_atomic_load_relaxed(&_PyRuntime.ceval.gil.locked));
 }
 
-DLLLOCAL static PyThreadState* _qore_PyCeval_GetThreadState() {
+DLLLOCAL static inline PyThreadState* _qore_PyCeval_GetThreadState() {
     return reinterpret_cast<PyThreadState*>(_Py_atomic_load_relaxed(&_PyRuntime.ceval.gil.last_holder));
 }
 
-DLLLOCAL static PyThreadState* _qore_PyCeval_SwapThreadState(PyThreadState* gil_state) {
+DLLLOCAL static inline PyThreadState* _qore_PyCeval_SwapThreadState(PyThreadState* gil_state) {
     PyThreadState* old = reinterpret_cast<PyThreadState*>(_Py_atomic_load_relaxed(&_PyRuntime.ceval.gil.last_holder));
     if (old != gil_state) {
         _Py_atomic_store_relaxed(&_PyRuntime.ceval.gil.last_holder, (uintptr_t)gil_state);

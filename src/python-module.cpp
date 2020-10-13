@@ -68,7 +68,7 @@ static void py_mc_parse(ExceptionSink* xsink, QoreString& arg, QorePythonProgram
 static void py_mc_export_class(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 static void py_mc_export_func(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 static void py_mc_add_module_path(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
-static void py_mc_reset_python(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
+//static void py_mc_reset_python(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm);
 
 struct qore_python_cmd_info_t {
     qore_python_module_cmd_t cmd;
@@ -327,7 +327,7 @@ static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink)
         QoreString nstr(&cmd, p - cmd.c_str());
         str = nstr;
         arg = cmd;
-        arg.replace(0, p - cmd.c_str() + 1, (const char*)0);
+        arg.replace(0, p - cmd.c_str() + 1, (const char*)nullptr);
         arg.trim();
     } else {
         str = cmd;

@@ -30,6 +30,7 @@
 #include "QoreMetaPathFinder.h"
 #include "PythonCallableCallReferenceNode.h"
 #include "PythonQoreCallable.h"
+#include "ModuleNamespace.h"
 
 #include <structmember.h>
 #include <frameobject.h>
@@ -949,7 +950,8 @@ int QorePythonProgram::importQoreNamespaceToPython(PyObject* mod, const QoreName
 }
 
 PyObject* QorePythonProgram::newModule(const char* name, const QoreNamespace* ns_pkg) {
-    QorePythonReferenceHolder new_mod(PyModule_New(name));
+    //QorePythonReferenceHolder new_mod(PyModule_New(name));
+    QorePythonReferenceHolder new_mod(ModuleNamespace_New(name, ns_pkg));
     if (ns_pkg) {
         std::string nspath = ns_pkg->getPath();
         QorePythonReferenceHolder path(PyUnicode_FromStringAndSize(nspath.c_str(), nspath.size()));
@@ -2131,8 +2133,6 @@ QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, Q
 
     // create Python mapping for QoreClass if necessary
     if (!PyQoreObjectType_Check(type)) {
-        //std::unique_ptr<PythonQoreClass> py_cls(new PythonQoreClass(this, type, *cls.get()));
-        //py_cls_map.insert(py_cls_map_t::value_type(cls.get(), py_cls.release()));
         new PythonQoreClass(this, type, *cls.get());
     }
 

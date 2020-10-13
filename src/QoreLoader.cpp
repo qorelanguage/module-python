@@ -23,6 +23,7 @@
 #include "QoreMetaPathFinder.h"
 #include "QorePythonProgram.h"
 #include "PythonQoreClass.h"
+#include "ModuleNamespace.h"
 
 #include <memory>
 
@@ -84,6 +85,10 @@ PyTypeObject QoreLoader_Type = {
 };
 
 int QoreLoader::init() {
+    if (initModuleNamespace()) {
+        return -1;
+    }
+
     if (PyType_Ready(&QoreLoader_Type) < 0) {
         printd(5, "QoreLoader::init() type initialization failed\n");
         return -1;
@@ -172,7 +177,7 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
 
     if (ns) {
         printd(5, "QoreLoader::exec_module() found '%s' NS %p: '::%s'\n", name_str, ns, ns->getName());
-        QoreProgramContextHelper pch(qore_python_pgm->getQoreProgram());
+        QoreProgramContextHelper pch(mod_pgm);
         qore_python_pgm->importQoreToPython(mod, *ns, name_str);
         std::string nspath = ns->getPath();
         QorePythonReferenceHolder py_path(PyUnicode_FromStringAndSize(nspath.c_str(), nspath.size()));

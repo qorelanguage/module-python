@@ -21,9 +21,11 @@
 
 #include "QoreMetaPathFinder.h"
 #include "QoreLoader.h"
+#include "JavaLoader.h"
 #include "QorePythonProgram.h"
 
 QorePythonManualReferenceHolder QoreMetaPathFinder::qore_package;
+QorePythonManualReferenceHolder QoreMetaPathFinder::java_package;
 QorePythonManualReferenceHolder QoreMetaPathFinder::mod_spec_cls;
 
 PyDoc_STRVAR(QoreMetaPathFinder_doc,
@@ -137,6 +139,7 @@ int QoreMetaPathFinder::setupModules() {
 
 void QoreMetaPathFinder::del() {
     qore_package.release();
+    java_package.release();
     mod_spec_cls.purge();
 }
 
@@ -174,12 +177,23 @@ PyObject* QoreMetaPathFinder::find_spec(PyObject* self, PyObject* args) {
             if (rv) {
                 return rv;
             }
+        } else if (!strcmp(fname, "java")) {
+            PyObject* rv = getJavaPackageModuleSpec();
+            if (rv) {
+                return rv;
+            }
         }
     } else {
         QoreString mname(fname);
         if (mname.size() > 5 && mname.equalPartial("qore.")) {
             //mname.replace(0, 5, (const char*)nullptr);
             PyObject* rv = tryLoadModule(mname, mname.c_str() + 5);
+            if (rv) {
+                return rv;
+            }
+        } else if (mname.size() > 5 && mname.equalPartial("java.")) {
+            //mname.replace(0, 5, (const char*)nullptr);
+            PyObject* rv = getJavaNamespaceModule(mname, mname.c_str() + 5);
             if (rv) {
                 return rv;
             }
@@ -190,7 +204,7 @@ PyObject* QoreMetaPathFinder::find_spec(PyObject* self, PyObject* args) {
     return Py_None;
 }
 
-PyObject* QoreMetaPathFinder::newModuleSpec(const QoreString& name, PyObject* loader) {
+PyObject* QoreMetaPathFinder::newModuleSpec(bool qore, const QoreString& name, PyObject* loader) {
     // create args for ModuleSpec constructor
     QorePythonReferenceHolder args(PyTuple_New(2));
     PyTuple_SET_ITEM(*args, 0, PyUnicode_FromStringAndSize(name.c_str(), name.size()));
@@ -207,7 +221,7 @@ PyObject* QoreMetaPathFinder::newModuleSpec(const QoreString& name, PyObject* lo
     PyDict_SetItemString(*kwargs, "is_package", Py_True);
     QorePythonReferenceHolder mod_spec(PyObject_Call((PyObject*)*mod_spec_cls, *args, *kwargs));
 
-    PyObject_SetAttrString(*mod_spec, "loader", QoreLoader::getLoader());
+    PyObject_SetAttrString(*mod_spec, "loader", qore ? QoreLoader::getLoader() : JavaLoader::getLoader());
 
     assert(mod_spec);
     return mod_spec.release();
@@ -216,19 +230,33 @@ PyObject* QoreMetaPathFinder::newModuleSpec(const QoreString& name, PyObject* lo
 PyObject* QoreMetaPathFinder::getQorePackageModuleSpec() {
     if (!qore_package) {
         // create qore package
-        qore_package = newModuleSpec("qore");
+        qore_package = newModuleSpec(true, "qore");
 
         QorePythonReferenceHolder search_locations(PyList_New(0));
         PyObject_SetAttrString(*qore_package, "submodule_search_locations", *search_locations);
     }
 
     qore_package.py_ref();
-    //printd(5, "QoreMetaPathFinder::getQorePackageModuleSpec() returning existing qore_package: %p\n", *qore_package);
+    //printd(5, "QoreMetaPathFinder::getQorePackageModuleSpec() returning qore_package: %p\n", *qore_package);
     return *qore_package;
 }
 
+PyObject* QoreMetaPathFinder::getJavaPackageModuleSpec() {
+    if (!java_package) {
+        // create java package
+        java_package = newModuleSpec(false, "java");
+
+        QorePythonReferenceHolder search_locations(PyList_New(0));
+        PyObject_SetAttrString(*java_package, "submodule_search_locations", *search_locations);
+    }
+
+    java_package.py_ref();
+    //printd(5, "QoreMetaPathFinder::getJavaPackageModuleSpec() returning java_package: %p\n", *java_package);
+    return *java_package;
+}
+
 PyObject* QoreMetaPathFinder::getQoreRootModuleSpec(const QoreString& mname) {
-    QorePythonReferenceHolder mod_spec(newModuleSpec(mname, QoreLoader::getLoaderRef()));
+    QorePythonReferenceHolder mod_spec(newModuleSpec(true, mname, QoreLoader::getLoaderRef()));
 
     QorePythonReferenceHolder search_locations(PyList_New(0));
     // add namespaces as submodule search locations (NOTE: not functionally necessary it seems)
@@ -268,5 +296,10 @@ PyObject* QoreMetaPathFinder::tryLoadModule(const QoreString& full_name, const c
     }
     assert(!xsink);
 
-    return newModuleSpec(full_name, QoreLoader::getLoaderRef());
+    return newModuleSpec(true, full_name, QoreLoader::getLoaderRef());
+}
+
+PyObject* QoreMetaPathFinder::getJavaNamespaceModule(const QoreString& full_name, const char* mod_name) {
+    printd(5, "QoreMetaPathFinder::getJavaNamespaceModule() load '%s' (%s)\n", full_name.c_str(), mod_name);
+    return newModuleSpec(false, full_name, JavaLoader::getLoaderRef());
 }

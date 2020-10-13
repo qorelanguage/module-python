@@ -22,6 +22,7 @@
 #include "python-module.h"
 #include "QoreThreadAttachHelper.h"
 #include "QoreLoader.h"
+#include "JavaLoader.h"
 #include "QoreMetaPathFinder.h"
 #include "QorePythonProgram.h"
 #include "PythonQoreCallable.h"
@@ -166,6 +167,10 @@ static int slot_qoreloader_exec(PyObject *m) {
             return -1;
         }
 
+        if (JavaLoader::init()) {
+            return -1;
+        }
+
         if (QoreMetaPathFinder::init()) {
             return -1;
         }
@@ -217,8 +222,59 @@ PyMODINIT_FUNC PyInit_qoreloader() {
     return PyModuleDef_Init(&qoreloadermodule);
 }
 
-typedef int (*jni_module_import_t)(ExceptionSink* xsink, QoreProgram* pgm, const char* import);
-static jni_module_import_t jni_module_import = nullptr;
+int load_jni_module(QorePythonProgram* qore_python_pgm) {
+    static bool jni_loaded = false;
+
+    if (!jni_loaded) {
+        QoreProgram* qpgm = qore_python_pgm->getQoreProgram();
+        ExceptionSink xsink;
+        if (ModuleManager::runTimeLoadModule("jni", qpgm, &xsink)) {
+            qore_python_pgm->raisePythonException(xsink);
+            return -1;
+        }
+        printd(5, "load_jni_module() 'jni' module loaded\n");
+        jni_loaded = true;
+    }
+    return 0;
+}
+
+int do_jni_module_import(QorePythonProgram* qore_python_pgm, const char* name_str) {
+    typedef int (*jni_module_import_t)(ExceptionSink* xsink, QoreProgram* pgm, const char* import);
+    static jni_module_import_t jni_module_import = nullptr;
+
+    if (!jni_module_import) {
+        if (load_jni_module(qore_python_pgm)) {
+            return -1;
+        }
+        jni_module_import = (jni_module_import_t)dlsym(RTLD_DEFAULT, "jni_module_import");
+        if (!jni_module_import) {
+            PyErr_SetString(PyExc_ValueError, "cannot find required symbol 'jni_module_import'");
+            return -1;
+        }
+    }
+
+    {
+        QoreString path(name_str);
+        if (path.size() > 2 && (path[-2] == '.' && path[-1] == '*')) {
+            QoreStringMaker desc("'%s': wildcard imports are not currently supported", name_str);
+            PyErr_SetString(PyExc_ValueError, desc.c_str());
+            return -1;
+        }
+    }
+
+    QoreProgram* qpgm = qore_python_pgm->getQoreProgram();
+    ExceptionSink xsink;
+
+    // set program context for initialization
+    QoreProgramContextHelper pgm_ctx(qpgm);
+    if (jni_module_import(&xsink, qpgm, name_str)) {
+        assert(xsink);
+        qore_python_pgm->raisePythonException(xsink);
+        return -1;
+    }
+
+    return 0;
+}
 
 PyObject* qoreloader_load_java(PyObject* self, PyObject* args) {
     if (!PyTuple_Check(args) || (PyTuple_Size(args) != 1)) {
@@ -234,43 +290,11 @@ PyObject* qoreloader_load_java(PyObject* self, PyObject* args) {
     }
     const char* name_str = PyUnicode_AsUTF8(name);
 
-    {
-        QoreString path(name_str);
-        if (path.size() > 2 && (path[-2] == '.' && path[-1] == '*')) {
-            QoreStringMaker desc("'%s': wildcard imports are not currently supported", name_str);
-            PyErr_SetString(PyExc_ValueError, desc.c_str());
-            return nullptr;
-        }
-    }
-
-    ExceptionSink xsink;
     QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
-    QoreProgram* qpgm = qore_python_pgm->getQoreProgram();
-    if (!jni_module_import) {
-        if (ModuleManager::runTimeLoadModule("jni", qpgm, &xsink)) {
-            qore_python_pgm->raisePythonException(xsink);
-            return nullptr;
-        }
-        jni_module_import = (jni_module_import_t)dlsym(RTLD_DEFAULT, "jni_module_import");
-        if (!jni_module_import) {
-            PyErr_SetString(PyExc_ValueError, "cannot find required symbol 'jni_module_import'");
-            return nullptr;
-        }
+    if (do_jni_module_import(qore_python_pgm, name_str)) {
+        return nullptr;
     }
     //printd(5, "qoreloader_load_java() jni module loaded: import '%s' pgm: %p\n", name_str, qpgm);
-
-    if (MM.runTimeLoadModule("jni", qpgm, &xsink)) {
-        qore_python_pgm->raisePythonException(xsink);
-        return nullptr;
-    }
-
-    // set program context for initialization
-    QoreProgramContextHelper pgm_ctx(qpgm);
-    if (jni_module_import(&xsink, qpgm, name_str)) {
-        assert(xsink);
-        qore_python_pgm->raisePythonException(xsink);
-        return nullptr;
-    }
 
     Py_INCREF(Py_None);
     return Py_None;

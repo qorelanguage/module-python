@@ -4,13 +4,13 @@
 
     @section pythonintro python Module Introduction
 
-    The \c python module allows for transparent and dynamic bidirectional importined code from %Qore to Python and
-    vice-versa.  Qore classes can inherit Python classes and extend them, and Python classes can inherit %Qore classes
-    and extend them as well; even %Qore abstract classes can be inherited by Python classes and made concrete by
-    implementing the requried concrete methods in Python.
+    The \c python module allows for transparent and dynamic bidirectional importined code from %Qore to %Python and
+    vice-versa.  Qore classes can inherit %Python classes and extend them, and %Python classes can inherit %Qore classes
+    and extend them as well; even %Qore abstract classes can be inherited by %Python classes and made concrete by
+    implementing the requried concrete methods in %Python.
 
-    This module also implements support in the same shared object for the \c qoreloader module for Python so allow
-    native Python code to import %Qore APIs; see @ref python_qoreloader_module for more information.
+    This module also implements support in the same shared object for the \c qoreloader module for %Python so allow
+    native %Python code to import %Qore APIs; see @ref python_qoreloader_module for more information.
 
     This module is released under the MIT license (see \c COPYING.MIT in the source distribution for more
     information).  The module is tagged as such in the module's header (meaning it can be loaded unconditionally
@@ -21,7 +21,7 @@
 
     Helper %Qore classes provided by this module:
     |!Class|!Description
-    |@ref Python::PythonProgram "PythonProgram"|Allows Python code to be embedded and executed in %Qore
+    |@ref Python::PythonProgram "PythonProgram"|Allows %Python code to be embedded and executed in %Qore
 
     @section python_examples Examples
 
@@ -65,10 +65,10 @@ public class Main {
 
     @section python_import Importing Python APIs into Qore
 
-    To import Python APIs and definitions into a %Qore program, the following python-module-specific module
+    To import %Python APIs and definitions into a %Qore program, the following python-module-specific module
     command can be used, which also causes the python module to be loaded and initialized if necessary:
-    - @code{.qore} %module-cmd(python) import module[.symbol|*] @endcode imports the given Python module into Python
-      and then imports the module or optionally only the given symbol into the %Qore program from Python.
+    - @code{.qore} %module-cmd(python) import module[.symbol|*] @endcode imports the given %Python module into %Python
+      and then imports the module or optionally only the given symbol into the %Qore program from %Python.
 
     @par Example:
     @code{.qore}
@@ -88,7 +88,7 @@ p.issueModuleCmd("python", "import math");
 
     @subsection python_module_path Set the Python Module Path
 
-    Elements can be added to the Python import module path by using the following module command:
+    Elements can be added to the %Python import module path by using the following module command:
     - @code{.qore} %module-cmd(python) add-module-path <path>@endcode
 
     The path given is also subjected to environment variable substitutions; the environment variable name must be
@@ -111,7 +111,7 @@ p.issueModuleCmd("python", "import my-python-module");
 
     @subsection python_immediate_parsing Parsing Python Code Immediately
 
-    Python code can be parsed immediately using the following module command:
+    %Python code can be parsed immediately using the following module command:
     - @code{.qore} %module-cmd(python) parse <filename> <Python source>@endcode
 
     @par Example:
@@ -127,7 +127,7 @@ p.issueModuleCmd("python", "parse pytest.py " + src);
 
     @subsection python_class_export Exporting Python Classes to Qore
 
-    Python classes can be explicitly exported to %Qore with the following module command:
+    %Python classes can be explicitly exported to %Qore with the following module command:
     - @code{.qore} %module-cmd(python) export-class <class-name>@endcode
 
     @par Example:
@@ -141,7 +141,7 @@ printf("get(): %y\n", obj.get());
 
     @subsection python_func_export Exporting Python Functions to Qore
 
-    Python functions can be explicitly exported to %Qore with the following module command:
+    %Python functions can be explicitly exported to %Qore with the following module command:
     - @code{.qore} %module-cmd(python) export-func <func-name>@endcode
 
     @par Example:
@@ -154,7 +154,7 @@ printf("py_test(): %y\n", obj.call());
 
     @section python_qore_import Importing Qore APIs into Python
 
-    %Qore APIs and definitions can be imported into a Python program by using the following module command:
+    %Qore APIs and definitions can be imported into a %Python program by using the following module command:
     - @code{.qore} %module-cmd(python) import-ns <qore-namespace> <python-module-path>@endcode
 
     @par Example:
@@ -165,7 +165,7 @@ p.issueModuleCmd("python", "import-ns MyQoreNamespace MyPythonModule");
 
     @subsection python_inheriting_qore_classes Inheriting Qore Classes in Python
 
-    When Python code inherits %Qore classes, the %Qore constructor must be explicitly called in the Python
+    When %Python code inherits %Qore classes, the %Qore constructor must be explicitly called in the %Python
     \c __init__() method as in the following example.
 
     @par Example:
@@ -179,11 +179,11 @@ class PyXmlRpcClient(qore.xml.XmlRpcClient):
 
     @subsection python_aliases Creating Python Aliases
 
-    The following module command can be used to create an alias in Python code:
+    The following module command can be used to create an alias in %Python code:
     - @code{.qore} %module-cmd(python) alias <python-source-path> <python-target-path>@endcode
 
-    This is often used when importing %Qore namespaces to Python to create an alias directly from a child %Qore
-    namespace to a Python module or package that is more convenient to access in Python code.
+    This is often used when importing %Qore namespaces to %Python to create an alias directly from a child %Qore
+    namespace to a %Python module or package that is more convenient to access in %Python code.
 
     @par Example:
     @code{.qore}
@@ -194,10 +194,10 @@ p.issueModuleCmd("python", "alias MyPythonModule.MySubModule1.MySubModule2.MyApi
 
     @section python_threads_and_stack Python Threading and Stack Management
 
-    This module implements support for multiple Python interpreters along with multithreading by managing the %Python
+    This module implements support for multiple %Python interpreters along with multithreading by managing the %Python
     interpreter thread state manually.
 
-    Additionally, the Python recursion limit is also set automatically depending on the current thread stack size set
+    Additionally, the %Python recursion limit is also set automatically depending on the current thread stack size set
     in %Qore.
 
     This is done to avoid crashes due to stack exhaustion in combination %Qore and %Python code.
@@ -210,12 +210,14 @@ p.issueModuleCmd("python", "alias MyPythonModule.MySubModule1.MySubModule2.MyApi
     @section python_qoreloader_module qoreloader Module
 
     The %Qore python module can also be aliased or symlinked to \c "qoreloader.so" (\c "qoreloader.pyd" on Windows)
-    and placed in the Python module path (\c PYTHONPATH), as the %Qore binary module also implement code for the
-    \c qoreloader Python module in the same shared object, which allows Python programs to dynamically initialize the
-    %Qore library from Python programs and then import %Qore APIs into Python using an injected \c qore package.
+    and placed in the %Python module path (\c PYTHONPATH), as the %Qore binary module also implement code for the
+    \c qoreloader %Python module in the same shared object, which allows %Python programs to dynamically initialize the
+    %Qore library from %Python programs and then import %Qore APIs into %Python using an injected \c qore package.
 
     The \c qoreloader module implements the following functionality:
     - @ref python_qoreloader_import_qore "qore": a special loader package for dynamically importing %Qore APIs into
+      %Python
+    - @ref python_qoreloader_import_java "java": a special loader package for dynamically import Java APIs into
       %Python
     - @ref qoreloader_load_java : a %Python function for loading Java APIs into %Qore so they can be imported then
       into %Python
@@ -224,7 +226,7 @@ p.issueModuleCmd("python", "alias MyPythonModule.MySubModule1.MySubModule2.MyApi
 
     @subsection python_qoreloader_import_qore Using the qoreloader Module to Import Qore APIs
 
-    For example, for Python to import the %Qore \c SqlUtil module, the following code can be used.
+    For example, for %Python to import the %Qore \c SqlUtil module, the following code can be used.
 
     @par Example
     @code{.py}
@@ -235,8 +237,8 @@ t = Table("pgsql:user/pass@db", "table_name")
 print(t.getTable().selectRow({"where": {"col1": "value"}}))
     @endcode
 
-    When %Qore modules are imported, the lowest namespace created by the module is imported as the new Python module
-    under the Python \c qore package.
+    When %Qore modules are imported, the lowest namespace created by the module is imported as the new %Python module
+    under the %Python \c qore package.
 
     See the next section about importing the special \c <tt><b>qore.__root__</b></tt> module.
 
@@ -249,7 +251,7 @@ print(t.getTable().selectRow({"where": {"col1": "value"}}))
     The special \c qore package has a special module called \c __root__ which represents the root namespace of the
     %Qore program object.
 
-    Importing <tt><b>qore.__root__</b></tt> module causes all symbols to be imported into the Python program.
+    Importing <tt><b>qore.__root__</b></tt> module causes all symbols to be imported into the %Python program.
 
     Because %Qore namespaces are imported as %Python modules, any existing %Qore namespace can be imported into a
     %Python program using the <tt><b>qore.__root__</b></tt> module as in the following examples:
@@ -266,14 +268,60 @@ from qore.__root__.Qore.SQL import DatasourcePool, Datasource, SQLStatement
     loaded; it just imports existing %Qore namespaces into the %Python program.  To load a %Qore module explicitly,
     use a %Qore module name after <tt><b>qore</b></tt>.
 
-    @subsection python_java_import Importing Java APIs into Python Through Qore
+    @subsection python_qoreloader_import_java Using the qoreloader Module to Import Java APIs Directly
 
     The \c python module implements support for using %Qore's \c jni module to import Java code dynamically into %Qore
-    and then into %Python.
+    and then into %Python using the \c java package.
 
-    To import Java code into %Qore, use @ref qoreloader_load_java with the Java dot path to the class name to load,
-    and then import the %Qore class into %Python using the @ref python_qore_root_imports "qore.__root__" module as in
-    the following example:
+    To import Java classes into %Python, import the java class by prefixing \c "java." to the package path name.
+
+    For example, to import the Java \c java.util.HashMap class into %Python, the following code can be used.
+
+    @par Example
+    @code{.py}
+# load the qoreloader API
+import qoreloader
+# import the Java class into Python
+from java.java.util import HashMap
+
+m = new HashMap()
+m.put("a", "value")
+    @endcode
+
+    You can also set the classpath for Java imports as in the following example:
+
+    @par Example
+    @code{.py}
+# load the qoreloader API
+import qoreloader
+
+# set up the classpath so that the jni module can find the JAR file
+qoreloader.issue_module_cmd('jni', 'add-classpath $HOME/jar/qore-jni.jar')
+
+# import the Java class into Python
+from java.org.qore.lang.restclient import RestClient
+
+r = RestClient({"url": "https://localhost:8011"})
+    @endcode
+
+    When Java packages and classes are imported, the lowest package created by the module is imported as the new
+    %Python module under the %Python \c java package.
+
+    The given APIs are first dynamically imported into %Qore, and then the %Qore APIs are imported dynamically into
+    %Python.
+
+    This is the easiest way to import Java APIs into %Python.
+
+    @note Unlike <tt><b>qore</b></tt>, wilcard imports are not currently possible with Java imports.
+
+    @subsection python_java_import Importing Java APIs Indirectly into Python Through Qore
+
+    The \c python module implements support for using %Qore's \c jni module to import Java code dynamically into %Qore
+    and then into %Python using a two-step process.
+
+    To import Java code first into %Qore, use @ref qoreloader_load_java with the Java dot path to the class name to
+    load, and then import the %Qore class into %Python using the @ref python_qore_root_imports "qore.__root__" module
+    as in the following example:
 
     @par Example
     @code{.py}
@@ -383,22 +431,22 @@ from qore.__root__.Jni.org.qore.lang.restclient import RestClient
     |\c tuple|\c list
     |\c function, \c method|\c code
 
-    All other Python types are converted to a %Qore object using a dynamically-created class that wraps the Python
+    All other %Python types are converted to a %Qore object using a dynamically-created class that wraps the %Python
     type or class.
 
     @section python_exceptions Python Exception Handling
 
-    Python exceptions are mapped to Qore exceptions as follows:
-    - \c err: the fully-qualified Python exception class name (ex: \c "builtins.SyntaxError", \c "socket.timeout")
+    %Python exceptions are mapped to Qore exceptions as follows:
+    - \c err: the fully-qualified %Python exception class name (ex: \c "builtins.SyntaxError", \c "socket.timeout")
     - \c desc: the string description, if none, then the exception arguments converted to a string with \c repr()
-    - \c arg: the Python exception object itself converted to a Qore value
+    - \c arg: the %Python exception object itself converted to a Qore value
 
     @section python_qore_object_lifecycle_management Managing the Lifecycle of Qore objects from Python
 
     %Qore's deterministic garbage collection approach and reliance on destructors means that %Qore objects created by
-    Python must have their lifecycles managed externally.
+    %Python must have their lifecycles managed externally.
 
-    Python objects wrapping %Qore objects hold only weak references to %Qore objects.
+    %Python objects wrapping %Qore objects hold only weak references to %Qore objects.
 
     @subsection python_qore_object_lifecycle_default Default Qore Object Lifecycle Management
 
@@ -413,7 +461,7 @@ from qore.__root__.Jni.org.qore.lang.restclient import RestClient
 
     The lifecycle of %Qore objects can be managed explicitly by using the
     @ref Python::PythonProgram::setSaveObjectCallback() "PythonProgram::setSaveObjectCallback()" method to set a
-    callback that is called every time a %Qore object is created using the Python API.
+    callback that is called every time a %Qore object is created using the %Python API.
 
     This callback must take a single object argument as in the following example:
 
