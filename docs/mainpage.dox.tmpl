@@ -312,7 +312,33 @@ r = RestClient({"url": "https://localhost:8011"})
 
     This is the easiest way to import Java APIs into %Python.
 
-    @note Unlike <tt><b>qore</b></tt>, wilcard imports are not currently possible with Java imports.
+    @subsubsection python_java_wildcard_imports Importing Java Packages into Python Through Qore
+
+    Wildcard imports from Java are not currently directly supported, however you can import the Java package as a
+    %Python module and then the classes in the module will be dynamically created when they are referenced.  See the
+    following example:
+
+    @par Java Package Import Example
+    @code{.py}
+# load the qoreloader API
+import qoreloader
+
+# set up the classpath so that the jni module can find the JAR file
+qoreloader.issue_module_cmd('jni', 'add-classpath $HOME/jar/qore-jni.jar')
+
+# import the Java package into Python
+from java.org.qore.lang import restclient
+
+# the RestClient class is resolved and imported dynamically on reference
+r = restclient.RestClient({"url": "https://localhost:8011"})
+    @endcode
+
+    @note Direct wildcard imports in the format <tt>from java.some.package.path import *</tt> are not yet supported,
+    as once the %Python module is created, the dynamic attribute lookups in the the global dictionary are not executed
+    at runtime using the wildcard import information, therefore all Java classes to be imported should be either
+    explicitly listed in the \c import statement, or the entire package should be imported as above; a \c "*" wildcard
+    import will only work if the required Java classes have already been imported into the %Qore program container in
+    advance otherwise.
 
     @subsection python_java_import Importing Java APIs Indirectly into Python Through Qore
 
@@ -337,8 +363,6 @@ qoreloader.load_java("org.qore.lang.restclient.RestClient")
 # import the Qore code into Python where it can be used
 from qore.__root__.Jni.org.qore.lang.restclient import RestClient
     @endcode
-
-    @note Wildcard imports from Java are not currently supported
 
     @subsection python_java_import_classpath Setting the Java Classpath
 

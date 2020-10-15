@@ -39,6 +39,8 @@
 #include <vector>
 #include <string>
 
+static const char* this_file = q_basenameptr(__FILE__);
+
 // type used for imported Qore namespaces in Python; a plan type with only a dictionary
 struct PythonQoreNs {
     PyObject_HEAD
@@ -1909,7 +1911,7 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
             frame = frame->f_back;
         }
         if (funcname) {
-            callstack.add(CT_BUILTIN, "unknown", -1, -1, funcname, "c++");
+            callstack.add(CT_BUILTIN, this_file, __LINE__, __LINE__, funcname, "c++");
         }
         use_loc = true;
     } else {
