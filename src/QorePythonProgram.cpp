@@ -121,12 +121,8 @@ QorePythonProgram::QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns) : q
     assert(!xsink);
 
     // returns a borrowed reference
-    module_dict = PyModule_GetDict(*module);
-    assert(module_dict);
-
-    // returns a borrowed reference
-    builtin_dict = PyDict_GetItemString(module_dict, "__builtins__");
-    assert(builtin_dict);
+    setGlobalDictionary(*module);
+    assert(!PyErr_Occurred());
 
     // import qoreloader module
     QorePythonReferenceHolder qoreloader(PyImport_ImportModule("qoreloader"));
@@ -204,12 +200,7 @@ QorePythonProgram::QorePythonProgram(const QoreString& source_code, const QoreSt
     module = new_module.release();
 
     // returns a borrowed reference
-    module_dict = PyModule_GetDict(*module);
-    assert(module_dict);
-
-    // returns a borrowed reference
-    builtin_dict = PyDict_GetItemString(module_dict, "__builtins__");
-    assert(builtin_dict);
+    setGlobalDictionary(*module);
 
     PyDict_SetItemString(module_dict, "qoreloader", *qoreloader);
 
@@ -221,6 +212,15 @@ QorePythonProgram::QorePythonProgram(const QoreString& source_code, const QoreSt
     //printd(5, "QorePythonProgram::QorePythonProgram() this: %p pgm: %p rootns: %p\n", this, qpgm, qpgm->getRootNS());
     // create Qore program object with the same restrictions as the parent
     //createQoreProgram();
+}
+
+int QorePythonProgram::setGlobalDictionary(PyObject* mod) {
+    module_dict = PyModule_GetDict(mod);
+    assert(module_dict);
+    // returns a borrowed reference
+    builtin_dict = PyDict_GetItemString(module_dict, "__builtins__");
+    assert(builtin_dict);
+    return 0;
 }
 
 void QorePythonProgram::createQoreProgram() {
@@ -2533,20 +2533,10 @@ int QorePythonProgram::import(ExceptionSink* xsink, const char* module, const ch
             false);
     }
 
-    return importModule(xsink, *mod, nullptr, module, IF_ALL);
-
-    /*
-    // first import all classes
-    if (importModule(xsink, *mod, nullptr, module, IF_CLASS)) {
-        assert(*xsink);
-        return -1;
-    }
-
-    return importModule(xsink, *mod, nullptr, module, IF_OTHER);
-    */
+    return importModule(xsink, *mod, module, IF_ALL);
 }
 
-int QorePythonProgram::importModule(ExceptionSink* xsink, PyObject* mod, PyObject* globals, const char* module,
+int QorePythonProgram::importModule(ExceptionSink* xsink, PyObject* mod, const char* module,
     int filter) {
     PythonModuleContextHelper mch(this, module);
 
@@ -2695,7 +2685,7 @@ int QorePythonProgram::importSymbol(ExceptionSink* xsink, PyObject* value, const
 
     if (PyModule_Check(value)) {
         QoreStringMaker sub_module("%s::%s", module, symbol);
-        return importModule(xsink, value, nullptr, sub_module.c_str(), filter);
+        return importModule(xsink, value, sub_module.c_str(), filter);
     }
 
     //printd(5, "QorePythonProgram::importSymbol() adding const %s.%s = '%s'\n", module, symbol, Py_TYPE(value)->tp_name);

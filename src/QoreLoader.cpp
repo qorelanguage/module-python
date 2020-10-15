@@ -23,7 +23,6 @@
 #include "QoreMetaPathFinder.h"
 #include "QorePythonProgram.h"
 #include "PythonQoreClass.h"
-#include "ModuleNamespace.h"
 
 #include <memory>
 
@@ -85,10 +84,6 @@ PyTypeObject QoreLoader_Type = {
 };
 
 int QoreLoader::init() {
-    if (initModuleNamespace()) {
-        return -1;
-    }
-
     if (PyType_Ready(&QoreLoader_Type) < 0) {
         printd(5, "QoreLoader::init() type initialization failed\n");
         return -1;

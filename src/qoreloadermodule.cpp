@@ -181,7 +181,7 @@ static int slot_qoreloader_exec(PyObject *m) {
     return 0;
 }
 
-void init_global_qore_python_pgm() {
+int init_global_qore_python_pgm() {
     if (!qore_python_pgm) {
         // save and restore the Python thread state while initializing the Qore python module
         PythonThreadStateHelper ptsh;
@@ -190,6 +190,8 @@ void init_global_qore_python_pgm() {
         attach_helper.attach();
         qore_python_pgm = new QorePythonProgram;
     }
+
+    return 0;
 }
 
 PyMODINIT_FUNC PyInit_qoreloader() {
