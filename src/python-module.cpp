@@ -268,9 +268,7 @@ static QoreStringNode* python_module_init_intern(bool repeat) {
     // ensure that runtime version matches compiled version
     check_python_version();
 
-    init_global_qore_python_pgm();
-
-    if (QorePythonProgram::staticInit()) {
+    if (init_global_qore_python_pgm() || QorePythonProgram::staticInit()) {
         throw QoreStandardException("PYTHON-MODULE-ERROR", "failed to initialize \"python\" module");
     }
 

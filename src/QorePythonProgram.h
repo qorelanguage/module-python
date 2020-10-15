@@ -499,7 +499,7 @@ protected:
         int filter);
 
     //! Imports the given module
-    DLLLOCAL int importModule(ExceptionSink* xsink, PyObject* mod, PyObject* globals, const char* module, int filter);
+    DLLLOCAL int importModule(ExceptionSink* xsink, PyObject* mod, const char* module, int filter);
 
     //! Saves the module in sys.modules
     DLLLOCAL int saveModule(const char* name, PyObject* mod);
@@ -524,6 +524,9 @@ protected:
     DLLLOCAL ResolvedCallReferenceNode* getQoreCallRefFromFunc(ExceptionSink* xsink, PyObject* val);
     //! Returns a Qore call reference from a Python method
     DLLLOCAL ResolvedCallReferenceNode* getQoreCallRefFromMethod(ExceptionSink* xsink, PyObject* val);
+
+    //! Sets and replaces the global dictionoary
+    DLLLOCAL int setGlobalDictionary(PyObject* mod);
 
     //! Waits for all threads to complete; must be called in the py_thr_lck lock
     DLLLOCAL void waitForThreadsIntern();

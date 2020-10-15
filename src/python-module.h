@@ -287,7 +287,7 @@ DLLEXPORT extern "C" void python_qore_module_desc(QoreModuleInfo& mod_info);
 DLLLOCAL PyMODINIT_FUNC PyInit_qoreloader();
 
 //! Creates the global QOre Python program object
-DLLLOCAL void init_global_qore_python_pgm();
+DLLLOCAL int init_global_qore_python_pgm();
 
 class QorePythonProgram;
 DLLLOCAL extern QoreNamespace PNS;
