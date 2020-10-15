@@ -48,7 +48,6 @@ class PythonTest inherits Test {
 
     constructor() : Test("python test", "1.0") {
         addTestCase("java test", \javaTest());
-        /*
         addTestCase("exception test", \exceptionTest());
         addTestCase("qore test", \qoreTest());
         addTestCase("stack test", \stackTest());
@@ -58,7 +57,6 @@ class PythonTest inherits Test {
         addTestCase("object lifecycle", \objectLifecycleTest());
         addTestCase("basic test", \basicTest());
         addTestCase("import test", \importTest());
-        */
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
     }
@@ -122,8 +120,42 @@ def test():
 %ifdef NO_JAVA
         testSkip("no jni module");
 %endif
+
+        if (ENV.QORE_JNI) {
+            {
+                # Java import test
+                PythonProgram p("
+import qoreloader
+qoreloader.issue_module_cmd('jni', 'add-classpath " + ENV.QORE_JNI + "')
+from java.org.qore.lang.restclient import RestClient
+
+def test(url):
+    return RestClient({'url': url}, True)
+    ", "test.py");
+
+                string url = "https://localhost:8011/";
+                object obj = p.callFunction("test", url);
+                assertEq(url, obj.getURL());
+            }
+
+            {
+                # Java import test
+                PythonProgram p("
+import qoreloader
+qoreloader.issue_module_cmd('jni', 'add-classpath " + ENV.QORE_JNI + "')
+from java.org.qore.lang import restclient
+
+def test(url):
+    return restclient.RestClient({'url': url}, True)
+    ", "test.py");
+
+                string url = "https://localhost:8011/";
+                object obj = p.callFunction("test", url);
+                assertEq(url, obj.getURL());
+            }
+        }
+
         {
-            # Java wildcard import test
             PythonProgram p("
 import qoreloader
 from java.org.qore.jni import Hash

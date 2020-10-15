@@ -22,6 +22,8 @@
 
 #include "ModuleNamespace.h"
 
+static PyObject* ModuleNamespace__getattr__(PyObject* self, PyObject* args);
+
 static PyMethodDef ModuleNamespace_methods[] = {
     {nullptr, nullptr},
 };
@@ -31,7 +33,6 @@ PyDoc_STRVAR(ModuleNamespace_doc,
 \n\
 Python modules for imported Qore namespaces.");
 
-static void ModuleNamespace_dealloc(PyObject* obj);
 static PyObject* ModuleNamespace_getattro(PyObject* self, PyObject* key);
 
 PyTypeObject ModuleNamespace_Type = {
@@ -84,9 +85,10 @@ int initModuleNamespace() {
     ModuleNamespace_Type.tp_clear = PyModule_Type.tp_clear;
 
     if (PyType_Ready(&ModuleNamespace_Type) < 0) {
-        printd(5, "initModuleNamespace() type initialization failed\n");
+        printd(5, "initModuleNamespace() module type initialization failed\n");
         return -1;
     }
+
     return 0;
 }
 
@@ -110,6 +112,7 @@ PyObject* ModuleNamespace_New(const char* name, const QoreNamespace* ns) {
         return nullptr;
     }
     assert(PyModule_Check(*self));
+
     ModuleNamespace* mns = get_namespace(*self);
     assert(!mns->ns);
     mns->ns = const_cast<QoreNamespace*>(ns);
@@ -118,29 +121,43 @@ PyObject* ModuleNamespace_New(const char* name, const QoreNamespace* ns) {
 }
 
 static PyObject* ModuleNamespace_getattro(PyObject* self, PyObject* key) {
+    // first check if the attribute is defined
+    PyObject* attr = PyObject_GenericGetAttr(self, key);
+    if (attr) {
+        return attr;
+    }
+    // now try to resolve it
     assert(PyUnicode_Check(key));
     const char* key_str = PyUnicode_AsUTF8(key);
+    // do not try to look up dunder attributes
+    if (key_str[0] == '_' && key_str[1] == '_') {
+        return nullptr;
+    }
     ModuleNamespace* mns = get_namespace(self);
-    printd(5, "ModuleNamespace_getattro() obj: %p ns: %p (%s) attr: %s\n", self, mns->ns, mns->ns->getName(), key_str);
-    if (key_str[0] != '_' && key_str[1] != '_') {
-        QoreProgram* qpgm = mns->ns->getProgram();
-        ExceptionSink xsink;
-        QoreExternalProgramContextHelper pch(&xsink, qpgm);
-        QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
-        if (xsink) {
-            qore_python_pgm->raisePythonException(xsink);
-            return nullptr;
-        }
-        CurrentProgramRuntimeExternalParseContextHelper prpch;
-        QoreClass* qc = mns->ns->findLocalClass(key_str);
-        if (!qc) {
-            // try to load the class dynamically
-            qc = mns->ns->findLoadLocalClass(key_str);
-        }
-        printd(5, "ModuleNamespace_getattro() %s.%s qc: %p\n", mns->ns->getName(), key_str, qc);
-        if (qc && qore_python_pgm->importQoreClassToPython(self, *qc, mns->ns->getName())) {
-            return nullptr;
-        }
+    printd(5, "ModuleNamespace_getattro() obj: %p ns: %p (%s) attr: %s: %p\n", self, mns->ns, mns->ns->getName(), key_str, attr);
+
+    QoreProgram* qpgm = mns->ns->getProgram();
+    QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
+    ExceptionSink xsink;
+    QoreExternalProgramContextHelper pch(&xsink, qpgm);
+    if (xsink) {
+        PyErr_Clear();
+        qore_python_pgm->raisePythonException(xsink);
+        return nullptr;
+    }
+    CurrentProgramRuntimeExternalParseContextHelper prpch;
+    QoreClass* qc = mns->ns->findLocalClass(key_str);
+    if (!qc) {
+        // try to load the class dynamically
+        qc = mns->ns->findLoadLocalClass(key_str);
+    }
+    printd(5, "ModuleNamespace_getattro() %s.%s qc: %p\n", mns->ns->getName(), key_str, qc);
+    if (!qc) {
+        return nullptr;
+    }
+    PyErr_Clear();
+    if (qc && qore_python_pgm->importQoreClassToPython(self, *qc, mns->ns->getName())) {
+        return nullptr;
     }
     return PyModule_Type.tp_getattro(self, key);
 }
