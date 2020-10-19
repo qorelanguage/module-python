@@ -959,7 +959,7 @@ public namespace Test {
     }
 
     sub ex2() {
-        throw "TEST", "test";
+        throw "TEST", "test", {};
     }
 
     string sub get() {
