@@ -1935,7 +1935,7 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
                 ValueHolder arg(xsink);
                 if (PyObject_HasAttrString(*ex_value, "arg")) {
                     pyval = PyObject_GetAttrString(*ex_value, "arg");
-                    desc = getQoreValue(xsink, *pyval);
+                    arg = getQoreValue(xsink, *pyval);
                 }
                 if (!*xsink) {
                     QoreStringValueHelper errstr(*err);
