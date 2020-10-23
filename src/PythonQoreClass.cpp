@@ -497,15 +497,18 @@ int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
         return 0;
     }
 
-    ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args, 0, true), &xsink);
-    if (!xsink) {
-        QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
+    // issue #4044: do not allow abstract classes to be constructed
+    if (!qcls->runtimeCheckInstantiateClass(&xsink)) {
+        ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args, 0, true), &xsink);
         if (!xsink) {
-            QorePythonReleaseGilHelper prgh;
-            ReferenceHolder<QoreObject> qobj(constructor_cls->execConstructor(*qcls, *qargs, true, &xsink), &xsink);
+            QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
             if (!xsink) {
-                printd(5, "PythonQoreClass::py_init() self: %p created Qore %s object (args: %p %d): %p (%s)\n", self, qcls->getName(), *qargs, qargs ? (int)qargs->size() : 0, *qobj, qobj->getClassName());
-                return newQoreObject(xsink, pyself, qobj.release(), qcls == constructor_cls ? nullptr : qcls, qore_python_pgm);
+                QorePythonReleaseGilHelper prgh;
+                ReferenceHolder<QoreObject> qobj(constructor_cls->execConstructor(*qcls, *qargs, true, &xsink), &xsink);
+                if (!xsink) {
+                    printd(5, "PythonQoreClass::py_init() self: %p created Qore %s object (args: %p %d): %p (%s)\n", self, qcls->getName(), *qargs, qargs ? (int)qargs->size() : 0, *qobj, qobj->getClassName());
+                    return newQoreObject(xsink, pyself, qobj.release(), qcls == constructor_cls ? nullptr : qcls, qore_python_pgm);
+                }
             }
         }
     }
