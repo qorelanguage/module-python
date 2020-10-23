@@ -96,7 +96,7 @@ QorePythonProgram::QorePythonProgram() : save_object_callback(nullptr) {
     // insert thread state into thread map
     AutoLocker al(py_thr_lck);
     assert(py_thr_map.find(this) == py_thr_map.end());
-    int tid = gettid();
+    int tid = q_gettid();
     py_thr_map[this] = {{tid, {python, false}}};
     py_global_tid_map[tid].insert(python);
     ++pgm_count;
@@ -436,7 +436,7 @@ QoreValue QorePythonProgram::eval(ExceptionSink* xsink, const QoreString& source
 }
 
 void QorePythonProgram::pythonThreadCleanup(void*) {
-    int tid = gettid();
+    int tid = q_gettid();
     //printd(5, "QorePythonProgram::pythonThreadCleanup()\n");
     AutoLocker al(py_thr_lck);
 
@@ -477,7 +477,7 @@ bool QorePythonProgram::haveGil() {
         return false;
     }
 
-    int tid = gettid();
+    int tid = q_gettid();
     AutoLocker al(py_thr_lck);
 
     py_global_tid_map_t::iterator i = py_global_tid_map.find(tid);
@@ -523,7 +523,7 @@ int QorePythonProgram::createInterpreter(QorePythonGilHelper& qpgh, ExceptionSin
     owns_interpreter = true;
 
     // save thread state
-    int tid = gettid();
+    int tid = q_gettid();
     AutoLocker al(py_thr_lck);
     {
         py_thr_map_t::iterator ti = py_thr_map.lower_bound(this);
@@ -588,7 +588,7 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
         assert(python);
         assert(python->gilstate_counter == 1);
         // the thread state will be deleted when the thread terminates or the interpreter is deleted
-        int tid = gettid();
+        int tid = q_gettid();
         AutoLocker al(py_thr_lck);
         {
             py_thr_map_t::iterator i = py_thr_map.find(this);
