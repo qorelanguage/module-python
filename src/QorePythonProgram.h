@@ -612,9 +612,9 @@ protected:
         if (i == py_thr_map.end()) {
             return nullptr;
         }
-        int tid = gettid();
+        int tid = q_gettid();
         py_tid_map_t::iterator ti = i->second.find(tid);
-        //printd(5, "QorePythonProgram::getThreadState() this: %p found TID %d: %p\n", this, gettid(), ti == i->second.end() ? nullptr : ti->second);
+        //printd(5, "QorePythonProgram::getThreadState() this: %p found TID %d: %p\n", this, q_gettid(), ti == i->second.end() ? nullptr : ti->second);
         return ti == i->second.end() ? nullptr : ti->second.state;
     }
 
