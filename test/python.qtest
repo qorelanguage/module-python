@@ -950,6 +950,17 @@ auto sub get() {
             assertEq({"a": 1}, parse_json(o.encode({"a": 1})));
 %endif
         }
+
+        {
+            PythonProgram pp("
+import qoreloader
+from qore.DataProvider import AbstractDataProcessor
+
+def test():
+    return AbstractDataProcessor()
+", "test.py");
+            assertThrows("ABSTRACT-CLASS-ERROR", \pp.callFunction(), "test");
+        }
     }
 }
 
