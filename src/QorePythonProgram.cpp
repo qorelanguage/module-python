@@ -107,8 +107,10 @@ QorePythonProgram::QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns) : q
     QorePythonGilHelper qpgh;
 
     //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
-    if (createInterpreter(qpgh, nullptr)) {
+    ExceptionSink xsink;
+    if (createInterpreter(qpgh, &xsink)) {
         valid = false;
+        return;
     }
 
     // ensure that the __main__ module is created
@@ -116,9 +118,12 @@ QorePythonProgram::QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns) : q
     module = PyImport_AddModule("__main__");
     module.py_ref();
 
-    ExceptionSink xsink;
     import(&xsink, "builtins");
-    assert(!xsink);
+    if (xsink) {
+        valid = false;
+        return;
+    }
+    //assert(!xsink);
 
     // returns a borrowed reference
     setGlobalDictionary(*module);
@@ -2673,9 +2678,8 @@ int QorePythonProgram::importSymbol(ExceptionSink* xsink, PyObject* value, const
 
     if (PyType_Check(value)) {
         //printd(5, "QorePythonProgram::importSymbol() class sym: '%s' -> '%s' (%p)\n", symbol, reinterpret_cast<PyTypeObject*>(value)->tp_name, value);
-        QoreClass* cls = getCreateQorePythonClassIntern(xsink, reinterpret_cast<PyTypeObject*>(value));
+        getCreateQorePythonClassIntern(xsink, reinterpret_cast<PyTypeObject*>(value));
         if (*xsink) {
-            assert(!cls);
             return -1;
         }
 
