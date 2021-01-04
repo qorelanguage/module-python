@@ -47,6 +47,7 @@ class PythonTest inherits Test {
     }
 
     constructor() : Test("python test", "1.0") {
+        addTestCase("super test", \superTest());
         addTestCase("java test", \javaTest());
         addTestCase("exception test", \exceptionTest());
         addTestCase("qore test", \qoreTest());
@@ -59,6 +60,60 @@ class PythonTest inherits Test {
         addTestCase("import test", \importTest());
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
+    }
+
+    superTest() {
+        {
+            PythonProgram p("
+import qoreloader
+from qore.__root__.Qore.Thread import Sequence
+
+class py_sequence(Sequence):
+    def __init__(self):
+        pass
+
+def test():
+    return py_sequence()
+    ", "test.py");
+
+            auto o = p.callFunction("test");
+            assertNothing(o);
+        }
+
+        {
+            PythonProgram p("
+import qoreloader
+from qore.__root__.Qore.Thread import Sequence
+
+class py_sequence(Sequence):
+    def __init__(self):
+        if (self.getCurrent() > 1):
+            raise Exception('err', 'desc')
+
+def test():
+    return py_sequence()
+", "test.py");
+
+            assertThrows("builtins.ValueError", \p.callFunction(), "test");
+        }
+
+        {
+            PythonProgram p("
+import qoreloader
+from qore.__root__.Qore.Thread import Sequence
+
+class py_sequence(Sequence):
+    def __init__(self):
+        super(py_sequence, self).__init__()
+        if (self.getCurrent() > 1):
+            raise Exception('err', 'desc')
+
+def test():
+    return py_sequence()
+", "test.py");
+
+            assertEq(0, p.callFunction("test").getCurrent());
+        }
     }
 
     exceptionTest() {
