@@ -501,6 +501,8 @@ PythonProgram::setSaveObjectCallback(callback);
     @section pythonreleasenotes python Module Release Notes
 
     @subsection python_1_0_2 python Module Version 1.0.2
+    - fixed issues handling the case when the python module is initialized with no Program context
+      (<a href="https://github.com/qorelanguage/qore/issues/4153">issue 4153</a>)
     - fixed a bug handling Python constructors in classes derived from Qore or Java classes where the constructor code
       accesses Qore or Java class members or methods before initializing the class
       (<a href="https://github.com/qorelanguage/qore/issues/4141">issue 4141</a>)
