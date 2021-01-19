@@ -300,7 +300,12 @@ static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns) {
     if (!pgm->getExternalData(QORE_PYTHON_MODULE_NAME)) {
         QoreNamespace* pyns = PNS.copy();
         rns->addNamespace(pyns);
-        pgm->setExternalData(QORE_PYTHON_MODULE_NAME, new QorePythonProgram(pgm, pyns));
+        // issue #4153: in case we only have the calling context here
+        ExceptionSink xsink;
+        QoreExternalProgramContextHelper pch(&xsink, pgm);
+        if (!xsink) {
+            pgm->setExternalData(QORE_PYTHON_MODULE_NAME, new QorePythonProgram(pgm, pyns));
+        }
     }
 
     assert(!PyGILState_Check());
@@ -363,7 +368,8 @@ static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink)
     if (!pypgm) {
         QoreNamespace* pyns = PNS.copy();
         pgm->getRootNS()->addNamespace(pyns);
-        pgm->setExternalData(QORE_PYTHON_MODULE_NAME, new QorePythonProgram(pgm, pyns));
+        pypgm = new QorePythonProgram(pgm, pyns);
+        pgm->setExternalData(QORE_PYTHON_MODULE_NAME, pypgm);
         pgm->addFeature(QORE_PYTHON_MODULE_NAME);
     }
 
