@@ -1839,8 +1839,8 @@ PyObject* QorePythonProgram::callPythonInternal(ExceptionSink* xsink, PyObject* 
         return nullptr;
     }
 
-    //printd(5, "QorePythonProgram::callPythonInternal(): this: %p valid: %d argcount: %d\n", this, valid,
-    //  (args && args->size() > arg_offset) ? args->size() - arg_offset : 0);
+    printd(5, "QorePythonProgram::callPythonInternal(): this: %p valid: %d argcount: %d (first: %p)\n", this, valid,
+      (args && args->size() > arg_offset) ? args->size() - arg_offset : 0, first);
     QorePythonReferenceHolder return_value(PyEval_CallObjectWithKeywords(callable, *py_args, kwargs));
     // check for Python exceptions
     if (!return_value && checkPythonException(xsink)) {

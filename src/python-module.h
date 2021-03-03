@@ -38,6 +38,13 @@
 //! the name of the language in stack traces
 #define QORE_PYTHON_LANG_NAME "Python"
 
+// module registration function
+DLLEXPORT extern "C" void python_qore_module_desc(QoreModuleInfo& mod_info);
+
+// export function for other language modules
+DLLEXPORT extern "C" int python_module_import(ExceptionSink* xsink, QoreProgram* pgm, const char* module,
+    const char* symbol);
+
 DLLLOCAL extern PyThreadState* mainThreadState;
 
 // forward reference
@@ -280,9 +287,6 @@ DLLLOCAL extern PyTypeObject PythonQoreObjectBase_Type;
 // Python program control for Qore interfacing
 DLLLOCAL extern QorePythonProgram* qore_python_pgm;
 
-// module registration function
-DLLEXPORT extern "C" void python_qore_module_desc(QoreModuleInfo& mod_info);
-
 //! Python module definition function for the qoreloader module
 DLLLOCAL PyMODINIT_FUNC PyInit_qoreloader();
 
@@ -320,10 +324,10 @@ private:
 class PythonQoreClass;
 typedef std::map<const QoreClass*, PythonQoreClass*> py_cls_map_t;
 
-//! called from Python only; if it returns nullptr, a Python exception is raised
-int load_jni_module(QorePythonProgram* qore_python_pgm);
+//! called from Python only; if it returns -1, a Python exception is raised
+DLLLOCAL int load_jni_module(QorePythonProgram* qore_python_pgm);
 
-//! called from Python only; if it returns nullptr, a Python exception is raised
+//! called from Python only; if it returns -1, a Python exception is raised
 DLLLOCAL int do_jni_module_import(QorePythonProgram* qore_python_pgm, const char* name_str);
 
 #if 0
