@@ -289,6 +289,8 @@ static QoreStringNode* python_module_init_intern(bool repeat) {
 
         QC_PYTHONBASEOBJECT = new QorePythonClass("__qore_base__");
         CID_PYTHONBASEOBJECT = QC_PYTHONBASEOBJECT->getID();
+
+        PNS.addSystemClass(QC_PYTHONBASEOBJECT->copy());
     }
 
     return nullptr;
@@ -379,7 +381,7 @@ static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink)
 // %module-cmd(python) import
 static void py_mc_import(ExceptionSink* xsink, QoreString& arg, QorePythonProgram* pypgm) {
     // process import statement
-    //printd(5, "python_module_parse_cmd() pypgm: %p arg: %s\n", pypgm, arg.c_str());
+    //printd(5, "py_mc_import() pypgm: %p arg: %s\n", pypgm, arg.c_str());
 
     QorePythonHelper qph(pypgm);
 
@@ -387,17 +389,19 @@ static void py_mc_import(ExceptionSink* xsink, QoreString& arg, QorePythonProgra
     qore_offset_t i = arg.find('.');
     if (i < 0 || i == static_cast<qore_offset_t>(arg.size() - 1)) {
         pypgm->import(xsink, arg.c_str());
-    } else {
-        const char* symbol = arg.c_str() + i + 1;
-        arg.replaceChar(i, '\0');
-
-        arg.terminate(i);
-        if (!strcmp(symbol, "*")) {
-            pypgm->import(xsink, arg.c_str());
-        } else {
-            pypgm->import(xsink, arg.c_str(), symbol);
-        }
+        return;
     }
+
+    const char* symbol = arg.c_str() + i + 1;
+    arg.replaceChar(i, '\0');
+
+    arg.terminate(i);
+    if (!strcmp(symbol, "*")) {
+        pypgm->import(xsink, arg.c_str());
+        return;
+    }
+
+    pypgm->import(xsink, arg.c_str(), symbol);
 }
 
 // %module-cmd(python) import-ns <qore-namespace> <python-module-path>
@@ -483,6 +487,21 @@ static void py_mc_reset_python(ExceptionSink* xsink, QoreString& arg, QorePython
     q_reset_python(xsink);
 }
 #endif
+
+// exported function
+extern "C" int python_module_import(ExceptionSink* xsink, QoreProgram* pgm, const char* module, const char* symbol) {
+    QorePythonProgram* pypgm = static_cast<QorePythonProgram*>(pgm->getExternalData(QORE_PYTHON_MODULE_NAME));
+    if (!pypgm) {
+        QoreNamespace* pyns = PNS.copy();
+        pgm->getRootNS()->addNamespace(pyns);
+        pypgm = new QorePythonProgram(pgm, pyns);
+        pgm->setExternalData(QORE_PYTHON_MODULE_NAME, pypgm);
+        pgm->addFeature(QORE_PYTHON_MODULE_NAME);
+    }
+    // the following call adds the class to the current program as well
+    QorePythonHelper qph(pypgm);
+    return pypgm->import(xsink, module, symbol);
+}
 
 QorePythonHelper::QorePythonHelper(const QorePythonProgram* pypgm)
     : old_pgm(q_swap_thread_local_data(python_u_tld_key, (void*)pypgm)), old_state(pypgm->setContext()), new_pypgm(pypgm) {

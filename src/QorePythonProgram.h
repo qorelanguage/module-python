@@ -4,7 +4,7 @@
 
   Qore Programming Language
 
-  Copyright (C) 2020 Qore Technologies, s.r.o.
+  Copyright (C) 2020 - 2021 Qore Technologies, s.r.o.
 
   Permission is hereby granted, free of charge, to any person obtaining a
   copy of this software and associated documentation files (the "Software"),
@@ -194,7 +194,8 @@ public:
     //! Returns a Qore list from a Python tuple
     /** must already have the Python thread context set
     */
-    DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, size_t offset = 0, bool for_args = false);
+    DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, size_t offset = 0,
+            bool for_args = false);
 
     //! Returns a Qore hash from a Python dict
     /** must already have the Python thread context set
@@ -215,7 +216,8 @@ public:
     DLLLOCAL int checkValid(ExceptionSink* xsink) const {
         // the GIL must be held when this function is called
         if (!valid) {
-            xsink->raiseException("PYTHON-ERROR", "the given PythonProgram object is invalid or has already been deleted");
+            xsink->raiseException("PYTHON-ERROR", "the given PythonProgram object is invalid or has already been " \
+                "deleted");
             return -1;
         }
         assert(PyGILState_Check());
@@ -242,7 +244,8 @@ public:
     DLLLOCAL int saveQoreObjectFromPython(const QoreValue& rv, ExceptionSink& xsink);
 
     //! Imports the given Qore namespace to Python under the given module path
-    DLLLOCAL void importQoreNamespaceToPython(const QoreNamespace& ns, const QoreString& py_mod_path, ExceptionSink* xsink);
+    DLLLOCAL void importQoreNamespaceToPython(const QoreNamespace& ns, const QoreString& py_mod_path,
+            ExceptionSink* xsink);
 
     //! returns a registered PythonQoreClass for the given Qore class
     DLLLOCAL PythonQoreClass* findCreatePythonClass(const QoreClass& cls, const char* mod_name);
@@ -285,7 +288,8 @@ public:
     DLLLOCAL PyObject* getPythonDict(ExceptionSink* xsink, const QoreHashNode* h);
 
     //! Populates the QoreClass based on the Python class
-    DLLLOCAL QorePythonClass* setupQorePythonClass(ExceptionSink* xsink, QoreNamespace* ns, PyTypeObject* type, std::unique_ptr<QorePythonClass>& cls, int flags = 0);
+    DLLLOCAL QorePythonClass* setupQorePythonClass(ExceptionSink* xsink, QoreNamespace* ns, PyTypeObject* type,
+            std::unique_ptr<QorePythonClass>& cls, int flags = 0);
 
     //! Creates ot retrieves a QoreClass for the given Python type
     DLLLOCAL QoreClass* getCreateQorePythonClass(ExceptionSink* xsink, PyTypeObject* type, int flags = 0);

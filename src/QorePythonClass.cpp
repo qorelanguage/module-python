@@ -47,7 +47,9 @@ QorePythonClass::QorePythonClass(QorePythonProgram* pypgm, const char* name) :
 }
 
 QorePythonClass::QorePythonClass(const QorePythonClass& old) : QoreBuiltinClass(old), pypgm(old.pypgm) {
-    pypgm->weakRef();
+    if (pypgm) {
+        pypgm->weakRef();
+    }
 }
 
 QorePythonClass::~QorePythonClass() {
