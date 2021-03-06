@@ -303,6 +303,12 @@ void QorePythonProgram::waitForThreadsIntern() {
 
 void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
     //printd(5, "QorePythonProgram::deleteIntern() this: %p\n", this);
+    if (q_libqore_exiting()) {
+#ifdef DEBUG
+        qpgm = nullptr;
+#endif
+        return;
+    }
 
     if (qpgm && owns_qore_program_ref) {
         // remove the external data before dereferencing
@@ -2102,6 +2108,7 @@ QoreNamespace* QorePythonProgram::getNamespaceForObject(PyObject* obj) {
             return pyns;
         }
         ns_path = module_context;
+        ns_path.replaceAll(".", "::");
     }
 
     //printd(5, "QorePythonProgram::getNamespaceForObject() obj %p (%s) -> ns: Python::%s\n", obj,
@@ -2384,7 +2391,10 @@ void QorePythonProgram::execPythonConstructor(const QoreMethod& meth, PyObject* 
 }
 
 void QorePythonProgram::execPythonDestructor(const QorePythonClass& thisclass, PyObject* pycls, QoreObject* self,
-    QorePythonPrivateData* pd, ExceptionSink* xsink) {
+        QorePythonPrivateData* pd, ExceptionSink* xsink) {
+    if (q_libqore_exiting()) {
+        return;
+    }
     QorePythonProgram* pypgm = thisclass.getPythonProgram();
 
     QorePythonHelper qph(pypgm);
@@ -2708,7 +2718,7 @@ int QorePythonProgram::findCreateQoreFunction(PyObject* value, const char* symbo
 }
 
 int QorePythonProgram::importSymbol(ExceptionSink* xsink, PyObject* value, const char* module,
-    const char* symbol, int filter) {
+        const char* symbol, int filter) {
     printd(5, "QorePythonProgram::importSymbol() %s.%s (type %s)\n", module, symbol, Py_TYPE(value)->tp_name);
     // check for builtin functions -> static method
     if (PyCFunction_Check(value)) {
@@ -2752,7 +2762,9 @@ int QorePythonProgram::importSymbol(ExceptionSink* xsink, PyObject* value, const
     }
     const QoreTypeInfo* typeInfo = v->getFullTypeInfo();
 
-    QoreNamespace* ns = pyns->findCreateNamespacePathAll(module_context);
+    QoreString ns_path = module_context;
+    ns_path.replaceAll(".", "::");
+    QoreNamespace* ns = pyns->findCreateNamespacePathAll(ns_path.c_str());
     if (ns->findLocalConstant(symbol)) {
         return 0;
     }
