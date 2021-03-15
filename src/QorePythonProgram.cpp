@@ -1888,7 +1888,6 @@ void QorePythonProgram::clearPythonException() {
     PyErr_Fetch(ex_type.getRef(), ex_value.getRef(), traceback.getRef());
 }
 
-static void breakit() {}
 int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
     // returns a borrowed reference
     PyObject* ex = PyErr_Occurred();
@@ -1896,7 +1895,6 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
         //printd(5, "QorePythonProgram::checkPythonException() no error\n");
         return 0;
     }
-    breakit();
 
     QorePythonReferenceHolder ex_type, ex_value, traceback;
     PyErr_Fetch(ex_type.getRef(), ex_value.getRef(), traceback.getRef());
