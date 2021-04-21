@@ -287,7 +287,7 @@ static QoreStringNode* python_module_init_intern(bool repeat) {
 
         tclist.push(QorePythonProgram::pythonThreadCleanup, nullptr);
 
-        QC_PYTHONBASEOBJECT = new QorePythonClass("__qore_base__");
+        QC_PYTHONBASEOBJECT = new QorePythonClass("__qore_base__", "::Python::__qore_base__");
         CID_PYTHONBASEOBJECT = QC_PYTHONBASEOBJECT->getID();
 
         PNS.addSystemClass(QC_PYTHONBASEOBJECT->copy());
