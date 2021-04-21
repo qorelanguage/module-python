@@ -2161,7 +2161,10 @@ QorePythonClass* QorePythonProgram::addClassToNamespaceIntern(ExceptionSink* xsi
     cname = cname_str.c_str();
 
     // create new class
-    std::unique_ptr<QorePythonClass> cls(new QorePythonClass(this, cname));
+    std::string path = ns->getPath(true);
+    path += "::";
+    path += cname;
+    std::unique_ptr<QorePythonClass> cls(new QorePythonClass(this, cname, path.c_str()));
 
     // insert into map
     clmap.insert(i, clmap_t::value_type(type, cls.get()));

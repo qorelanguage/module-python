@@ -41,9 +41,9 @@ class QorePythonProgram;
 class QorePythonClass : public QoreBuiltinClass {
 public:
     //! only for the base python class
-    DLLLOCAL QorePythonClass(const char* name);
+    DLLLOCAL QorePythonClass(const char* name, const char* path);
 
-    DLLLOCAL QorePythonClass(QorePythonProgram* pypgm, const char* name);
+    DLLLOCAL QorePythonClass(QorePythonProgram* pypgm, const char* name, const char* path);
 
     DLLLOCAL QorePythonClass(const QorePythonClass& old);
 
