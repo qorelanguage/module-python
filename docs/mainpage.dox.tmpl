@@ -500,6 +500,13 @@ PythonProgram::setSaveObjectCallback(callback);
 
     @section pythonreleasenotes python Module Release Notes
 
+    @subsection python_1_0_3 python Module Version 1.0.3
+    - do not shut down the %Python library on exit, as it will cause a crash in exit handlers in %Python modules that
+      require the library to be in place (ex: h5py module v 3.3.0)
+      (<a href="https://github.com/qorelanguage/qore/issues/4290">issue 4290</a>)
+    - fixed additional namespace clashes and namespace allocation issues for imported %Python classes in %Qore
+      (<a href="https://github.com/qorelanguage/qore/issues/4289">issue 4289</a>)
+
     @subsection python_1_0_2 python Module Version 1.0.2
     - fixed issues handling the case when the python module is initialized with no Program context
       (<a href="https://github.com/qorelanguage/qore/issues/4153">issue 4153</a>)

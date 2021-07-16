@@ -593,8 +593,8 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
     if (!python) {
         python = PyThreadState_New(interpreter);
 
-        //printd(5, "QorePythonProgram::setContext() this: %p created new thread context: %p (py_thr_map: %p " \
-        //  "size: %d)\n", this, python, &py_thr_map, (int)py_thr_map.size());
+        printd(5, "QorePythonProgram::setContext() this: %p created new thread context: %p (py_thr_map: %p "
+            "size: %d)\n", this, python, &py_thr_map, (int)py_thr_map.size());
         assert(python);
         assert(python->gilstate_counter == 1);
         // the thread state will be deleted when the thread terminates or the interpreter is deleted
@@ -1179,7 +1179,8 @@ void QorePythonProgram::exportClass(ExceptionSink* xsink, QoreString& arg) {
         ns = ns->findCreateNamespacePathAll(ns_str.c_str());
     }
 
-    addClassToNamespaceIntern(xsink, ns, (PyTypeObject*)*obj, strpath.back().c_str(), i);
+    strset_t nsset;
+    addClassToNamespaceIntern(xsink, ns, (PyTypeObject*)*obj, strpath.back().c_str(), i, nsset);
 }
 
 void QorePythonProgram::addModulePath(ExceptionSink* xsink, QoreString& arg) {
@@ -2068,7 +2069,8 @@ QoreClass* QorePythonProgram::getCreateQorePythonClass(ExceptionSink* xsink, PyT
         return nullptr;
     }
 
-    return getCreateQorePythonClassIntern(xsink, type, nullptr, flags);
+    strset_t nsset;
+    return getCreateQorePythonClassIntern(xsink, type, nsset, nullptr, flags);
 }
 
 QoreNamespace* QorePythonProgram::getNamespaceForObject(PyObject* obj) {
@@ -2115,7 +2117,7 @@ QoreNamespace* QorePythonProgram::getNamespaceForObject(PyObject* obj) {
 }
 
 QoreClass* QorePythonProgram::getCreateQorePythonClassIntern(ExceptionSink* xsink, PyTypeObject* type,
-        const char* cname, int flags) {
+        strset_t& nsset, const char* cname, int flags) {
     //printd(5, "QorePythonProgram::getCreateQorePythonClassIntern() class: '%s'\n", type->tp_name);
     // see if the Python type already represents a Qore class
     if (PyQoreObjectType_Check(type)) {
@@ -2131,11 +2133,11 @@ QoreClass* QorePythonProgram::getCreateQorePythonClassIntern(ExceptionSink* xsin
     }
 
     // get relative path to class and class name
-    std::string rpath_str;
+    QoreString rpath_str;
     if (!cname) {
         const char* p = strrchr(type->tp_name, '.');
         if (p) {
-            rpath_str = std::string(type->tp_name, p - type->tp_name);
+            rpath_str.set(type->tp_name, p - type->tp_name);
             cname = p + 1;
         } else {
             cname = type->tp_name;
@@ -2144,16 +2146,34 @@ QoreClass* QorePythonProgram::getCreateQorePythonClassIntern(ExceptionSink* xsin
 
     // create new QorePythonClass
     QoreNamespace* ns = getNamespaceForObject(reinterpret_cast<PyObject*>(type));
-    return addClassToNamespaceIntern(xsink, ns, type, cname, i, flags);
+    if (!rpath_str.empty() && rpath_str.startsWith(ns->getName())) {
+        size_t len = strlen(ns->getName());
+        if (rpath_str[len] == '.' && rpath_str.size() > len) {
+            rpath_str.replace(0, len + 1, nullptr);
+            rpath_str.replaceAll(".", "::");
+            ns = ns->findCreateNamespacePathAll(rpath_str.c_str());
+        }
+    }
+    return addClassToNamespaceIntern(xsink, ns, type, cname, i, nsset, flags);
 }
 
 QorePythonClass* QorePythonProgram::addClassToNamespaceIntern(ExceptionSink* xsink, QoreNamespace* ns,
-        PyTypeObject* type, const char* cname, clmap_t::iterator i, int flags) {
+        PyTypeObject* type, const char* cname, clmap_t::iterator i, strset_t& nsset, int flags) {
     // get a unique name for the class
     QoreString cname_str = cname;
+    // namespace path
+    std::string ns_path = ns->getPath(true);
+    // full path of class with ns
+    std::string full_path;
+    strset_t::iterator nsi;
     {
         int base = 0;
-        while (ns->findLocalClass(cname_str.c_str())) {
+        while (true) {
+            full_path = ns_path + "::" + cname_str.c_str();
+            nsi = nsset.find(full_path);
+            if (nsi == nsset.end() && !ns->findLocalClass(cname_str.c_str())) {
+                break;
+            }
             cname_str.clear();
             cname_str.sprintf("%s_base_%d", cname, base++);
         }
@@ -2161,10 +2181,10 @@ QorePythonClass* QorePythonProgram::addClassToNamespaceIntern(ExceptionSink* xsi
     cname = cname_str.c_str();
 
     // create new class
-    std::string path = ns->getPath(true);
-    path += "::";
-    path += cname;
-    std::unique_ptr<QorePythonClass> cls(new QorePythonClass(this, cname, path.c_str()));
+    std::unique_ptr<QorePythonClass> cls(new QorePythonClass(this, cname, full_path.c_str()));
+
+    // add to nsset
+    nsset.insert(nsi, full_path);
 
     // insert into map
     clmap.insert(i, clmap_t::value_type(type, cls.get()));
@@ -2172,14 +2192,14 @@ QorePythonClass* QorePythonProgram::addClassToNamespaceIntern(ExceptionSink* xsi
     //printd(5, "QorePythonProgram::addClassToNamespaceIntern() ns: '%s' cls: '%s' (%s id: %d)\n", ns->getName(),
     //  cls->getName(), type->tp_name, cls->getID());
 
-    return setupQorePythonClass(xsink, ns, type, cls, flags);
+    return setupQorePythonClass(xsink, ns, type, cls, nsset, flags);
 }
 
 static constexpr int static_meth_flags = QCF_USES_EXTRA_ARGS;
 static constexpr int normal_meth_flags = static_meth_flags | QCF_ABSTRACT_OVERRIDE_ALL;
 
 QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, QoreNamespace* ns, PyTypeObject* type,
-        std::unique_ptr<QorePythonClass>& cls, int flags) {
+        std::unique_ptr<QorePythonClass>& cls, strset_t& nsset, int flags) {
     //printd(5, "QorePythonProgram::setupQorePythonClass() ns: '%s' cls: '%s' (%s) flags: %d\n", ns->getName(),
     //  cls->getName(), type->tp_name, flags);
     cls->addConstructor((void*)type, (q_external_constructor_t)execPythonConstructor, Public,
@@ -2193,7 +2213,7 @@ QorePythonClass* QorePythonProgram::setupQorePythonClass(ExceptionSink* xsink, Q
 
     // add single base class
     if (type->tp_base) {
-        QoreClass* bclass = getCreateQorePythonClassIntern(xsink, type->tp_base);
+        QoreClass* bclass = getCreateQorePythonClassIntern(xsink, type->tp_base, nsset);
         if (!bclass) {
             assert(*xsink);
             return nullptr;
@@ -2737,7 +2757,8 @@ int QorePythonProgram::importSymbol(ExceptionSink* xsink, PyObject* value, const
     if (PyType_Check(value)) {
         //printd(5, "QorePythonProgram::importSymbol() class sym: '%s' -> '%s' (%p)\n", symbol,
         //  reinterpret_cast<PyTypeObject*>(value)->tp_name, value);
-        getCreateQorePythonClassIntern(xsink, reinterpret_cast<PyTypeObject*>(value));
+        strset_t nsset;
+        getCreateQorePythonClassIntern(xsink, reinterpret_cast<PyTypeObject*>(value), nsset);
         if (*xsink) {
             return -1;
         }

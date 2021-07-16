@@ -233,7 +233,12 @@ static QoreStringNode* python_module_init_intern(bool repeat) {
         }
 
         Py_InitializeEx(0);
+#ifndef QORE_ALLOW_PYTHON_SHUTDOWN
+        // issue# 4290: if we actively shut down Python on exit, then exit handlers in modules
+        // (such as the h5py module in version 3.3.0) will cause a crash when the process exits,
+        // as it requires the Python library to be still in place and initialized
         python_needs_shutdown = true;
+#endif
         //printd(5, "python_module_init() Python initialized\n");
     }
 
