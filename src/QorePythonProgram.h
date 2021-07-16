@@ -63,6 +63,8 @@ struct QorePythonThreadStateInfo {
 class QorePythonProgram : public AbstractQoreProgramExternalData {
     friend class PythonModuleContextHelper;
 public:
+    typedef std::set<std::string> strset_t;
+
     //! Python context using the main interpreter
     DLLLOCAL QorePythonProgram();
 
@@ -289,7 +291,7 @@ public:
 
     //! Populates the QoreClass based on the Python class
     DLLLOCAL QorePythonClass* setupQorePythonClass(ExceptionSink* xsink, QoreNamespace* ns, PyTypeObject* type,
-            std::unique_ptr<QorePythonClass>& cls, int flags = 0);
+            std::unique_ptr<QorePythonClass>& cls, strset_t& nsset, int flags = 0);
 
     //! Creates ot retrieves a QoreClass for the given Python type
     DLLLOCAL QoreClass* getCreateQorePythonClass(ExceptionSink* xsink, PyTypeObject* type, int flags = 0);
@@ -429,7 +431,6 @@ protected:
     pyobj_set_t mod_set;
 
     //! set of unique strings
-    typedef std::set<std::string> strset_t;
     strset_t strset;
 
     //! mutex for thread state map
@@ -474,11 +475,11 @@ protected:
 
     DLLLOCAL QoreNamespace* getNamespaceForObject(PyObject* type);
 
-    DLLLOCAL QoreClass* getCreateQorePythonClassIntern(ExceptionSink* xsink, PyTypeObject* type,
+    DLLLOCAL QoreClass* getCreateQorePythonClassIntern(ExceptionSink* xsink, PyTypeObject* type, strset_t& nsset,
         const char* cls_name = nullptr, int flags = 0);
 
     DLLLOCAL QorePythonClass* addClassToNamespaceIntern(ExceptionSink* xsink, QoreNamespace* ns, PyTypeObject* type,
-        const char* cname, clmap_t::iterator i, int flags = 0);
+        const char* cname, clmap_t::iterator i, strset_t& nsset, int flags = 0);
 
     //! Call a method and and return the result
     DLLLOCAL QoreValue callCFunctionMethod(ExceptionSink* xsink, PyObject* func, const QoreListNode* args,
