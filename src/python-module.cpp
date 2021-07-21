@@ -95,6 +95,7 @@ static mcmap_t mcmap = {
 };
 
 static bool python_needs_shutdown = false;
+static bool python_initialized = false;
 
 int python_u_tld_key = -1;
 int python_qobj_key = -1;
@@ -157,10 +158,12 @@ static void check_python_version() {
 }
 
 static void python_module_shutdown() {
-    if (python_needs_shutdown) {
+    if (python_initialized) {
         PyThreadState_Swap(nullptr);
         PyEval_AcquireThread(mainThreadState);
         _qore_PyGILState_SetThisThreadState(mainThreadState);
+    }
+    if (python_needs_shutdown) {
         int rc = Py_FinalizeEx();
         if (rc) {
             printd(0, "Unkown error shutting down Python: rc: %d\n", rc);
@@ -233,12 +236,13 @@ static QoreStringNode* python_module_init_intern(bool repeat) {
         }
 
         Py_InitializeEx(0);
-#ifndef QORE_ALLOW_PYTHON_SHUTDOWN
+#ifdef QORE_ALLOW_PYTHON_SHUTDOWN
         // issue# 4290: if we actively shut down Python on exit, then exit handlers in modules
         // (such as the h5py module in version 3.3.0) will cause a crash when the process exits,
         // as it requires the Python library to be still in place and initialized
         python_needs_shutdown = true;
 #endif
+        python_initialized = true;
         //printd(5, "python_module_init() Python initialized\n");
     }
 
@@ -278,7 +282,7 @@ static QoreStringNode* python_module_init_intern(bool repeat) {
     }
 
     mainThreadState = PyThreadState_Get();
-    if (python_needs_shutdown) {
+    if (python_initialized) {
         // release the current thread state after initialization
         PyEval_ReleaseThread(mainThreadState);
         assert(!_qore_PyRuntimeGILState_GetThreadState());
