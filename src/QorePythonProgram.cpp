@@ -2554,9 +2554,48 @@ int QorePythonProgram::saveModule(const char* name, PyObject* mod) {
 }
 
 int QorePythonProgram::import(ExceptionSink* xsink, const char* module, const char* symbol) {
-    // make sure we don't already have this symbol
-    // returns a borrowed reference
-    QorePythonReferenceHolder mod(PyImport_ImportModule(module));
+    //printd(5, "QorePythonProgram::import() module: '%s' symbol: '%s'\n", module, symbol ? symbol : "n/a");
+
+    QoreString mod_name(module);
+    QorePythonReferenceHolder mod;
+    if (symbol) {
+        QoreString sym(symbol);
+        qore_offset_t i = sym.rfind('.');
+        if (i > 0 && (size_t)i != (sym.size() - 1)) {
+            mod_name.concat('.');
+            mod_name.concat(sym, 0, i, xsink);
+            //printd(5, "trying to import '%s'\n", mod_name.c_str());
+            mod = PyImport_ImportModule(mod_name.c_str());
+
+            if (!mod) {
+                if (!checkPythonException(xsink)) {
+                    throw QoreStandardException("PYTHON-IMPORT-ERROR", "Python could not load module '%s'", module);
+                }
+                return -1;
+            }
+
+            // if the module has already been imported, then ignore
+            if (mod_set.find(*mod) != mod_set.end()) {
+                return 0;
+            }
+
+            QoreString ns_path(mod_name);
+            ns_path.replaceAll(".", "::");
+
+            symbol = sym.c_str() + i + 1;
+            //printd(5, "imported module: '%s' importing symbol: '%s' (ns_path: '%s')\n", mod_name.c_str(), symbol,
+            //    ns_path.c_str());
+
+            PythonModuleContextHelper mch(this, ns_path.c_str());
+            // https://docs.python.org/3/reference/import.html:
+            // any module that contains a __path__ attribute is considered a package
+            return checkImportSymbol(xsink, mod_name.c_str(), *mod, PyObject_HasAttrString(*mod, "__path__"), symbol,
+                IF_ALL, false);
+        }
+    }
+
+    mod = PyImport_ImportModule(module);
+
     if (!mod) {
         if (!checkPythonException(xsink)) {
             throw QoreStandardException("PYTHON-IMPORT-ERROR", "Python could not load module '%s'", module);
@@ -2564,52 +2603,9 @@ int QorePythonProgram::import(ExceptionSink* xsink, const char* module, const ch
         return -1;
     }
 
-    // https://docs.python.org/3/reference/import.html:
-    // any module that contains a __path__ attribute is considered a package
-    //bool is_package = PyObject_HasAttrString(*mod, "__path__");
-
-    QoreString ns_path(module);
-
-    if (symbol) {
-        QoreString sym(symbol);
-        // find intermediate modules
-        while (true) {
-            qore_offset_t i = sym.find('.');
-            if (i <= 0 || (size_t)i == (sym.size() - 1)) {
-                break;
-            }
-            QoreString mod_name(&sym, i);
-
-            if (!PyObject_HasAttrString(*mod, mod_name.c_str())) {
-                throw QoreStandardException("PYTHON-IMPORT-ERROR", "submodule '%s' is not an attribute of '%s'",
-                    mod_name.c_str(), module);
-            }
-            QorePythonReferenceHolder mod_val(PyObject_GetAttrString(*mod, mod_name.c_str()));
-            assert(mod_val);
-            if (!PyModule_Check(*mod_val)) {
-                throw QoreStandardException("PYTHON-IMPORT-ERROR", "'%s' is not a submodule but rather has " \
-                    "type '%s'", mod_name.c_str(), Py_TYPE(*mod_val)->tp_name);
-            }
-
-            mod = mod_val.release();
-
-            ns_path.sprintf("::%s", mod_name.c_str());
-
-            sym.splice(0, i + 1, xsink);
-            if (*xsink) {
-                return -1;
-            }
-            symbol = sym.c_str();
-        }
-
-        // if the module has already been imported, then ignore
-        if (mod_set.find(*mod) != mod_set.end()) {
-            return 0;
-        }
-
-        PythonModuleContextHelper mch(this, ns_path.c_str());
-        return checkImportSymbol(xsink, sym.c_str(), *mod, PyObject_HasAttrString(*mod, "__path__"), symbol, IF_ALL,
-            false);
+    // if the module has already been imported, then ignore
+    if (mod_set.find(*mod) != mod_set.end()) {
+        return 0;
     }
 
     return importModule(xsink, *mod, module, IF_ALL);

@@ -951,7 +951,7 @@ auto sub get(auto arg) {
 
             assertFloatEq(0.841470985, p.callFunction("get", 1), 0.000000001);
             assertFloatEq(0.841470985, p.callFunction("math::sin", 1), 0.000000001);
-            assertThrows("NO-FUNCTION", \p.callFunction(), ("math::cos", 1));
+            assertThrows("NO-FUNCTION", \p.callFunction(), ("math::cos9", 1));
         }
 
         {
