@@ -577,7 +577,7 @@ int QorePythonProgram::setRecursionLimit(ExceptionSink* xsink) {
     //printd(5, "QorePythonProgram::setRecursionLimit() stack remaining: %lld size: %lld\n", q_thread_stack_remaining(),
     //  q_thread_get_stack_size());
     // use the q_thread_stack_remaining() API if Qore >= 1.0.8
-#if QORE_VERSION_CODE >= 10008
+#if QORE_VERSION_CODE > 10007
     int64 lim = (int64)q_thread_stack_remaining() / PYTHON_STACK_FACTOR;
 #else
     // q_thread_stack_remaining() was broken in Qore < 1.0.8
