@@ -22,8 +22,6 @@
 
 #include "ModuleNamespace.h"
 
-static PyObject* ModuleNamespace__getattr__(PyObject* self, PyObject* args);
-
 static PyMethodDef ModuleNamespace_methods[] = {
     {nullptr, nullptr},
 };

@@ -574,8 +574,15 @@ int QorePythonProgram::setRecursionLimit(ExceptionSink* xsink) {
     QorePythonReferenceHolder func(PyObject_GetAttrString(*sys, "setrecursionlimit"));
     assert(PyCFunction_Check(*func));
     //printd(5, "QorePythonProgram::setRecursionLimit() setrecursionlimit: %s\n", Py_TYPE(*func)->tp_name);
-
+    //printd(5, "QorePythonProgram::setRecursionLimit() stack remaining: %lld size: %lld\n", q_thread_stack_remaining(),
+    //  q_thread_get_stack_size());
+    // use the q_thread_stack_remaining() API if Qore >= 1.0.8
+#if QORE_VERSION_CODE >= 10008
+    int64 lim = (int64)q_thread_stack_remaining() / PYTHON_STACK_FACTOR;
+#else
+    // q_thread_stack_remaining() was broken in Qore < 1.0.8
     int64 lim = (int64)q_thread_get_stack_size() / PYTHON_STACK_FACTOR;
+#endif
     QorePythonReferenceHolder py_args(PyTuple_New(1));
     PyTuple_SET_ITEM(*py_args, 0, PyLong_FromLongLong(lim));
     QorePythonReferenceHolder return_value(PyCFunction_Call(*func, *py_args, nullptr));

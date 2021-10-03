@@ -501,6 +501,9 @@ PythonProgram::setSaveObjectCallback(callback);
     @section pythonreleasenotes python Module Release Notes
 
     @subsection python_1_0_4 python Module Version 1.0.4
+    - fixed calculating the recursion depth in the initial thread so that more Python modules can be loaded in single-
+      threaded programs without changing the stack size
+      (<a href="https://github.com/qorelanguage/qore/issues/4323">issue 4323</a>)
     - fixed errors import valid Python modules
       (<a href="https://github.com/qorelanguage/qore/issues/4322">issue 4322</a>)
 
