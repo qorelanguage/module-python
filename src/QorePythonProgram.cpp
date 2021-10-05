@@ -558,6 +558,26 @@ int QorePythonProgram::createInterpreter(QorePythonGilHelper& qpgh, ExceptionSin
     return setRecursionLimit(xsink);
 }
 
+int QorePythonProgram::getRecursionLimit() {
+#if QORE_VERSION_CODE > 10007
+    //printd(5, "QorePythonProgram::getRecursionLimit() stack remaining: %lld total size: %lld\n",
+    //    q_thread_stack_remaining(), q_thread_get_this_stack_size());
+    // for some reason the recusion depth needs to be calculated smaller with smaller stack sizes
+    // testing results in using an estimated 6K python stack frame size for stacks 1M and smaller
+    // and 10K for larger stacks
+    int64 ss = (int64)q_thread_stack_remaining();
+    int64 lim;
+    if (ss > (1024 * 1024)) {
+        lim = (int64)q_thread_stack_remaining() / PYTHON_LARGE_STACK_FACTOR;
+    } else {
+        lim = (int64)q_thread_stack_remaining() / PYTHON_SMALL_STACK_FACTOR;
+    }
+#else    // q_thread_stack_remaining() was broken in Qore < 1.0.8
+    int64 lim = (int64)q_thread_get_stack_size() / PYTHON_SMALL_STACK_FACTOR;
+#endif
+    return lim;
+}
+
 int QorePythonProgram::setRecursionLimit(ExceptionSink* xsink) {
     QorePythonReferenceHolder sys(PyImport_ImportModule("sys"));
     if (!sys) {
@@ -574,17 +594,9 @@ int QorePythonProgram::setRecursionLimit(ExceptionSink* xsink) {
     QorePythonReferenceHolder func(PyObject_GetAttrString(*sys, "setrecursionlimit"));
     assert(PyCFunction_Check(*func));
     //printd(5, "QorePythonProgram::setRecursionLimit() setrecursionlimit: %s\n", Py_TYPE(*func)->tp_name);
-    //printd(5, "QorePythonProgram::setRecursionLimit() stack remaining: %lld size: %lld\n", q_thread_stack_remaining(),
-    //  q_thread_get_stack_size());
     // use the q_thread_stack_remaining() API if Qore >= 1.0.8
-#if QORE_VERSION_CODE > 10007
-    int64 lim = (int64)q_thread_stack_remaining() / PYTHON_STACK_FACTOR;
-#else
-    // q_thread_stack_remaining() was broken in Qore < 1.0.8
-    int64 lim = (int64)q_thread_get_stack_size() / PYTHON_STACK_FACTOR;
-#endif
     QorePythonReferenceHolder py_args(PyTuple_New(1));
-    PyTuple_SET_ITEM(*py_args, 0, PyLong_FromLongLong(lim));
+    PyTuple_SET_ITEM(*py_args, 0, PyLong_FromLongLong(getRecursionLimit()));
     QorePythonReferenceHolder return_value(PyCFunction_Call(*func, *py_args, nullptr));
     return checkPythonException(xsink);
 }
@@ -674,8 +686,9 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
 
     // calculate new recursion depth
     int recursion_depth = python->recursion_depth;
-    int new_recursion_depth = q_thread_stack_used() / PYTHON_STACK_FACTOR;
-    //printd(5, "QorePythonProgram::setContext() ewcursion_depth: %d -> %d\n", python->recursion_depth,
+    // be conservative when calculating the new recursion depth
+    int new_recursion_depth = q_thread_stack_used() / PYTHON_SMALL_STACK_FACTOR;
+    //printd(5, "QorePythonProgram::setContext() recursion_depth: %d -> %d\n", python->recursion_depth,
     //  new_recursion_depth);
     python->recursion_depth = new_recursion_depth;
 
