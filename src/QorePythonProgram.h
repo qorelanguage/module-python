@@ -53,7 +53,7 @@ class PythonQoreClass;
 #define IF_ALL   (IF_CLASS | IF_OTHER)
 
 //! best guess at the ratio of stack size / x = python recursion limit to avoid crashes
-constexpr int PYTHON_STACK_FACTOR = 6000;
+constexpr int PYTHON_STACK_FACTOR = 10 * 1024;
 
 struct QorePythonThreadStateInfo {
     PyThreadState* state;
