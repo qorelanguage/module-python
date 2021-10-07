@@ -641,8 +641,8 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
         //printd(5, "QorePythonProgram::setContext() this: %p\n", this);
     }
 
-    //printd(5, "QorePythonProgram::setContext() got thread context: %p (GIL: %d hG: %d) refs: %d\n", python,
-    //  PyGILState_Check(), haveGil(), python->gilstate_counter);
+    printd(5, "QorePythonProgram::setContext() got thread context: %p (GIL: %d hG: %d) refs: %d\n", python,
+        PyGILState_Check(), haveGil(), python->gilstate_counter);
 
     PyGILState_STATE g_state;
     // the TSS state needs to be restored in any case
@@ -654,7 +654,8 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
         _qore_PyGILState_SetThisThreadState(python);
     }
 
-    if (haveGil()) {
+    // are we currently holding the GIL?
+    if (_qore_has_gil(tss_state)) {
         // set GIL context
         ceval_state = _qore_PyCeval_SwapThreadState(python);
 
@@ -726,11 +727,8 @@ void QorePythonProgram::releaseContext(const QorePythonThreadInfo& oldstate) con
         // NOTE we cannot assert !PyGILState_Check() here, as we have released the GIL, and another thread may have
         // created a new interpreter, which will temporarily disbale the GIL check, which would cause
         // PyGILState_Check() to return 1
-        assert(!haveGil());
+        assert(!_qore_has_gil());
     } else {
-        // restore old thread context; GIL still held
-        assert(haveGil());
-
         if (python != oldstate.t_state) {
             PyThreadState_Swap(oldstate.t_state);
         }

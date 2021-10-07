@@ -357,6 +357,8 @@ PyObject* PythonQoreClass::wrap(QoreObject* obj) {
 }
 
 PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* args) {
+    QoreForeignThreadHelper qfth;
+
     // get method
     const QoreMethod* m = reinterpret_cast<const QoreMethod*>(PyCapsule_GetPointer(method_capsule, nullptr));
     assert(PyTuple_Check(args));
@@ -420,6 +422,8 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
 }
 
 PyObject* PythonQoreClass::exec_qore_static_method(PyObject* method_capsule, PyObject* args) {
+    QoreForeignThreadHelper qfth;
+
     // get method
     const QoreMethod* m = reinterpret_cast<const QoreMethod*>(PyCapsule_GetPointer(method_capsule, nullptr));
     assert(PyTuple_Check(args));

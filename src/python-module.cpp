@@ -523,20 +523,35 @@ QorePythonHelper::~QorePythonHelper() {
     //printd(5, "QorePythonHelper::~QorePythonHelper() restored old: %p\n", old_pgm);
 }
 
-static bool _qore_has_gil() {
-    return (_qore_PyCeval_GetGilLockedStatus() && _qore_PyCeval_GetThreadState() == PyGILState_GetThisThreadState());
+bool _qore_has_gil(PyThreadState* t_state) {
+    return (_qore_PyCeval_GetGilLockedStatus() && _qore_PyCeval_GetThreadState() == t_state);
+}
+
+static bool _qore_has_gil(PyThreadState* state0, PyThreadState* state1) {
+    if (!_qore_PyCeval_GetGilLockedStatus()) {
+        return false;
+    }
+    PyThreadState* gs = _qore_PyCeval_GetThreadState();
+    return gs == state0 || gs == state1;
 }
 
 QorePythonGilHelper::QorePythonGilHelper(PyThreadState* new_thread_state)
     : new_thread_state(new_thread_state), state(_qore_PyRuntimeGILState_GetThreadState()),
         t_state(PyGILState_GetThisThreadState()),
-        release_gil(!_qore_has_gil()) {
+        release_gil(!_qore_has_gil(t_state, new_thread_state)) {
     assert(new_thread_state);
+    //printd(5, "QorePythonGilHelper::QorePythonGilHelper() %llx acquire: %d state: %llx t_state: %llx\n",
+    //    new_thread_state, release_gil, state, t_state);
     if (release_gil) {
         PyEval_AcquireThread(new_thread_state);
         assert(PyThreadState_Get() == new_thread_state);
     } else {
         assert(t_state == _qore_PyCeval_GetThreadState());
+        if (t_state == new_thread_state) {
+            do_nothing = true;
+            //printd(5, "QorePythonGilHelper::QorePythonGilHelper() %llx noop\n", new_thread_state);
+            return;
+        }
     }
 
     ++new_thread_state->gilstate_counter;
@@ -550,16 +565,23 @@ QorePythonGilHelper::QorePythonGilHelper(PyThreadState* new_thread_state)
 
 QorePythonGilHelper::~QorePythonGilHelper() {
     assert(_qore_has_gil());
+    if (do_nothing) {
+        return;
+    }
 
     --new_thread_state->gilstate_counter;
 
     if (release_gil) {
+        //printd(5, "QorePythonGilHelper::~QorePythonGilHelper() releasing %llx state: %llx t_state: %llx\n",
+        //    new_thread_state, state, t_state);
         PyThreadState_Swap(new_thread_state);
         _qore_PyCeval_SwapThreadState(new_thread_state);
         _qore_PyGILState_SetThisThreadState(new_thread_state);
         // release the GIL
         PyEval_ReleaseThread(new_thread_state);
     } else {
+        //printd(5, "QorePythonGilHelper::~QorePythonGilHelper() swapping %llx state: %llx t_state: %llx\n",
+        //    new_thread_state, state, t_state);
         PyThreadState_Swap(state);
         _qore_PyCeval_SwapThreadState(t_state);
         _qore_PyGILState_SetThisThreadState(t_state);
