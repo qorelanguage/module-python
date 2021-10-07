@@ -109,6 +109,7 @@ protected:
     PyThreadState* state;
     PyThreadState* t_state;
     bool release_gil = true;
+    bool do_nothing = false;
 };
 
 class QorePythonReleaseGilHelper {
@@ -292,6 +293,9 @@ DLLLOCAL PyMODINIT_FUNC PyInit_qoreloader();
 
 //! Creates the global QOre Python program object
 DLLLOCAL int init_global_qore_python_pgm();
+
+//! Returns true if the current thread is holding the GIL
+DLLLOCAL bool _qore_has_gil(PyThreadState* t_state = PyGILState_GetThisThreadState());
 
 class QorePythonProgram;
 DLLLOCAL extern QoreNamespace PNS;

@@ -501,6 +501,10 @@ PythonProgram::setSaveObjectCallback(callback);
     @section pythonreleasenotes python Module Release Notes
 
     @subsection python_1_0_5 python Module Version 1.0.5
+    - fixed a deadlock in context switching when Python threads switch to Qore or Java
+      (<a href="https://github.com/qorelanguage/qore/issues/4328">issue 4328</a>)
+    - fixed a crash when Python threads made Qore or Java calls
+      (<a href="https://github.com/qorelanguage/qore/issues/4327">issue 4327</a>)
     - fixed a regression in recursion depth calculations
       (<a href="https://github.com/qorelanguage/qore/issues/4323">issue 4323</a>)
 

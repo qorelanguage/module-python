@@ -47,6 +47,7 @@ class PythonTest inherits Test {
     }
 
     constructor() : Test("python test", "1.0") {
+        addTestCase("python thread test", \pythonThreadTest());
         addTestCase("super test", \superTest());
         addTestCase("java test", \javaTest());
         addTestCase("exception test", \exceptionTest());
@@ -60,6 +61,31 @@ class PythonTest inherits Test {
         addTestCase("import test", \importTest());
         # Set return value for compatibility with test harnesses that check the return value
         set_return_value(main());
+    }
+
+    pythonThreadTest() {
+        {
+            PythonProgram p("
+from threading import Thread
+
+import qoreloader
+from qore.__root__.Qore.Thread import Queue
+
+def do_test(queue: Queue) -> None:
+    queue.push(1)
+
+def test():
+    queue = Queue()
+    thread = Thread(target = do_test, args = (queue,))
+    thread.start();
+    thread.join()
+    return queue.get()
+", "test.py");
+
+            auto o = p.callFunction("test");
+            assertEq(1, o);
+        }
+
     }
 
     superTest() {
