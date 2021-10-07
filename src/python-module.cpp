@@ -584,7 +584,6 @@ QorePythonGilHelper::~QorePythonGilHelper() {
         //    new_thread_state, state, t_state);
         PyThreadState_Swap(state);
         _qore_PyCeval_SwapThreadState(t_state);
-        _qore_PyGILState_SetThisThreadState(t_state);
     }
 
     // restore the old TLD state

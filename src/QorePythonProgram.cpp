@@ -670,7 +670,6 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
 
     if (t_state != python) {
         PyThreadState_Swap(python);
-        --t_state->gilstate_counter;
     }
 
     // now we have the GIL
