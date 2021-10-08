@@ -379,6 +379,7 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
             }
         }
     }
+
 #if 0
     QorePythonReferenceHolder argstr(PyObject_Repr(args));
     printd(5, "PythonQoreClass::exec_qore_method() %s::%s() obj: %p (%s) args: %s\n", m->getClassName(), m->getName(),
@@ -398,26 +399,33 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
         return exec_qore_static_method(*static_meth, args, 1);
     }
 
-    QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
-    QorePythonHelper qph(qore_python_pgm);
     ExceptionSink xsink;
-    QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
-    if (!xsink) {
-        ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args, 1), &xsink);
+    QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
+    {
+        QorePythonHelper qph(qore_python_pgm);
+        QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
         if (!xsink) {
-            ValueHolder rv(&xsink);
-            {
-                QorePythonReleaseGilHelper prgh;
-                rv = obj->evalMethod(*m, *qargs, &xsink);
-            }
-            QorePythonReferenceHolder py_rv(qore_python_pgm->getPythonValue(*rv, &xsink));
+            ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args, 1), &xsink);
             if (!xsink) {
-                return py_rv.release();
+                ValueHolder rv(&xsink);
+                {
+                    QorePythonReleaseGilHelper prgh;
+                    rv = obj->evalMethod(*m, *qargs, &xsink);
+                }
+                if (!xsink) {
+                    QorePythonReferenceHolder py_rv(qore_python_pgm->getPythonValue(*rv, &xsink));
+                    if (!xsink) {
+                        assert(py_rv);
+                        return py_rv.release();
+                    }
+                }
             }
         }
     }
 
+    // issue #4329: exception must be thrown in the calling context
     qore_python_pgm->raisePythonException(xsink);
+    assert(PyErr_Occurred());
     return nullptr;
 }
 
@@ -437,26 +445,33 @@ PyObject* PythonQoreClass::exec_qore_static_method(PyObject* method_capsule, PyO
 }
 
 PyObject* PythonQoreClass::exec_qore_static_method(const QoreMethod& m, PyObject* args, size_t offset) {
-    QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
-    QorePythonHelper qph(qore_python_pgm);
     ExceptionSink xsink;
-    QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
-    if (!xsink) {
-        ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args, offset), &xsink);
+    QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
+    {
+        QorePythonHelper qph(qore_python_pgm);
+        QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
         if (!xsink) {
-            ValueHolder rv(&xsink);
-            {
-                QorePythonReleaseGilHelper prgh;
-                rv = QoreObject::evalStaticMethod(m, m.getClass(), *qargs, &xsink);
-            }
-            QorePythonReferenceHolder py_rv(qore_python_pgm->getPythonValue(*rv, &xsink));
+            ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args, offset), &xsink);
             if (!xsink) {
-                return py_rv.release();
+                ValueHolder rv(&xsink);
+                {
+                    QorePythonReleaseGilHelper prgh;
+                    rv = QoreObject::evalStaticMethod(m, m.getClass(), *qargs, &xsink);
+                }
+                if (!xsink) {
+                    QorePythonReferenceHolder py_rv(qore_python_pgm->getPythonValue(*rv, &xsink));
+                    if (!xsink) {
+                        assert(py_rv);
+                        return py_rv.release();
+                    }
+                }
             }
         }
     }
 
+    // issue #4329: exception must be thrown in the calling context
     qore_python_pgm->raisePythonException(xsink);
+    assert(PyErr_Occurred());
     return nullptr;
 }
 
@@ -526,6 +541,7 @@ int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
     }
 
     qore_python_pgm->raisePythonException(xsink);
+    assert(PyErr_Occurred());
     return -1;
 }
 
@@ -546,6 +562,7 @@ int PythonQoreClass::newQoreObject(ExceptionSink& xsink, PyQoreObject* pyself, Q
     }
 
     qore_python_pgm->raisePythonException(xsink);
+    assert(PyErr_Occurred());
     return -1;
 }
 
@@ -589,8 +606,8 @@ PyObject* PythonQoreClass::py_getattro(PyObject* self, PyObject* attr) {
             }
         }
     }
-    assert(xsink);
     qore_python_pgm->raisePythonException(xsink);
+    assert(PyErr_Occurred());
     return nullptr;
 }
 

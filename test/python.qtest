@@ -86,6 +86,97 @@ def test():
             assertEq(1, o);
         }
 
+        {
+            PythonProgram p("
+from threading import Thread
+
+import qoreloader
+from qore.__root__.Qore.Thread import Queue
+
+class PyQueue(Queue):
+    def py_push(self, x):
+        self.push(x)
+
+def do_test(queue: PyQueue):
+    queue.py_push(1)
+
+def test():
+    queue = PyQueue()
+    thread = Thread(target = do_test, args = (queue,))
+    thread.start();
+    thread.join()
+    return queue.get()
+", "test.py");
+
+            auto o = p.callFunction("test");
+            assertEq(1, o);
+        }
+
+        {
+            Program p(PO_NEW_STYLE);
+            p.importClass("QTest");
+            p.issueModuleCmd("python", "import-ns QTest x");
+            p.issueModuleCmd("python", "parse test from threading import Thread
+
+import qoreloader
+from qore.__root__.Qore.Thread import Counter
+class Other:
+    def __init__(self) -> None:
+        self.py_test = PyTest()
+
+    def test(self, x) -> None:
+        self.py_test.process(x)
+
+    def do_test(self, counter: Counter) -> None:
+        self.test(1)
+        counter.dec()
+
+class PyTest(x.QTest):
+    def test(self, x) -> None:
+        self.process(x)
+
+def get_other() -> Other:
+    return Other()
+
+def py_test(other: Other) -> int:
+    counter = Counter(1)
+    thread = Thread(target = other.do_test, args = (counter,))
+    thread.start();
+    counter.waitForZero()
+    thread.join()
+    return 1
+");
+            p.issueModuleCmd("python", "export-func get_other");
+            p.issueModuleCmd("python", "export-func py_test");
+            object other = p.callFunction("get_other");
+            auto o = p.callFunction("py_test", other);
+            assertEq(1, o);
+        }
+
+        {
+            PythonProgram p("
+from threading import Thread
+
+import qoreloader
+from qore.__root__.Qore.Thread import Queue
+from qore.__root__.QTest import QTest
+
+class Err(QTest):
+    def test(self) -> None:
+        self.raise_err()
+
+def do_test() -> None:
+    err = Err()
+    err.test()
+
+def test() -> None:
+    do_test()
+    return 1
+
+", "test.py");
+
+            assertThrows("1", \p.callFunction(), "test");
+        }
     }
 
     superTest() {
@@ -1151,4 +1242,15 @@ class TestApi {
     }
 
     abstract SubApi getImpl();
+}
+
+namespace QTest {
+    class QTest {
+        process(auto v) {
+        }
+
+        raise_err() {
+            throw 1;
+        }
+    }
 }

@@ -726,7 +726,6 @@ void QorePythonProgram::releaseContext(const QorePythonThreadInfo& oldstate) con
         // NOTE we cannot assert !PyGILState_Check() here, as we have released the GIL, and another thread may have
         // created a new interpreter, which will temporarily disbale the GIL check, which would cause
         // PyGILState_Check() to return 1
-        assert(!_qore_has_gil());
     } else {
         if (python != oldstate.t_state) {
             PyThreadState_Swap(oldstate.t_state);
@@ -866,6 +865,7 @@ int QorePythonProgram::saveQoreObjectFromPythonDefault(const QoreValue& rv, Exce
 }
 
 void QorePythonProgram::raisePythonException(ExceptionSink& xsink) {
+    assert(xsink);
     QoreValue err(xsink.getExceptionErr());
     QoreValue desc(xsink.getExceptionDesc());
     QoreValue arg(xsink.getExceptionArg());
@@ -898,7 +898,7 @@ void QorePythonProgram::raisePythonException(ExceptionSink& xsink) {
     xsink.clear();
 
     ex_arg = PyObject_CallObject((PyObject*)&PythonQoreException_Type, *tuple);
-    //printd(5, "QorePythonProgram::raisePythonException() py_ex: %p %s\n", *ex_arg, Py_TYPE(*ex_arg)->tp_name);
+    //printd(5,  "QorePythonProgram::raisePythonException() py_ex: %p %s\n", *ex_arg, Py_TYPE(*ex_arg)->tp_name);
     PyErr_SetObject((PyObject*)&PythonQoreException_Type, *ex_arg);
 }
 
@@ -1581,6 +1581,7 @@ PyObject* QorePythonProgram::getPythonList(ExceptionSink* xsink, const QoreListN
     while (i.next()) {
         QorePythonReferenceHolder val(getPythonValue(i.getValue(), xsink));
         if (*xsink) {
+            raisePythonException(*xsink);
             return nullptr;
         }
         PyList_SetItem(*list, i.index(), val.release());
@@ -1614,6 +1615,7 @@ PyObject* QorePythonProgram::getPythonTupleValue(ExceptionSink* xsink, const Qor
         while (i.next()) {
             QorePythonReferenceHolder val(getPythonValue(i.getValue(), xsink));
             if (*xsink) {
+                raisePythonException(*xsink);
                 return nullptr;
             }
             PyTuple_SET_ITEM(*tuple, i.index() - arg_offset + offset, val.release());
@@ -1629,10 +1631,12 @@ PyObject* QorePythonProgram::getPythonDict(ExceptionSink* xsink, const QoreHashN
     while (i.next()) {
         QorePythonReferenceHolder key(getPythonString(xsink, i.getKeyString()));
         if (*xsink) {
+            raisePythonException(*xsink);
             return nullptr;
         }
         QorePythonReferenceHolder val(getPythonValue(i.get(), xsink));
         if (*xsink) {
+            raisePythonException(*xsink);
             return nullptr;
         }
         assert(val);
@@ -1645,6 +1649,7 @@ PyObject* QorePythonProgram::getPythonDict(ExceptionSink* xsink, const QoreHashN
 PyObject* QorePythonProgram::getPythonString(ExceptionSink* xsink, const QoreString* str) {
     TempEncodingHelper py_str(str, QCS_UTF8, xsink);
     if (*xsink) {
+        qore_python_pgm->raisePythonException(*xsink);
         return nullptr;
     }
     return PyUnicode_FromStringAndSize(py_str->c_str(), py_str->size());
@@ -2832,12 +2837,21 @@ PyObject* QorePythonProgram::callQoreFunction(PyObject* self, PyObject* args) {
     assert(PyTuple_Check(args));
     ReferenceHolder<QoreListNode> qargs(fc->py_pgm->getQoreListFromTuple(&xsink, args), &xsink);
     if (!xsink) {
-        ValueHolder rv(fc->func.evalFunction(nullptr, *qargs, fc->py_pgm->getQoreProgram(), &xsink), &xsink);
+        ValueHolder rv(&xsink);
+        {
+            QorePythonReleaseGilHelper prgh;
+            rv = fc->func.evalFunction(nullptr, *qargs, fc->py_pgm->getQoreProgram(), &xsink);
+        }
         if (!xsink) {
-            return fc->py_pgm->getPythonValue(*rv, &xsink);
+            QorePythonReferenceHolder py_rv(fc->py_pgm->getPythonValue(*rv, &xsink));
+            if (!xsink) {
+                assert(py_rv);
+                return py_rv.release();
+            }
         }
     }
 
     fc->py_pgm->raisePythonException(xsink);
+    assert(PyErr_Occurred());
     return nullptr;
 }
