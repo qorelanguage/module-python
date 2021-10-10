@@ -1,4 +1,3 @@
-gelog
 %{?_datarootdir: %global mydatarootdir %_datarootdir}
 %{!?_datarootdir: %global mydatarootdir %{buildroot}/usr/share}
 
