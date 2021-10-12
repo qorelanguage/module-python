@@ -500,6 +500,10 @@ PythonProgram::setSaveObjectCallback(callback);
 
     @section pythonreleasenotes python Module Release Notes
 
+    @subsection python_1_0_7 python Module Version 1.0.7
+    - fixed a bug setting the %Qore program context in new %Python threads calling imported %Qore methods or functions
+      (<a href="https://github.com/qorelanguage/qore/issues/4330">issue 4330</a>)
+
     @subsection python_1_0_6 python Module Version 1.0.6
     - fixed a bug handling exception propagation between %Qore and %Python
       (<a href="https://github.com/qorelanguage/qore/issues/4329">issue 4329</a>)

@@ -29,6 +29,8 @@
 
 #include <frameobject.h>
 
+#include <pthread.h>
+
 static constexpr const char* QCLASS_KEY = "__$QCLS__";
 
 static int qore_exception_init(PyObject* self, PyObject* args, PyObject* kwds) {
@@ -402,8 +404,14 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
     ExceptionSink xsink;
     QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
     {
+        // issue #4330: get Qore program from method if possible
+        QoreProgram* pgm = m->getClass()->getProgram();
+        if (!pgm) {
+            pgm = qore_python_pgm->getQoreProgram();
+        }
+
         QorePythonHelper qph(qore_python_pgm);
-        QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
+        QoreExternalProgramContextHelper pch(&xsink, pgm);
         if (!xsink) {
             ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args, 1), &xsink);
             if (!xsink) {
@@ -438,7 +446,8 @@ PyObject* PythonQoreClass::exec_qore_static_method(PyObject* method_capsule, PyO
 #if 0
     QorePythonReferenceHolder argstr(PyObject_Repr(args));
     assert(PyUnicode_Check(*argstr));
-    printd(5, "PythonQoreClass::exec_qore_static_method() %s::%s() args: %s\n", m->getClassName(), m->getName(), PyUnicode_AsUTF8(*argstr));
+    printd(5, "PythonQoreClass::exec_qore_static_method() %s::%s() args: %s\n", m->getClassName(), m->getName(),
+        PyUnicode_AsUTF8(*argstr));
 #endif
 
     return exec_qore_static_method(*m, args);
@@ -448,8 +457,14 @@ PyObject* PythonQoreClass::exec_qore_static_method(const QoreMethod& m, PyObject
     ExceptionSink xsink;
     QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
     {
+        // issue #4330: get Qore program from method if possible
+        QoreProgram* pgm = m.getClass()->getProgram();
+        if (!pgm) {
+            pgm = qore_python_pgm->getQoreProgram();
+        }
+
         QorePythonHelper qph(qore_python_pgm);
-        QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
+        QoreExternalProgramContextHelper pch(&xsink, pgm);
         if (!xsink) {
             ReferenceHolder<QoreListNode> qargs(qore_python_pgm->getQoreListFromTuple(&xsink, args, offset), &xsink);
             if (!xsink) {
