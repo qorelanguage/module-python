@@ -175,20 +175,11 @@ QorePythonProgram::QorePythonProgram(const QoreString& source_code, const QoreSt
     }
     //printd(5, "QorePythonProgram::QorePythonProgram() loaded qoreloader: %p\n", *qoreloader);
 
-    // parse code
-    QorePythonNodeHolder node(PyParser_SimpleParseString(src_code->c_str(), start));
-    if (!node) {
-        if (!checkPythonException(xsink)) {
-            xsink->raiseException("PYTHON-COMPILE-ERROR", "parse failed");
-        }
-        return;
-    }
-
-    // compile parsed code
-    python_code = (PyObject*)PyNode_Compile(*node, src_label->c_str());
+    // parse and compile code
+    python_code = (PyObject*)Py_CompileString(src_code->c_str(), src_label->c_str(), start);
     if (!python_code) {
         if (!checkPythonException(xsink)) {
-            xsink->raiseException("PYTHON-COMPILE-ERROR", "compile failed");
+            xsink->raiseException("PYTHON-COMPILE-ERROR", "parsing and compilation failed");
         }
         return;
     }
@@ -302,7 +293,7 @@ void QorePythonProgram::waitForThreadsIntern() {
 }
 
 void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
-    //printd(5, "QorePythonProgram::deleteIntern() this: %p\n", this);
+    printd(5, "QorePythonProgram::deleteIntern() this: %p\n", this);
     if (q_libqore_exiting()) {
 #ifdef DEBUG
         qpgm = nullptr;
@@ -375,8 +366,11 @@ void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
             // enforce serialization
             AutoLocker al(py_thr_lck);
 
+            // do not clear and delete the interpreter with Python 3.10+
+#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION < 10
             PyInterpreterState_Clear(interpreter);
             PyInterpreterState_Delete(interpreter);
+#endif
             interpreter = nullptr;
             owns_interpreter = false;
         }
@@ -412,20 +406,11 @@ QoreValue QorePythonProgram::eval(ExceptionSink* xsink, const QoreString& source
     QorePythonReferenceHolder python_code;
     {
         //printd(5, "QorePythonProgram::QorePythonProgram() GIL thread state: %p\n", PyGILState_GetThisThreadState());
-        // parse code
-        QorePythonNodeHolder node(PyParser_SimpleParseString(src_code->c_str(), input));
-        if (!node) {
-            if (!checkPythonException(xsink)) {
-                xsink->raiseException("PYTHON-COMPILE-ERROR", "parse failed");
-            }
-            return QoreValue();
-        }
-
-        // compile parsed code
-        python_code = (PyObject*)PyNode_Compile(*node, src_label->c_str());
+        // parse and compile code
+        python_code = (PyObject*)Py_CompileString(src_code->c_str(), src_label->c_str(), input);
         if (!python_code) {
             if (!checkPythonException(xsink)) {
-                xsink->raiseException("PYTHON-COMPILE-ERROR", "compile failed");
+                xsink->raiseException("PYTHON-COMPILE-ERROR", "parsing and compilation failed");
             }
             return QoreValue();
         }
