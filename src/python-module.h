@@ -27,7 +27,6 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <structmember.h>
-#include <node.h>
 
 #include <qore/Qore.h>
 
@@ -62,7 +61,9 @@ DLLLOCAL extern qore_classid_t CID_PYTHONBASEOBJECT;
 #include <internal/pycore_pystate.h>
 #else
 #if PY_MAJOR_VERSION >= 3
-#if PY_MINOR_VERSION == 9
+#if PY_MINOR_VERSION == 10
+#include "python310_internals.h"
+#elif PY_MINOR_VERSION == 9
 #include "python39_internals.h"
 #elif PY_MINOR_VERSION == 8
 #include "python38_internals.h"
@@ -247,39 +248,6 @@ public:
 
 protected:
     PyGILState_STATE old_state;
-};
-
-class QorePythonNodeHolder {
-public:
-    DLLLOCAL QorePythonNodeHolder(_node* node) : node(node) {
-    }
-
-    DLLLOCAL ~QorePythonNodeHolder() {
-        if (node) {
-            PyNode_Free(node);
-        }
-    }
-
-    DLLLOCAL _node* release() {
-        _node* rv = node;
-        node = nullptr;
-        return rv;
-    }
-
-    DLLLOCAL operator bool() const {
-        return (bool)node;
-    }
-
-    DLLLOCAL _node* operator*() {
-        return node;
-    }
-
-    DLLLOCAL const _node* operator*() const {
-        return node;
-    }
-
-protected:
-    _node* node;
 };
 
 // Base type for Qore objects in Python
