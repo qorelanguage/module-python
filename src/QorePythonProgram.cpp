@@ -2120,7 +2120,15 @@ QoreNamespace* QorePythonProgram::getNamespaceForObject(PyObject* obj) {
 
     //printd(5, "QorePythonProgram::getNamespaceForObject() obj %p (%s) -> ns: Python::%s\n", obj,
     //  Py_TYPE(obj)->tp_name, ns_path.c_str());
-    return pyns->findCreateNamespacePathAll(ns_path.c_str());
+    QoreNamespace* ns = pyns->findCreateNamespacePathAll(ns_path.c_str());
+#if QORE_VERSION_CODE >= 10013
+    if (module_context) {
+        if (ns->setKeyValueIfNotSet("python_module", module_context)) {
+            printd(5, "set python_module: '%s' in ns: '%s'\n", module_context, ns->getPath(true).c_str());
+        }
+    }
+#endif
+    return ns;
 }
 
 QoreClass* QorePythonProgram::getCreateQorePythonClassIntern(ExceptionSink* xsink, PyTypeObject* type,
