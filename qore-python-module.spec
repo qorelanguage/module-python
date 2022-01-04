@@ -55,7 +55,7 @@ make DESTDIR=%{buildroot} install %{?_smp_mflags}
 %{module_dir}
 
 %changelog
-* Fri Oct 31 2021 David Nichols <david@qore.org>
+* Sun Oct 31 2021 David Nichols <david@qore.org>
 - updated to version 1.1.1
 
 * Wed Oct 27 2021 David Nichols <david@qore.org>
