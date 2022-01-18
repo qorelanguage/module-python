@@ -34,7 +34,7 @@ make -j${MAKE_JOBS}
 make install
 ln -s python*.qmod qoreloader.so
 # issue #4398: test the qoreloader.so module
-python -c "import qoreloader;from qore.__root__.Qore.Thread import Counter;c = Counter();c.waitForZero()"
+python3 -c "import qoreloader;from qore.__root__.Qore.Thread import Counter;c = Counter();c.waitForZero()"
 
 # add Qore user and group
 groupadd -o -g ${QORE_GID} qore
