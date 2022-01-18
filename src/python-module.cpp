@@ -53,7 +53,7 @@ void python_qore_module_desc(QoreModuleInfo& mod_info) {
     mod_info.info->setKeyValue("python_micro", PY_MICRO_VERSION, nullptr);
 }
 
-QoreNamespace PNS(QORE_PYTHON_NS_NAME);
+QoreNamespace* PNS = nullptr;
 PyThreadState* mainThreadState = nullptr;
 
 QorePythonClass* QC_PYTHONBASEOBJECT;
@@ -96,6 +96,7 @@ static mcmap_t mcmap = {
 
 static bool python_needs_shutdown = false;
 static bool python_initialized = false;
+bool python_shutdown = false;
 
 int python_u_tld_key = -1;
 int python_qobj_key = -1;
@@ -163,6 +164,7 @@ static void python_module_shutdown() {
         PyEval_AcquireThread(mainThreadState);
         _qore_PyGILState_SetThisThreadState(mainThreadState);
     }
+    python_shutdown = true;
     if (python_needs_shutdown) {
         int rc = Py_FinalizeEx();
         if (rc) {
@@ -229,6 +231,15 @@ static QoreStringNode* python_module_init() {
 }
 
 static QoreStringNode* python_module_init_intern(bool repeat) {
+    if (!PNS) {
+        PNS = new QoreNamespace("Qore::Python");
+        PNS->addSystemClass(initPythonProgramClass(*PNS));
+        QC_PYTHONBASEOBJECT = new QorePythonClass("__qore_base__", "::Python::__qore_base__");
+        CID_PYTHONBASEOBJECT = QC_PYTHONBASEOBJECT->getID();
+
+        PNS->addSystemClass(QC_PYTHONBASEOBJECT->copy());
+    }
+
     // initialize python library; do not register signal handlers
     if (!Py_IsInitialized()) {
         if (PyImport_AppendInittab("qoreloader", PyInit_qoreloader) == -1) {
@@ -292,14 +303,7 @@ static QoreStringNode* python_module_init_intern(bool repeat) {
     }
 
     if (!repeat) {
-        PNS.addSystemClass(initPythonProgramClass(PNS));
-
         tclist.push(QorePythonProgram::pythonThreadCleanup, nullptr);
-
-        QC_PYTHONBASEOBJECT = new QorePythonClass("__qore_base__", "::Python::__qore_base__");
-        CID_PYTHONBASEOBJECT = QC_PYTHONBASEOBJECT->getID();
-
-        PNS.addSystemClass(QC_PYTHONBASEOBJECT->copy());
     }
 
     return nullptr;
@@ -309,7 +313,7 @@ static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns) {
     QoreProgram* pgm = getProgram();
     assert(pgm->getRootNS() == rns);
     if (!pgm->getExternalData(QORE_PYTHON_MODULE_NAME)) {
-        QoreNamespace* pyns = PNS.copy();
+        QoreNamespace* pyns = PNS->copy();
         rns->addNamespace(pyns);
         // issue #4153: in case we only have the calling context here
         ExceptionSink xsink;
@@ -319,14 +323,18 @@ static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns) {
         }
     }
 
-    assert(!PyGILState_Check());
-    assert(!QorePythonProgram::haveGil());
+    assert(!python_initialized || !PyGILState_Check());
+    assert(!python_initialized || !QorePythonProgram::haveGil());
 }
 
 static void python_module_delete() {
     if (qore_python_pgm) {
         qore_python_pgm->doDeref();
         qore_python_pgm = nullptr;
+    }
+    if (PNS) {
+        delete PNS;
+        PNS = nullptr;
     }
     python_module_shutdown();
 }
@@ -377,7 +385,7 @@ static void python_module_parse_cmd(const QoreString& cmd, ExceptionSink* xsink)
     QorePythonProgram* pypgm = static_cast<QorePythonProgram*>(pgm->getExternalData(QORE_PYTHON_MODULE_NAME));
     //printd(5, "parse-cmd '%s' pypgm: %p pythonns: %p\n", arg.c_str(), pypgm, pypgm->getPythonNamespace());
     if (!pypgm) {
-        QoreNamespace* pyns = PNS.copy();
+        QoreNamespace* pyns = PNS->copy();
         pgm->getRootNS()->addNamespace(pyns);
         pypgm = new QorePythonProgram(pgm, pyns);
         pgm->setExternalData(QORE_PYTHON_MODULE_NAME, pypgm);
@@ -501,7 +509,7 @@ static void py_mc_reset_python(ExceptionSink* xsink, QoreString& arg, QorePython
 extern "C" int python_module_import(ExceptionSink* xsink, QoreProgram* pgm, const char* module, const char* symbol) {
     QorePythonProgram* pypgm = static_cast<QorePythonProgram*>(pgm->getExternalData(QORE_PYTHON_MODULE_NAME));
     if (!pypgm) {
-        QoreNamespace* pyns = PNS.copy();
+        QoreNamespace* pyns = PNS->copy();
         pgm->getRootNS()->addNamespace(pyns);
         pypgm = new QorePythonProgram(pgm, pyns);
         pgm->setExternalData(QORE_PYTHON_MODULE_NAME, pypgm);

@@ -5,7 +5,7 @@
 %global user_module_dir %{mydatarootdir}/qore-modules/
 
 Name:           qore-python-module
-Version:        1.1.1
+Version:        1.1.2
 Release:        1
 Summary:        Qorus Integration Engine - Qore Python module
 License:        MIT
@@ -55,6 +55,9 @@ make DESTDIR=%{buildroot} install %{?_smp_mflags}
 %{module_dir}
 
 %changelog
+* Tue Jan 18 2022 David Nichols <david@qore.org>
+- updated to version 1.1.2
+
 * Sun Oct 31 2021 David Nichols <david@qore.org>
 - updated to version 1.1.1
 

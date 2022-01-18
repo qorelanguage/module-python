@@ -252,8 +252,10 @@ PythonQoreClass::~PythonQoreClass() {
     Py_DECREF(py_type);
 }
 
-void PythonQoreClass::populateClass(QorePythonProgram* pypgm, const QoreClass& qcls, clsset_t& cls_set, cstrset_t& meth_set, bool skip_first) {
-    //printd(5, "PythonQoreClass::populateClass() cls: %s cs: %d ms: %d\n", qcls.getName(), (int)cls_set.size(), (int)meth_set.size());
+void PythonQoreClass::populateClass(QorePythonProgram* pypgm, const QoreClass& qcls, clsset_t& cls_set,
+        cstrset_t& meth_set, bool skip_first) {
+    //printd(5, "PythonQoreClass::populateClass() cls: %s cs: %d ms: %d\n", qcls.getName(), (int)cls_set.size(),
+    //  (int)meth_set.size());
 
     {
         QoreMethodIterator i(qcls);
@@ -263,7 +265,8 @@ void PythonQoreClass::populateClass(QorePythonProgram* pypgm, const QoreClass& q
                 continue;
             }
 
-            //printd(5, "PythonQoreClass::populateClass() adding %s -> %s::%s()\n", name.c_str(), qcls.getName(), m->getName());
+            //printd(5, "PythonQoreClass::populateClass() adding %s -> %s::%s()\n", name.c_str(), qcls.getName(),
+            //  m->getName());
             cstrset_t::iterator mi = meth_set.lower_bound(m->getName());
             if (mi == meth_set.end() || strcmp(*mi, m->getName())) {
                 meth_set.insert(mi, m->getName());
@@ -282,14 +285,25 @@ void PythonQoreClass::populateClass(QorePythonProgram* pypgm, const QoreClass& q
             if (m->getAccess() > Private) {
                 continue;
             }
+            // issue #4397: check if there is an accessible normal method with the same name, if so, skip it
+            {
+                ClassAccess access;
+                const QoreMethod* nm = qcls.findMethod(m->getName(), access);
+                if (nm && access < Internal) {
+                    continue;
+                }
+            }
 
-            //printd(5, "PythonQoreClass::populateClass() adding %s -> static %s::%s()\n", name.c_str(), qcls.getName(), m->getName());
+            //printd(5, "PythonQoreClass::populateClass() adding %s -> static %s::%s()\n", name.c_str(),
+            //  qcls.getName(), m->getName());
             cstrset_t::iterator mi = meth_set.lower_bound(m->getName());
             if (mi == meth_set.end() || strcmp(*mi, m->getName())) {
                 meth_set.insert(mi, m->getName());
-                QoreStringMaker mdoc("Python wrapper for Qore static class method %s::%s()", qcls.getName(), m->getName());
+                QoreStringMaker mdoc("Python wrapper for Qore static class method %s::%s()", qcls.getName(),
+                    m->getName());
                 const char* mdocstr = pypgm->saveString(mdoc.c_str());
-                py_static_meth_vec.push_back({m->getName(), (PyCFunction)exec_qore_static_method, METH_VARARGS, mdocstr});
+                py_static_meth_vec.push_back({m->getName(), (PyCFunction)exec_qore_static_method, METH_VARARGS,
+                    mdocstr});
                 py_static_meth_obj_vec.push_back(PyCapsule_New((void*)m, nullptr, nullptr));
             }
         }
@@ -383,22 +397,25 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
     }
 
 #if 0
-    QorePythonReferenceHolder argstr(PyObject_Repr(args));
-    printd(5, "PythonQoreClass::exec_qore_method() %s::%s() obj: %p (%s) args: %s\n", m->getClassName(), m->getName(),
-        obj, obj ? obj->getClassName() : "n/a", PyUnicode_AsUTF8(*argstr));
+    {
+        QorePythonReferenceHolder argstr(PyObject_Repr(args));
+        printd(5, "PythonQoreClass::exec_qore_method() %s::%s() obj: %p (%s) args: %s\n", m->getClassName(),
+            m->getName(), obj, obj ? obj->getClassName() : "n/a", PyUnicode_AsUTF8(*argstr));
+    }
 #endif
     if (!obj) {
         // see if a static method with the same name is available
         ClassAccess access;
         const QoreMethod* static_meth = m->getClass()->findStaticMethod(m->getName(), access);
-        if (!static_meth) {
+        if (!static_meth || access > Private) {
             QoreStringMaker desc("cannot call normal method '%s::%s()' without a 'self' object argument that " \
                 "inherits '%s'", m->getClassName(), m->getName(), m->getClassName());
             PyErr_SetString(PyExc_ValueError, desc.c_str());
             return nullptr;
         }
 
-        return exec_qore_static_method(*static_meth, args, 1);
+        //printd(5, "about to call exec_qore_static_method()\n");
+        return exec_qore_static_method(*static_meth, args, 0);
     }
 
     ExceptionSink xsink;
@@ -438,16 +455,19 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
 }
 
 PyObject* PythonQoreClass::exec_qore_static_method(PyObject* method_capsule, PyObject* args) {
+    printd(5, "exec_qore_static_method() args: %p\n", args);
     QoreForeignThreadHelper qfth;
 
     // get method
     const QoreMethod* m = reinterpret_cast<const QoreMethod*>(PyCapsule_GetPointer(method_capsule, nullptr));
     assert(PyTuple_Check(args));
 #if 0
-    QorePythonReferenceHolder argstr(PyObject_Repr(args));
-    assert(PyUnicode_Check(*argstr));
-    printd(5, "PythonQoreClass::exec_qore_static_method() %s::%s() args: %s\n", m->getClassName(), m->getName(),
-        PyUnicode_AsUTF8(*argstr));
+    {
+        QorePythonReferenceHolder argstr(PyObject_Repr(args));
+        assert(PyUnicode_Check(*argstr));
+        printd(1, "PythonQoreClass::exec_qore_static_method() %s::%s() args: %s\n", m->getClassName(), m->getName(),
+            PyUnicode_AsUTF8(*argstr));
+    }
 #endif
 
     return exec_qore_static_method(*m, args);

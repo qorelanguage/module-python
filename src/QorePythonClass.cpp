@@ -73,7 +73,8 @@ PyObject* QorePythonClass::getPyObject(QoreObject* self, ExceptionSink* xsink) c
         return nullptr;
     }
     if (v->getType() != NT_INT) {
-        xsink->raiseException("PYTHON-OBJECT-ERROR", "invalid type '%s' saved to internal data key '%s'", v->getFullTypeName(), PYOBJ_KEY);
+        xsink->raiseException("PYTHON-OBJECT-ERROR", "invalid type '%s' saved to internal data key '%s'",
+            v->getFullTypeName(), PYOBJ_KEY);
         return nullptr;
     }
     return (PyObject*)v->getAsBigInt();
@@ -119,8 +120,8 @@ QoreValue QorePythonClass::memberGate(const QoreMethod& meth, void* m, QoreObjec
     return cls->getPythonMember(pypgm, mname->c_str(), pd, xsink);
 }
 
-QoreValue QorePythonClass::callPythonMethod(ExceptionSink* xsink, QorePythonProgram* pypgm, const char* mname, const QoreListNode* args,
-    QorePythonPrivateData* pd, size_t arg_offset) const {
+QoreValue QorePythonClass::callPythonMethod(ExceptionSink* xsink, QorePythonProgram* pypgm, const char* mname,
+        const QoreListNode* args, QorePythonPrivateData* pd, size_t arg_offset) const {
     PyObject* pyobj = pd->get();
     PyTypeObject* mtype = Py_TYPE(pyobj);
     QorePythonHelper qph(pypgm);

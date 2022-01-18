@@ -500,6 +500,13 @@ PythonProgram::setSaveObjectCallback(callback);
 
     @section pythonreleasenotes python Module Release Notes
 
+    @subsection python_1_1_2 python Module Version 1.1.2
+    - not possible to use the \c qoreloader module from native %Python
+      (<a href="https://github.com/qorelanguage/qore/issues/4398">issue 4398</a>)
+    - not possible to call imported Java or %Qore static methods when a normal method exists in the same class with
+      the same name
+      (<a href="https://github.com/qorelanguage/qore/issues/4397">issue 4397</a>)
+
     @subsection python_1_1_1 python Module Version 1.1.1
     - mark %Qore namespaces imported from %Python modules so that other languages like Java can use consistent paths
       with %Python symbols
