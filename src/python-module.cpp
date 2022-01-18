@@ -232,7 +232,7 @@ static QoreStringNode* python_module_init() {
 
 static QoreStringNode* python_module_init_intern(bool repeat) {
     if (!PNS) {
-        PNS = new QoreNamespace("Qore::Python");
+        PNS = new QoreNamespace("Python");
         PNS->addSystemClass(initPythonProgramClass(*PNS));
         QC_PYTHONBASEOBJECT = new QorePythonClass("__qore_base__", "::Python::__qore_base__");
         CID_PYTHONBASEOBJECT = QC_PYTHONBASEOBJECT->getID();
