@@ -53,6 +53,8 @@ class QorePythonClass;
 DLLLOCAL extern QorePythonClass* QC_PYTHONBASEOBJECT;
 DLLLOCAL extern qore_classid_t CID_PYTHONBASEOBJECT;
 
+DLLLOCAL extern bool python_shutdown;
+
 /** NOTE: depends on Python internals to work around limitations with the GIL and multiple thread states with multiple
           interpreters
 */
@@ -224,7 +226,9 @@ public:
     }
 
     DLLLOCAL ~QorePythonReferenceHolder() {
-        purge();
+        if (!python_shutdown) {
+            purge();
+        }
     }
 
     DLLLOCAL QorePythonReferenceHolder& operator=(PyObject* obj) {
@@ -266,7 +270,7 @@ DLLLOCAL int init_global_qore_python_pgm();
 DLLLOCAL bool _qore_has_gil(PyThreadState* t_state = PyGILState_GetThisThreadState());
 
 class QorePythonProgram;
-DLLLOCAL extern QoreNamespace PNS;
+DLLLOCAL extern QoreNamespace* PNS;
 
 DLLLOCAL extern int python_u_tld_key;
 DLLLOCAL extern int python_qobj_key;

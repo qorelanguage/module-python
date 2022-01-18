@@ -2,7 +2,7 @@
 /*
     qore Python module
 
-    Copyright (C) 2020 - 2021 Qore Technologies, s.r.o.
+    Copyright (C) 2020 - 2022 Qore Technologies, s.r.o.
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -149,7 +149,8 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
     assert(PyObject_HasAttrString(mod, "__name__"));
     QorePythonReferenceHolder name(PyObject_GetAttrString(mod, "__name__"));
     assert(PyUnicode_Check(*name));
-    const char* name_str = PyUnicode_AsUTF8(*name);
+    const char* orig_name_str = PyUnicode_AsUTF8(*name);
+    const char* name_str = orig_name_str;
 
     printd(5, "QoreLoader::exec_module() mod: '%s'\n", name_str);
     QorePythonProgram* qore_python_pgm = QorePythonProgram::getContext();
@@ -163,10 +164,14 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
     } else {
         assert(!strncmp(name_str, "qore.", 5));
         name_str += 5;
-        if (!strcmp(name_str, "__root__")) {
-            ns = mod_pgm->getRootNS();
+        if (strchr(name_str, '.')) {
+            ns = nullptr;
         } else {
-            ns = getModuleRootNs(name_str, mod_pgm);
+            if (!strcmp(name_str, "__root__")) {
+                ns = mod_pgm->getRootNS();
+            } else {
+                ns = getModuleRootNs(name_str, mod_pgm);
+            }
         }
     }
 
@@ -177,6 +182,9 @@ PyObject* QoreLoader::exec_module(PyObject* self, PyObject* args) {
         std::string nspath = ns->getPath();
         QorePythonReferenceHolder py_path(PyUnicode_FromStringAndSize(nspath.c_str(), nspath.size()));
         PyObject_SetAttrString(mod, "__path__", *py_path);
+    } else {
+        QoreStringMaker desc("cannot find Qore namespace for Python module '%s'", orig_name_str);
+        PyErr_SetString(PyExc_NameError, desc.c_str());
     }
 
     Py_INCREF(Py_None);
@@ -212,18 +220,18 @@ const QoreNamespace* QoreLoader::getModuleRootNsIntern(const char* name, const Q
         if (!mod || strcmp(mod, name)) {
             continue;
         }
-        //printd(5, "QoreLoader::getModuleRootNs('%s') found\n", name);
+        printd(5, "QoreLoader::getModuleRootNs('%s') found '%s' (%p)\n", name, ns->getPath().c_str(), ns);
         // try to find parent ns
         while (true) {
             const QoreNamespace* parent = ns->getParent();
             if (!isModule(parent, name, all_mod_info, mod_dep_map)) {
-                //printd(5, "QoreLoader::getModuleRootNs('%s') invalid parent '%s'\n", name, parent->getName());
+                printd(5, "QoreLoader::getModuleRootNs('%s') invalid parent '%s'\n", name, parent->getPath().c_str());
                 break;
             }
             ns = parent;
-            //printd(5, "QoreLoader::getModuleRootNs('%s') got parent '%s'\n", name, ns->getName());
+            printd(5, "QoreLoader::getModuleRootNs('%s') got parent '%s'\n", name, ns->getPath().c_str());
         }
-        //printd(5, "QoreLoader::getModuleRootNs('%s') returning '%s'\n", name, ns->getName());
+        printd(5, "QoreLoader::getModuleRootNs('%s') returning '%s'\n", name, ns->getPath().c_str());
         return ns;
     }
     return nullptr;

@@ -76,7 +76,7 @@ public:
     DLLLOCAL QorePythonProgram(const QorePythonProgram& old, QoreProgram* qpgm) : QorePythonProgram(qpgm,
         qpgm->findNamespace(QORE_PYTHON_NS_NAME)) {
         if (!pyns) {
-            pyns = PNS.copy();
+            pyns = PNS->copy();
             qpgm->getRootNS()->addNamespace(pyns);
         }
     }

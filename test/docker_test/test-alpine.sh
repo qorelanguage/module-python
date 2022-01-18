@@ -32,6 +32,9 @@ cd ${MODULE_SRC_DIR}/build
 cmake .. -DCMAKE_BUILD_TYPE=debug -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX}
 make -j${MAKE_JOBS}
 make install
+ln -s python*.qmod qoreloader.so
+# issue #4398: test the qoreloader.so module
+python3 -c "import qoreloader;from qore.__root__.Qore.Thread import Counter;c = Counter();c.waitForZero()"
 
 # add Qore user and group
 if ! grep -q "^qore:x:${QORE_GID}" /etc/group; then

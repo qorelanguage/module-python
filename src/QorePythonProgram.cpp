@@ -228,7 +228,7 @@ void QorePythonProgram::createQoreProgram() {
     int64 parse_options = pgm ? pgm->getParseOptions64() : 0;
     qpgm = new QoreProgram(parse_options);
     owns_qore_program_ref = true;
-    pyns = PNS.copy();
+    pyns = PNS->copy();
     qpgm->getRootNS()->addNamespace(pyns);
     qpgm->setExternalData(QORE_PYTHON_MODULE_NAME, this);
 

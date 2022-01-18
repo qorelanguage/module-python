@@ -256,6 +256,11 @@ def t3():
     }
 
     qoreTest() {
+        {
+            PythonProgram::evalStatement("from qore.__root__.Qore import Serializable", "test.py");
+            assertEq(1, PythonProgram::evalExpression("Serializable.deserialize(Serializable.serialize(1))"));
+        }
+
         hash<string, object> object_cache;
         code callback = sub (object obj) {
             # save object in object cache, so it doesn't go out of scope
