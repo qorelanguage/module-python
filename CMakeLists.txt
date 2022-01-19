@@ -24,7 +24,7 @@ endif()
 # thread-state mamangement only works witb Python 3.7+
 set(MIN_PY_MINOR_VER 7)
 
-find_package(Qore 0.9.5 REQUIRED)
+find_package(Qore 1.0 REQUIRED)
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 if(${Python3_VERSION_MINOR} VERSION_LESS ${MIN_PY_MINOR_VER})
     message(FATAL_ERROR "Python version ${Python3_VERSION} is unsupported; the minimum Python version is 3.${MIN_PY_MINOR_VER}")
