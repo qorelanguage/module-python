@@ -73,8 +73,8 @@ public:
     DLLLOCAL QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns);
 
     //! New Qore Python context; does not own the QoreProgram reference
-    DLLLOCAL QorePythonProgram(const QorePythonProgram& old, QoreProgram* qpgm) : QorePythonProgram(qpgm,
-        qpgm->findNamespace(QORE_PYTHON_NS_NAME)) {
+    DLLLOCAL QorePythonProgram(const QorePythonProgram& old, QoreProgram* qpgm)
+            : QorePythonProgram(qpgm, qpgm->findNamespace(QORE_PYTHON_NS_NAME)) {
         if (!pyns) {
             pyns = PNS->copy();
             qpgm->getRootNS()->addNamespace(pyns);
@@ -102,6 +102,11 @@ public:
         deleteIntern(xsink);
     }
 
+    DLLLOCAL void py_destructor(ExceptionSink* xsink) {
+        needs_deregistration = false;
+        deleteIntern(xsink);
+    }
+
     DLLLOCAL QoreValue run(ExceptionSink* xsink) {
         assert(python_code);
         QorePythonHelper qph(this);
@@ -120,7 +125,8 @@ public:
     }
 
     //! Evaluates the statement and returns any result
-    DLLLOCAL QoreValue eval(ExceptionSink* xsink, const QoreString& source_code, const QoreString& source_label, int input, bool encapsulate);
+    DLLLOCAL QoreValue eval(ExceptionSink* xsink, const QoreString& source_code, const QoreString& source_label,
+            int input, bool encapsulate);
 
     //! Call the function and return the result
     DLLLOCAL QoreValue callFunction(ExceptionSink* xsink, const QoreString& func_name, const QoreListNode* args,
@@ -152,7 +158,8 @@ public:
 
     //! Sets the "save object callback" for %Qore objects created in Python code
     DLLLOCAL void setSaveObjectCallback(const ResolvedCallReferenceNode* save_object_callback) {
-        //printd(5, "QorePythonProgram::setSaveObjectCallback() this: %p old: %p new: %p\n", this, *this->save_object_callback, save_object_callback);
+        //printd(5, "QorePythonProgram::setSaveObjectCallback() this: %p old: %p new: %p\n", this,
+        //  *this->save_object_callback, save_object_callback);
         this->save_object_callback = save_object_callback ? save_object_callback->refRefSelf() : nullptr;
     }
 
@@ -169,7 +176,7 @@ public:
 
     //! Calls a Python method and returns the result as a %Qore value
     DLLLOCAL QoreValue callPythonMethod(ExceptionSink* xsink, PyObject* attr, PyObject* obj, const QoreListNode* args,
-        size_t arg_offset = 0);
+            size_t arg_offset = 0);
 
     //! Import Python code into the Qore program object
     DLLLOCAL int import(ExceptionSink* xsink, const char* module, const char* symbol = nullptr);
@@ -285,7 +292,7 @@ public:
 
     //! Returns a Python tuple for the given Qore list
     DLLLOCAL PyObject* getPythonTupleValue(ExceptionSink* xsink, const QoreListNode* l, size_t arg_offset = 0,
-        PyObject* first = nullptr);
+            PyObject* first = nullptr);
 
     //! Returns a Python dict for the given Qore hash
     DLLLOCAL PyObject* getPythonDict(ExceptionSink* xsink, const QoreHashNode* h);
@@ -418,6 +425,10 @@ protected:
     bool owns_qore_program_ref = false;
     //! true if the object is valid
     bool valid = true;
+    //! needs deregistration
+    bool needs_deregistration = false;
+    //! has this object been destroyed
+    bool destroyed = false;
 
     //! if we should destroy the interpreter state
     bool owns_interpreter = false;
@@ -480,32 +491,32 @@ protected:
     DLLLOCAL QoreNamespace* getNamespaceForObject(PyObject* type);
 
     DLLLOCAL QoreClass* getCreateQorePythonClassIntern(ExceptionSink* xsink, PyTypeObject* type, strset_t& nsset,
-        const char* cls_name = nullptr, int flags = 0);
+            const char* cls_name = nullptr, int flags = 0);
 
     DLLLOCAL QorePythonClass* addClassToNamespaceIntern(ExceptionSink* xsink, QoreNamespace* ns, PyTypeObject* type,
-        const char* cname, clmap_t::iterator i, strset_t& nsset, int flags = 0);
+            const char* cname, clmap_t::iterator i, strset_t& nsset, int flags = 0);
 
     //! Call a method and and return the result
     DLLLOCAL QoreValue callCFunctionMethod(ExceptionSink* xsink, PyObject* func, const QoreListNode* args,
-        size_t arg_offset = 0);
+            size_t arg_offset = 0);
 
     //! Call a wrapper descriptor method and return the result
     DLLLOCAL QoreValue callWrapperDescriptorMethod(ExceptionSink* xsink, PyObject* self, PyObject* obj,
-        const QoreListNode* args, size_t arg_offset = 0);
+            const QoreListNode* args, size_t arg_offset = 0);
     //! Call a method descriptor method and return the result
     DLLLOCAL QoreValue callMethodDescriptorMethod(ExceptionSink* xsink, PyObject* self, PyObject* obj,
-        const QoreListNode* args, size_t arg_offset = 0);
+            const QoreListNode* args, size_t arg_offset = 0);
     //! Call a classmethod descriptor method and return the result
     DLLLOCAL QoreValue callClassMethodDescriptorMethod(ExceptionSink* xsink, PyObject* self, PyObject* obj,
-        const QoreListNode* args, size_t arg_offset = 0);
+            const QoreListNode* args, size_t arg_offset = 0);
 
     //! Retrieve and import the given symbol
     DLLLOCAL int checkImportSymbol(ExceptionSink* xsink, const char* module, PyObject* mod, bool is_package,
-        const char* symbol, int filter, bool ignore_missing);
+            const char* symbol, int filter, bool ignore_missing);
 
     //! Import the given symbol into the Qore program object
     DLLLOCAL int importSymbol(ExceptionSink* xsink, PyObject* value, const char* module, const char* symbol,
-        int filter);
+            int filter);
 
     //! Imports the given module
     DLLLOCAL int importModule(ExceptionSink* xsink, PyObject* mod, const char* module, int filter);
@@ -528,7 +539,7 @@ protected:
     DLLLOCAL QoreListNode* getQoreListFromList(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset);
     //! Returns a Qore list from a Python tuple
     DLLLOCAL QoreListNode* getQoreListFromTuple(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset,
-        size_t offset = 0, bool for_args = false);
+            size_t offset = 0, bool for_args = false);
     //! Returns a Qore call reference from a Python function
     DLLLOCAL ResolvedCallReferenceNode* getQoreCallRefFromFunc(ExceptionSink* xsink, PyObject* val);
     //! Returns a Qore call reference from a Python method
@@ -541,32 +552,32 @@ protected:
     DLLLOCAL void waitForThreadsIntern();
 
     DLLLOCAL static void execPythonConstructor(const QoreMethod& meth, PyObject* pycls, QoreObject* self,
-        const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
+            const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
     DLLLOCAL static void execPythonDestructor(const QorePythonClass& thisclass, PyObject* pycls, QoreObject* self,
-        QorePythonPrivateData* pd, ExceptionSink* xsink);
+            QorePythonPrivateData* pd, ExceptionSink* xsink);
 
     DLLLOCAL static QoreValue execPythonStaticMethod(const QoreMethod& meth, PyObject* m, const QoreListNode* args,
-        q_rt_flags_t rtflags, ExceptionSink* xsink);
+            q_rt_flags_t rtflags, ExceptionSink* xsink);
     DLLLOCAL static QoreValue execPythonNormalMethod(const QoreMethod& meth, PyObject* m, QoreObject* self,
-        QorePythonPrivateData* pd, const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
+            QorePythonPrivateData* pd, const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
 
     DLLLOCAL static QoreValue execPythonNormalWrapperDescriptorMethod(const QoreMethod& meth, PyObject* m,
-        QoreObject* self, QorePythonPrivateData* pd, const QoreListNode* args, q_rt_flags_t rtflags,
-        ExceptionSink* xsink);
+            QoreObject* self, QorePythonPrivateData* pd, const QoreListNode* args, q_rt_flags_t rtflags,
+            ExceptionSink* xsink);
     DLLLOCAL static QoreValue execPythonNormalMethodDescriptorMethod(const QoreMethod& meth, PyObject* m,
-        QoreObject* self, QorePythonPrivateData* pd, const QoreListNode* args, q_rt_flags_t rtflags,
-        ExceptionSink* xsink);
+            QoreObject* self, QorePythonPrivateData* pd, const QoreListNode* args, q_rt_flags_t rtflags,
+            ExceptionSink* xsink);
     DLLLOCAL static QoreValue execPythonNormalClassMethodDescriptorMethod(const QoreMethod& meth, PyObject* m,
-        QoreObject* self, QorePythonPrivateData* pd, const QoreListNode* args, q_rt_flags_t rtflags,
-        ExceptionSink* xsink);
+            QoreObject* self, QorePythonPrivateData* pd, const QoreListNode* args, q_rt_flags_t rtflags,
+            ExceptionSink* xsink);
 
     DLLLOCAL static QoreValue execPythonStaticCFunctionMethod(const QoreMethod& meth, PyObject* func,
-        const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
+            const QoreListNode* args, q_rt_flags_t rtflags, ExceptionSink* xsink);
 
     DLLLOCAL static QoreValue execPythonCFunction(PyObject* func, const QoreListNode* args, q_rt_flags_t rtflags,
-        ExceptionSink* xsink);
+            ExceptionSink* xsink);
     DLLLOCAL static QoreValue execPythonFunction(PyObject* func, const QoreListNode* args, q_rt_flags_t rtflags,
-        ExceptionSink* xsink);
+            ExceptionSink* xsink);
 
     //! Python integration
     DLLLOCAL static PyObject* callQoreFunction(PyObject* self, PyObject* args);
@@ -600,8 +611,8 @@ protected:
                 printd(0, "QorePythonProgram::releaseContext() ERROR missing pgm: %p\n", this);
             } else {
                 for (auto& i : i->second) {
-                    printd(0, "QorePythonProgram::releaseContext() this: %p ERROR missing TID: {TID %d, {%p, own: %d}}\n", this,
-                        i.first, i.second.state, i.second.owns_state);
+                    printd(0, "QorePythonProgram::releaseContext() this: %p ERROR missing TID: {TID %d, {%p, "
+                        "own: %d}}\n", this, i.first, i.second.state, i.second.owns_state);
                 }
             }
         }
@@ -623,7 +634,8 @@ protected:
         }
         int tid = q_gettid();
         py_tid_map_t::iterator ti = i->second.find(tid);
-        //printd(5, "QorePythonProgram::getThreadState() this: %p found TID %d: %p\n", this, q_gettid(), ti == i->second.end() ? nullptr : ti->second);
+        //printd(5, "QorePythonProgram::getThreadState() this: %p found TID %d: %p\n", this, q_gettid(),
+        //  ti == i->second.end() ? nullptr : ti->second);
         return ti == i->second.end() ? nullptr : ti->second.state;
     }
 

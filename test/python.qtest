@@ -977,7 +977,7 @@ class test:
             assertThrows("builtins.NameError", \pp.callMethod(), ("test", "normal", NOTHING, 1));
             assertThrows("NO-METHOD", \pp.callMethod(), ("test", "__name__"));
             assertThrows("builtins.Exception", \pp.callMethod(), ("test", "do_ex"));
-            assertThrows("builtins.NameError", \pp.evalExpression(), "test()");
+            assertThrows("builtins.NameError", \pp.evalExpression(), "testx()");
         }
 
         {

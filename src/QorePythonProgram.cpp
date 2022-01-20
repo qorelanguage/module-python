@@ -100,6 +100,7 @@ QorePythonProgram::QorePythonProgram() : save_object_callback(nullptr) {
     py_thr_map[this] = {{tid, {python, false}}};
     py_global_tid_map[tid].insert(python);
     ++pgm_count;
+    needs_deregistration = qpy_register(this);
 }
 
 QorePythonProgram::QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns)
@@ -141,10 +142,11 @@ QorePythonProgram::QorePythonProgram(QoreProgram* qpgm, QoreNamespace* pyns)
     }
 
     PyDict_SetItemString(module_dict, "qoreloader", *qoreloader);
+    needs_deregistration = qpy_register(this);
 }
 
 QorePythonProgram::QorePythonProgram(const QoreString& source_code, const QoreString& source_label, int start,
-    ExceptionSink* xsink) : save_object_callback(nullptr) {
+        ExceptionSink* xsink) : save_object_callback(nullptr) {
     printd(5, "QorePythonProgram::QorePythonProgram() this: %p\n", this);
     TempEncodingHelper src_code(source_code, QCS_UTF8, xsink);
     if (*xsink) {
@@ -211,6 +213,7 @@ QorePythonProgram::QorePythonProgram(const QoreString& source_code, const QoreSt
     //  qpgm->getRootNS());
     // create Qore program object with the same restrictions as the parent
     //createQoreProgram();
+    needs_deregistration = qpy_register(this);
 }
 
 int QorePythonProgram::setGlobalDictionary(PyObject* mod) {
@@ -271,6 +274,7 @@ QorePythonProgram* QorePythonProgram::getContext() {
 
 int QorePythonProgram::staticInit() {
     PyDateTime_IMPORT;
+    assert(PyDateTimeAPI);
     QorePythonReferenceHolder traceback_mod(PyImport_ImportModule("traceback"));
     if (!traceback_mod) {
         PyErr_Clear();
@@ -293,7 +297,15 @@ void QorePythonProgram::waitForThreadsIntern() {
 }
 
 void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
-    printd(5, "QorePythonProgram::deleteIntern() this: %p\n", this);
+    if (destroyed) {
+        return;
+    }
+    destroyed = true;
+    if (needs_deregistration) {
+        qpy_deregister(this);
+    }
+
+    printd(5, "QorePythonProgram::deleteIntern() this: %p i: %p oi: %d\n", this, interpreter, owns_interpreter);
     if (q_libqore_exiting()) {
 #ifdef DEBUG
         qpgm = nullptr;
@@ -312,7 +324,6 @@ void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
     {
         AutoLocker al(py_thr_lck);
         if (interpreter) {
-
             // wait for threads to complete before deleting entries
             waitForThreadsIntern();
 
@@ -360,17 +371,29 @@ void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
             valid = false;
         }
         if (interpreter && owns_interpreter) {
-            // grab the GIL with the main thread lock
-            QorePythonGilHelper pgh;
+            {
+                // grab the GIL with the main thread lock
+                QorePythonGilHelper pgh;
 
-            // enforce serialization
-            AutoLocker al(py_thr_lck);
+                // enforce serialization
+                AutoLocker al(py_thr_lck);
 
-            // do not clear and delete the interpreter with Python 3.10+
+                // do not clear and delete the interpreter with Python 3.10+
 #if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION < 10
-            PyInterpreterState_Clear(interpreter);
+                PyInterpreterState_Clear(interpreter);
+            }
             PyInterpreterState_Delete(interpreter);
+#else
+                // for Python 10+, we only delete the interpreter if initialized by Python
+                if (qore_needs_shutdown) {
+                    PyInterpreterState_Clear(interpreter);
+                }
+            }
+            if (qore_needs_shutdown) {
+                PyInterpreterState_Delete(interpreter);
+            }
 #endif
+
             interpreter = nullptr;
             owns_interpreter = false;
         }
@@ -515,6 +538,7 @@ int QorePythonProgram::createInterpreter(QorePythonGilHelper& qpgh, ExceptionSin
 
     interpreter = python->interp;
     owns_interpreter = true;
+    printd(5, "QorePythonProgram::createInterpreter() interpreter: %p\n", interpreter);
 
     // save thread state
     int tid = q_gettid();
@@ -1194,8 +1218,8 @@ void QorePythonProgram::addModulePath(ExceptionSink* xsink, QoreString& arg) {
         return;
     }
 
-    QorePythonReferenceHolder mod(PyImport_ImportModule("sys"));
-    if (!mod) {
+    QorePythonReferenceHolder sys(PyImport_ImportModule("sys"));
+    if (!sys) {
         if (!checkPythonException(xsink)) {
             throw QoreStandardException("PYTHON-ERROR", "cannot load 'sys' module");
         }
@@ -1204,10 +1228,10 @@ void QorePythonProgram::addModulePath(ExceptionSink* xsink, QoreString& arg) {
 
     QorePythonReferenceHolder path;
 
-    if (!PyObject_HasAttrString(*mod, "path")) {
+    if (!PyObject_HasAttrString(*sys, "path")) {
         path = PyList_New(0);
     } else {
-        path = PyObject_GetAttrString(*mod, "path");
+        path = PyObject_GetAttrString(*sys, "path");
         if (!PyList_Check(*path)) {
             throw QoreStandardException("PYTHON-ERROR", "'sys.path' is not a list; got type '%s' instead",
                 Py_TYPE(*path)->tp_name);
@@ -1450,7 +1474,9 @@ QoreValue QorePythonProgram::getQoreValue(ExceptionSink* xsink, PyObject* val) {
 }
 
 QoreValue QorePythonProgram::getQoreValue(ExceptionSink* xsink, PyObject* val, pyobj_set_t& rset) {
-    //printd(5, "QorePythonBase::getQoreValue() val: %p '%s'\n", val, Py_TYPE(val)->tp_name);
+    printd(5, "QorePythonBase::getQoreValue() this: %p PyDateTimeAPI: %p val: %p '%s'\n", this, PyDateTimeAPI, val,
+        Py_TYPE(val)->tp_name);
+    assert(PyDateTimeAPI);
     if (!val || val == Py_None) {
         return QoreValue();
     }
@@ -2561,7 +2587,7 @@ int QorePythonProgram::saveModule(const char* name, PyObject* mod) {
         return -1;
     }
     QorePythonReferenceHolder modules(PyObject_GetAttrString(*sys, "modules"));
-    //printd(5, "QorePythonProgram::saveModule() modules: %p %s\n", *modules, Py_TYPE(*modules)->tp_name);
+    printd(5, "QorePythonProgram::saveModule() modules: %p '%s' %s\n", *modules, name, Py_TYPE(*modules)->tp_name);
     if (!PyDict_Check(*modules)) {
         return -1;
     }

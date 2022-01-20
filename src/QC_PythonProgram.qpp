@@ -159,7 +159,7 @@ auto PythonProgram::evalStatementKeep(string source_code, string source_label = 
     @note This method uses a shared static PythonProgram object to parse, compile, and evaluate the input string
  */
 auto PythonProgram::evalExpression(string source_code, string source_label = "exp") {
-    return pp->eval(xsink, *source_code, *source_label, Py_eval_input, true);
+    return pp->eval(xsink, *source_code, *source_label, Py_eval_input, false);
 }
 
 //! Sets the "save object" callback for %Qore objects created from Python code
@@ -241,7 +241,10 @@ PythonProgram::aliasDefinition(string python_source_path, string python_target_p
 
     @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
 
-    @note This method uses the PythonProgram context in the current program to parse, compile, and evaluate the input string
+    @note
+    - This method uses the PythonProgram context in the current program to parse, compile, and evaluate the input
+      string
+    - Is parsed in a "standalone" mode without being able to access existing symbols in the program
 
     @see evalStatementKeep()
  */
@@ -257,7 +260,8 @@ static auto PythonProgram::evalStatement(string source_code, string source_label
 
     @throw PYTHON-COMPILE-ERROR error parsing or compiling the given source
 
-    @note This method uses the PythonProgram context in the current program to parse, compile, and evaluate the input string
+    @note This method uses the PythonProgram context in the current program to parse, compile, and evaluate the input
+    string
 
     @see evalStatement()
  */
@@ -278,7 +282,7 @@ static auto PythonProgram::evalStatementKeep(string source_code, string source_l
 static auto PythonProgram::evalExpression(string source_code, string source_label = "exp") {
     QorePythonProgram* pypgm = QorePythonProgram::getContext();
     assert(pypgm);
-    return pypgm->eval(xsink, *source_code, *source_label, Py_eval_input, true);
+    return pypgm->eval(xsink, *source_code, *source_label, Py_eval_input, false);
 }
 
 //! Sets the "save object" callback for %Qore objects created from Python code in the root %Qore Program context
