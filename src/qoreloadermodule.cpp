@@ -2,7 +2,7 @@
 /*
     qore Python module
 
-    Copyright (C) 2020 - 2021 Qore Technologies, s.r.o.
+    Copyright (C) 2020 - 2022 Qore Technologies, s.r.o.
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -46,7 +46,7 @@ static PyMethodDef qoreloader_methods[] = {
     {nullptr, nullptr, 0, nullptr},
 };
 
-static bool qore_needs_shutdown = false;
+bool qore_needs_shutdown = false;
 
 thread_local QoreThreadAttacher qoreThreadAttacher;
 
@@ -135,12 +135,65 @@ static struct PyModuleDef qoreloadermodule = {
     qoreloader_free,     // m_free
 };
 
+typedef std::set<QorePythonProgram*> qpy_pgm_set_t;
+static qpy_pgm_set_t qpy_pgm_set;
+QoreThreadLock qpy_lock;
+
+bool qpy_register(QorePythonProgram* p) {
+    if (!qore_needs_shutdown) {
+        return false;
+    }
+    printd(5, "qpy_register() p: %p\n", p);
+    AutoLocker al(qpy_lock);
+    assert(qpy_pgm_set.find(p) == qpy_pgm_set.end());
+    qpy_pgm_set.insert(p);
+    return true;
+}
+
+void qpy_deregister(QorePythonProgram* p) {
+    if (!qore_needs_shutdown) {
+        return;
+    }
+    printd(5, "qpy_deregister() p: %p\n", p, qore_needs_shutdown);
+    qpy_pgm_set_t::iterator i = qpy_pgm_set.find(p);
+    if (i != qpy_pgm_set.end()) {
+        qpy_pgm_set.erase(i);
+    }
+}
+
+static PyObject* qoreloader_atexit(PyObject* self, PyObject* args) {
+    printd(5, "qoreloader_atexit() PyThreadState_Get(): %p\n", PyThreadState_Get());
+
+    ExceptionSink xsink;
+    for (auto& i : qpy_pgm_set) {
+        printd(5, "qoreloader_atexit() p: %p\n", i);
+        i->py_destructor(&xsink);
+    }
+
+    qore_needs_shutdown = false;
+    qore_cleanup();
+
+    assert(mainThreadState);
+    PyThreadState_Swap(mainThreadState);
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyMethodDef atexit_md = {
+    "qoreloader_atexit",
+    qoreloader_atexit,
+    METH_NOARGS,
+    "qoreloader cleanup function",
+};
+
 static int slot_qoreloader_exec(PyObject *m) {
     ++init_count;
-    //printd(5, "slot_qoreloader_exec() ic: %d\n", init_count);
+    printd(5, "slot_qoreloader_exec() ic: %d\n", init_count);
     if (init_count == 1) {
         // initialize qore library if necessary
         if (!q_libqore_initalized()) {
+            printd(5, "PyInit_qoreloader() initializing Qore library\n");
             qore_init(QL_MIT);
             qore_needs_shutdown = true;
             printd(5, "PyInit_qoreloader() Qore library initialized\n");
@@ -173,6 +226,34 @@ static int slot_qoreloader_exec(PyObject *m) {
 
         if (QoreMetaPathFinder::init()) {
             return -1;
+        }
+
+        if (qore_needs_shutdown) {
+            printd(5, "slot_qoreloader_exec() PyThreadState_Get(): %p\n", PyThreadState_Get());
+
+            // set cleanup function call
+            QorePythonReferenceHolder atexit(PyImport_ImportModule("atexit"));
+            if (!*atexit) {
+                printd(5, "slot_qoreloader_exec() ERROR: no atexit module\n");
+                return -1;
+            }
+
+            if (!PyObject_HasAttrString(*atexit, "register")) {
+                printd(5, "slot_qoreloader_exec() ERROR: no atexit.register() method\n");
+                return -1;
+            }
+
+            QorePythonReferenceHolder register_func(PyObject_GetAttrString(*atexit, "register"));
+            if (!register_func || !PyCallable_Check(*register_func)) {
+                printd(5, "slot_qoreloader_exec() ERROR: atexit.register() is not callable\n");
+                return -1;
+            }
+
+            // call atexit.register()
+            QorePythonReferenceHolder args(PyTuple_New(1));
+            QorePythonReferenceHolder func(PyCFunction_New(&atexit_md, nullptr));
+            PyTuple_SET_ITEM(*args, 0, func.release());
+            QorePythonReferenceHolder rv_ignored(PyEval_CallObject(*register_func, *args));
         }
     }
 

@@ -306,6 +306,14 @@ DLLLOCAL int load_jni_module(QorePythonProgram* qore_python_pgm);
 //! called from Python only; if it returns -1, a Python exception is raised
 DLLLOCAL int do_jni_module_import(QorePythonProgram* qore_python_pgm, const char* name_str);
 
+class QorePythonProgram;
+//! for tracking QorePythonProgram objects when initialized from Python
+DLLLOCAL bool qpy_register(QorePythonProgram* p);
+DLLLOCAL void qpy_deregister(QorePythonProgram* p);
+
+//! if true then this module was initialized by Python
+DLLLOCAL extern bool qore_needs_shutdown;
+
 #if 0
 DLLLOCAL int q_reset_python(ExceptionSink* xsink);
 #endif

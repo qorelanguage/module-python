@@ -277,6 +277,7 @@ bool QoreLoader::isModule(const QoreNamespace* parent, const char* name, const Q
         }
     }
 
-    //printd(5, "QoreLoader::isModule() NOT parent: '%s' mod: %s; not in reexport list\n", parent->getName(), mod ? mod : "n/a");
+    //printd(5, "QoreLoader::isModule() NOT parent: '%s' mod: %s; not in reexport list\n", parent->getName(),
+    //  mod ? mod : "n/a");
     return false;
 }
