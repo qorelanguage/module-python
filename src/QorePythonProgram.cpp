@@ -371,10 +371,9 @@ void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
             valid = false;
         }
         if (interpreter && owns_interpreter) {
+            // grab the GIL with the main thread lock
+            QorePythonGilHelper pgh;
             {
-                // grab the GIL with the main thread lock
-                QorePythonGilHelper pgh;
-
                 // enforce serialization
                 AutoLocker al(py_thr_lck);
 
