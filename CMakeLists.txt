@@ -88,7 +88,7 @@ string(REPLACE ";" " " MODULE_DOX_INPUT "${MODULE_DOX_INPUT}")
 #message(STATUS mdi: ${MODULE_DOX_INPUT})
 
 set(MODULE_DOX_INPUT ${CMAKE_BINARY_DIR})
-qore_binary_module(${module_name} ${PROJECT_VERSION})
+qore_external_binary_module(${module_name} ${PROJECT_VERSION})
 
 qore_dist(${PROJECT_VERSION})
 
@@ -98,5 +98,5 @@ FIND_PACKAGE(Doxygen)
 if (DOXYGEN_FOUND)
     qore_wrap_dox(QORE_DOX_SRC ${QORE_DOX_TMPL_SRC})
     add_custom_target(QORE_MOD_DOX_FILES DEPENDS ${QORE_DOX_SRC})
-    add_dependencies(docs QORE_MOD_DOX_FILES)
+    add_dependencies(docs-module QORE_MOD_DOX_FILES)
 endif()
