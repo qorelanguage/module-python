@@ -25,6 +25,17 @@ endif()
 set(MIN_PY_MINOR_VER 7)
 
 find_package(Qore 1.0 REQUIRED)
+
+if (DEFINED ENV{Python3_ROOT})
+    set(Python3_ROOT $ENV{Python3_ROOT})
+endif()
+if (DEFINED ENV{Python3_LIBRARIES})
+    set(Python3_LIBRARIES $ENV{Python3_LIBRARIES})
+endif()
+if (DEFINED ENV{Python3_INCLUDE_DIRS})
+    set(Python3_INCLUDE_DIRS $ENV{Python3_INCLUDE_DIRS})
+endif()
+
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 if(${Python3_VERSION_MINOR} VERSION_LESS ${MIN_PY_MINOR_VER})
     message(FATAL_ERROR "Python version ${Python3_VERSION} is unsupported; the minimum Python version is 3.${MIN_PY_MINOR_VER}")

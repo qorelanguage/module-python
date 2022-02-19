@@ -102,7 +102,7 @@ int python_u_tld_key = -1;
 int python_qobj_key = -1;
 
 static sig_vec_t sig_vec = {
-#ifndef Q_WINDOWS
+#ifndef _Q_WINDOWS
     SIGSEGV, SIGBUS
 #endif
 };
@@ -258,7 +258,7 @@ static QoreStringNode* python_module_init_intern(bool repeat) {
     }
 
     if (!repeat) {
-#ifndef Q_WINDOWS
+#ifndef _Q_WINDOWS
         sig_vec_t new_sig_vec;
         for (int sig : sig_vec) {
             QoreStringNode *err = qore_reassign_signal(sig, QORE_PYTHON_MODULE_NAME);
