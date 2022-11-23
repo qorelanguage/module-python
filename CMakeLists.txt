@@ -102,6 +102,10 @@ set(MODULE_DOX_INPUT ${CMAKE_CURRENT_BINARY_DIR}/mainpage.dox ${JAVA_JAR_SRC_STR
 string(REPLACE ";" " " MODULE_DOX_INPUT "${MODULE_DOX_INPUT}")
 #message(STATUS mdi: ${MODULE_DOX_INPUT})
 
+if (DEFINED ENV{DOXYGEN_EXECUTABLE})
+    set(DOXYGEN_EXECUTABLE $ENV{DOXYGEN_EXECUTABLE})
+endif()
+
 set(MODULE_DOX_INPUT ${CMAKE_BINARY_DIR})
 qore_external_binary_module(${module_name} ${PROJECT_VERSION})
 
@@ -109,7 +113,6 @@ qore_dist(${PROJECT_VERSION})
 
 qore_config_info()
 
-FIND_PACKAGE(Doxygen)
 if (DOXYGEN_FOUND)
     qore_wrap_dox(QORE_DOX_SRC ${QORE_DOX_TMPL_SRC})
     add_custom_target(QORE_MOD_DOX_FILES DEPENDS ${QORE_DOX_SRC})
