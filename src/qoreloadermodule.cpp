@@ -164,10 +164,14 @@ void qpy_deregister(QorePythonProgram* p) {
 static PyObject* qoreloader_atexit(PyObject* self, PyObject* args) {
     printd(5, "qoreloader_atexit() PyThreadState_Get(): %p\n", PyThreadState_Get());
 
-    ExceptionSink xsink;
-    for (auto& i : qpy_pgm_set) {
-        printd(5, "qoreloader_atexit() p: %p\n", i);
-        i->py_destructor(&xsink);
+    if (!qpy_pgm_set.empty()) {
+        assert(mainThreadState);
+
+        ExceptionSink xsink;
+        for (auto& i : qpy_pgm_set) {
+            //printd(5, "qoreloader_atexit() p: %p\n", i);
+            i->py_destructor(&xsink);
+        }
     }
 
     qore_needs_shutdown = false;

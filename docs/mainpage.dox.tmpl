@@ -500,6 +500,10 @@ PythonProgram::setSaveObjectCallback(callback);
 
     @section pythonreleasenotes python Module Release Notes
 
+    @subsection python_1_1_5 python Module Version 1.1.5
+    - fixed a crash related to Python subinterpreter cleanup when the module is loaded by native Python
+      (<a href="https://github.com/qorelanguage/qore/issues/4649">issue 4649</a>)
+
     @subsection python_1_1_4 python Module Version 1.1.4
     - another fix handling subinterpreters
       (<a href="https://github.com/qorelanguage/qore/issues/4405">issue 4405</a>)

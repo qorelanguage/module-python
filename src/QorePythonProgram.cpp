@@ -379,6 +379,7 @@ void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
 
                 // do not clear and delete the interpreter with Python 3.10+
 #if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION < 10
+                assert(_qore_PyRuntimeGILState_GetThreadState());
                 PyInterpreterState_Clear(interpreter);
             }
             PyInterpreterState_Delete(interpreter);
@@ -520,6 +521,7 @@ int QorePythonProgram::createInterpreter(QorePythonGilHelper& qpgh, ExceptionSin
         AutoLocker al(py_thr_lck);
 
         python = Py_NewInterpreter();
+
         if (!python) {
             if (xsink) {
                 xsink->raiseException("PYTHON-COMPILE-ERROR", "error creating the Python subinterpreter");

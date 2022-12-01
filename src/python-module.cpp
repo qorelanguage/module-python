@@ -547,20 +547,17 @@ QorePythonGilHelper::QorePythonGilHelper(PyThreadState* new_thread_state)
     : new_thread_state(new_thread_state), state(_qore_PyRuntimeGILState_GetThreadState()),
         t_state(PyGILState_GetThisThreadState()),
         release_gil(!_qore_has_gil(t_state, new_thread_state)) {
-    assert(new_thread_state);
     //printd(5, "QorePythonGilHelper::QorePythonGilHelper() %llx acquire: %d state: %llx t_state: %llx\n",
     //    new_thread_state, release_gil, state, t_state);
+    assert(new_thread_state);
     if (release_gil) {
         PyEval_AcquireThread(new_thread_state);
         assert(PyThreadState_Get() == new_thread_state);
     } else {
         assert(t_state == _qore_PyCeval_GetThreadState());
-        if (t_state == new_thread_state) {
-            do_nothing = true;
-            //printd(5, "QorePythonGilHelper::QorePythonGilHelper() %llx noop\n", new_thread_state);
-            return;
-        }
     }
+    // NOTE: even if the current thread state is equal to the new one, we still need to set all thread states in all
+    // locations
 
     ++new_thread_state->gilstate_counter;
     PyThreadState_Swap(new_thread_state);
@@ -573,9 +570,6 @@ QorePythonGilHelper::QorePythonGilHelper(PyThreadState* new_thread_state)
 
 QorePythonGilHelper::~QorePythonGilHelper() {
     assert(_qore_has_gil());
-    if (do_nothing) {
-        return;
-    }
 
     --new_thread_state->gilstate_counter;
 

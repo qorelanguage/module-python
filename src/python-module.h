@@ -112,7 +112,6 @@ protected:
     PyThreadState* state;
     PyThreadState* t_state;
     bool release_gil = true;
-    bool do_nothing = false;
 };
 
 class QorePythonReleaseGilHelper {
