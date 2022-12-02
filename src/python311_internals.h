@@ -169,34 +169,6 @@ struct _Py_unicode_runtime_ids {
     Py_ssize_t next_index;
 };
 
-// These would be in pycore_long.h if it weren't for an include cycle.
-#define _PY_NSMALLPOSINTS           257
-#define _PY_NSMALLNEGINTS           5
-
-#if 0
-struct _Py_global_objects {
-    struct {
-        /* Small integers are preallocated in this array so that they
-         * can be shared.
-         * The integers that are preallocated are those in the range
-         * -_PY_NSMALLNEGINTS (inclusive) to _PY_NSMALLPOSINTS (exclusive).
-         */
-        PyLongObject small_ints[_PY_NSMALLNEGINTS + _PY_NSMALLPOSINTS];
-
-        PyBytesObject bytes_empty;
-        struct {
-            PyBytesObject ob;
-            char eos;
-        } bytes_characters[256];
-
-        struct _Py_global_strings strings;
-
-        _PyGC_Head_UNUSED _tuple_empty_gc_not_used;
-        PyTupleObject tuple_empty;
-    } singletons;
-};
-#endif
-
 typedef struct pyruntimestate {
     /* Has been initialized to a safe state.
 
