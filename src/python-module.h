@@ -63,7 +63,9 @@ DLLLOCAL extern bool python_shutdown;
 #include <internal/pycore_pystate.h>
 #else
 #if PY_MAJOR_VERSION >= 3
-#if PY_MINOR_VERSION == 10
+#if PY_MINOR_VERSION == 11
+#include "python311_internals.h"
+#elif PY_MINOR_VERSION == 10
 #include "python310_internals.h"
 #elif PY_MINOR_VERSION == 9
 #include "python39_internals.h"

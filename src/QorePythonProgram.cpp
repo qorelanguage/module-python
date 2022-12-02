@@ -695,12 +695,12 @@ QorePythonThreadInfo QorePythonProgram::setContext() const {
     ++python->gilstate_counter;
 
     // calculate new recursion depth
-    int recursion_depth = python->recursion_depth;
+    int recursion_depth = PyThreadState_GetRecursionLimit(python);
     // be conservative when calculating the new recursion depth
     int new_recursion_depth = q_thread_stack_used() / PYTHON_SMALL_STACK_FACTOR;
     //printd(5, "QorePythonProgram::setContext() recursion_depth: %d -> %d\n", python->recursion_depth,
     //  new_recursion_depth);
-    python->recursion_depth = new_recursion_depth;
+    PyThreadState_UpdateRecursionLimit(python, new_recursion_depth);
 
     return {tss_state, t_state, ceval_state, g_state, recursion_depth, true};
 }
@@ -715,11 +715,11 @@ void QorePythonProgram::releaseContext(const QorePythonThreadInfo& oldstate) con
     assert(python);
     assert(_qore_PyThreadState_IsCurrent(python));
 
-    //printd(5, "QorePythonProgram::releaseContext() rd: %d -> ord: %d\n", python->recursion_depth,
+    //printd(5, "QorePythonProgram::releaseContext() rd: %d -> ord: %d\n", PyThreadState_GetRecursionLimit(python),
     //  oldstate.recursion_depth);
 
     // restore recursion depth
-    python->recursion_depth = oldstate.recursion_depth;
+    PyThreadState_UpdateRecursionLimit(python, oldstate.recursion_depth);
 
     // restore the old state
     if (oldstate.ceval_state != python) {
@@ -1973,17 +1973,38 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
 
         PyFrameObject* frame = tb->tb_frame;
         const char* funcname = nullptr;
+#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION > 10
         while (frame) {
-            int line = PyCode_Addr2Line(frame->f_code, frame->f_lasti);
-            const char* filename = getCString(frame->f_code->co_filename);
+            // get line number
+            QorePythonReferenceHolder code((PyObject*)PyFrame_GetCode(frame));
+            int line = PyCode_Addr2Line((PyCodeObject*)*code, PyFrame_GetLasti(frame));
+            QorePythonReferenceHolder filename_obj(PyObject_GetAttrString(*code, "co_filename"));
+            const char* filename = PyUnicode_AsUTF8(*filename_obj);
+
             if (frame == tb->tb_frame) {
                 loc.set(filename, line, line, nullptr, 0, QORE_PYTHON_LANG_NAME);
             } else {
                 callstack.add(CT_USER, filename, line, line, funcname, QORE_PYTHON_LANG_NAME);
             }
+            QorePythonReferenceHolder funcname_obj(PyObject_GetAttrString(*code, "co_name"));
+            funcname = PyUnicode_AsUTF8(*funcname_obj);
+
+            frame = PyFrame_GetBack(frame);
+        }
+#else
+        while (frame) {
+            int line = PyCode_Addr2Line(frame->f_code, frame->f_lasti);
+            const char* filename = getCString(frame->f_code->co_filename);
+
+            if (frame == tb->tb_frame) {
+                 loc.set(filename, line, line, nullptr, 0, QORE_PYTHON_LANG_NAME);
+             } else {
+                 callstack.add(CT_USER, filename, line, line, funcname, QORE_PYTHON_LANG_NAME);
+             }
             funcname = getCString(frame->f_code->co_name);
             frame = frame->f_back;
         }
+#endif
         if (funcname) {
             callstack.add(CT_BUILTIN, this_file, __LINE__, __LINE__, funcname, "c++");
         }

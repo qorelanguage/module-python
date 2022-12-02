@@ -27,6 +27,14 @@
 #include <pystate.h>
 #include <dynamic_annotations.h>
 
+inline int PyThreadState_GetRecursionLimit(PyThreadState* state) {
+    return state->recursion_depth;
+}
+
+inline void PyThreadState_UpdateRecursionLimit(PyThreadState* state, int new_limit) {
+    state->recursion_depth = new_limit;
+}
+
 typedef struct _Py_atomic_address {
     uintptr_t _value;
 } _Py_atomic_address;

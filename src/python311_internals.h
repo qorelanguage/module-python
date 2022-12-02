@@ -28,11 +28,11 @@
 #include <fileobject.h>
 
 inline int PyThreadState_GetRecursionLimit(PyThreadState* state) {
-    return state->recursion_depth;
+    return state->recursion_limit;
 }
 
 inline void PyThreadState_UpdateRecursionLimit(PyThreadState* state, int new_limit) {
-    state->recursion_depth = new_limit;
+    state->recursion_limit = new_limit;
 }
 
 typedef struct _Py_atomic_address {
@@ -42,23 +42,6 @@ typedef struct _Py_atomic_address {
 typedef struct _Py_atomic_int {
     int _value;
 } _Py_atomic_int;
-
-struct _pending_calls {
-    PyThread_type_lock lock;
-    /* Request for running pending calls. */
-    _Py_atomic_int calls_to_do;
-    /* Request for looking at the `async_exc` field of the current
-       thread state.
-       Guarded by the GIL. */
-    int async_exc;
-#define NPENDINGCALLS 32
-    struct {
-        int (*func)(void *);
-        void *arg;
-    } calls[NPENDINGCALLS];
-    int first;
-    int last;
-};
 
 struct _gilstate_runtime_state {
     /* bpo-26558: Flag to disable PyGILState_Check().
@@ -110,9 +93,7 @@ struct _ceval_runtime_state {
        the main thread of the main interpreter can handle signals: see
        _Py_ThreadCanHandleSignals(). */
     _Py_atomic_int signals_pending;
-#ifndef EXPERIMENTAL_ISOLATED_SUBINTERPRETERS
     struct _gil_runtime_state gil;
-#endif
 };
 
 /* GC information is stored BEFORE the object structure. */
@@ -188,7 +169,41 @@ struct _Py_unicode_runtime_ids {
     Py_ssize_t next_index;
 };
 
+// These would be in pycore_long.h if it weren't for an include cycle.
+#define _PY_NSMALLPOSINTS           257
+#define _PY_NSMALLNEGINTS           5
+
+#if 0
+struct _Py_global_objects {
+    struct {
+        /* Small integers are preallocated in this array so that they
+         * can be shared.
+         * The integers that are preallocated are those in the range
+         * -_PY_NSMALLNEGINTS (inclusive) to _PY_NSMALLPOSINTS (exclusive).
+         */
+        PyLongObject small_ints[_PY_NSMALLNEGINTS + _PY_NSMALLPOSINTS];
+
+        PyBytesObject bytes_empty;
+        struct {
+            PyBytesObject ob;
+            char eos;
+        } bytes_characters[256];
+
+        struct _Py_global_strings strings;
+
+        _PyGC_Head_UNUSED _tuple_empty_gc_not_used;
+        PyTupleObject tuple_empty;
+    } singletons;
+};
+#endif
+
 typedef struct pyruntimestate {
+    /* Has been initialized to a safe state.
+
+       In order to be effective, this must be set to 0 during or right
+       after allocation. */
+    int _initialized;
+
     /* Is running Py_PreInitialize()? */
     int preinitializing;
 
@@ -245,7 +260,25 @@ typedef struct pyruntimestate {
 
     struct _Py_unicode_runtime_ids unicode_ids;
 
-    // XXX Consolidate globals found via the check-c-globals script.
+    /* All the objects that are shared by the runtime's interpreters. */
+    //struct _Py_global_objects global_objects;
+
+    /* The following fields are here to avoid allocation during init.
+       The data is exposed through _PyRuntimeState pointer fields.
+       These fields should not be accessed directly outside of init.
+
+       All other _PyRuntimeState pointer fields are populated when
+       needed and default to NULL.
+
+       For now there are some exceptions to that rule, which require
+       allocation during init.  These will be addressed on a case-by-case
+       basis.  Most notably, we don't pre-allocated the several mutex
+       (PyThread_type_lock) fields, because on Windows we only ever get
+       a pointer type.
+       */
+
+    /* PyInterpreterState.interpreters.main */
+    //PyInterpreterState _main_interpreter;
 } _PyRuntimeState;
 
 DLLLOCAL extern _PyRuntimeState _PyRuntime;
