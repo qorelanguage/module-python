@@ -377,22 +377,10 @@ void QorePythonProgram::deleteIntern(ExceptionSink* xsink) {
                 // enforce serialization
                 AutoLocker al(py_thr_lck);
 
-                // do not clear and delete the interpreter with Python 3.10+
-#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION < 10
                 assert(_qore_PyRuntimeGILState_GetThreadState());
                 PyInterpreterState_Clear(interpreter);
             }
             PyInterpreterState_Delete(interpreter);
-#else
-                // for Python 10+, we only delete the interpreter if initialized by Python
-                if (qore_needs_shutdown) {
-                    PyInterpreterState_Clear(interpreter);
-                }
-            }
-            if (qore_needs_shutdown) {
-                PyInterpreterState_Delete(interpreter);
-            }
-#endif
 
             interpreter = nullptr;
             owns_interpreter = false;
@@ -464,7 +452,12 @@ QoreValue QorePythonProgram::eval(ExceptionSink* xsink, const QoreString& source
 void QorePythonProgram::pythonThreadCleanup(void*) {
     int tid = q_gettid();
     //printd(5, "QorePythonProgram::pythonThreadCleanup()\n");
-    AutoLocker al(py_thr_lck);
+
+    // issue #4651: when called when the Qore library and the python module are initialized from Java during static
+    // process destruction, exit handlers may have already destroyed the static objects in this module
+    if (py_thr_lck.trylock()) {
+        return;
+    }
 
     // delete all thread states for the tid
     for (auto& i : py_thr_map) {
@@ -482,6 +475,7 @@ void QorePythonProgram::pythonThreadCleanup(void*) {
         py_global_tid_map.erase(gi);
     }
     //printd(5, "QorePythonProgram::pythonThreadCleanup() done\n");
+    py_thr_lck.unlock();
 }
 
 bool QorePythonProgram::haveGil() {
