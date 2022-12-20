@@ -17,7 +17,7 @@ BuildRequires:  gcc-c++
 BuildRequires:  devtoolset-7-gcc-c++
 %endif
 BuildRequires:  cmake >= 3.12.4
-%if 0%{?suse_version} || 0%{?fedora} || 0%{?sles_version}
+%if 0%{?suse_version} || 0%{?fedora} || 0%{?sles_version} || 0%{?el9}
 BuildRequires:  python3-devel >= 3.8
 Requires:       python3 >= 3.8
 %else
@@ -26,9 +26,11 @@ BuildRequires:  python38-devel
 Requires:       python38
 %endif
 %endif
-BuildRequires:  qore-devel >= 1.0
+BuildRequires:  qore-devel >= 1.12.4
+BuildRequires:  qore-stdlib >= 1.12.4
+BuildRequires:  qore >= 1.12.4
+Requires:       qore-module(abi)%{?_isa} = %{module_api}
 Requires:       %{_bindir}/env
-Requires:       qore >= 1.0
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 
 %description
@@ -47,12 +49,17 @@ export CXXFLAGS="%{?optflags}"
 alias python=/usr/bin/python3
 cmake -DCMAKE_INSTALL_PREFIX=%{_prefix} -DCMAKE_BUILD_TYPE=RELWITHDEBINFO -DCMAKE_SKIP_RPATH=1 -DCMAKE_SKIP_INSTALL_RPATH=1 -DCMAKE_SKIP_BUILD_RPATH=1 -DCMAKE_PREFIX_PATH=${_prefix}/lib64/cmake/Qore .
 make %{?_smp_mflags}
+make %{?_smp_mflags} docs
+sed -i 's/#!\/usr\/bin\/env qore/#!\/usr\/bin\/qore/' test/*.qtest
 
 %install
 make DESTDIR=%{buildroot} install %{?_smp_mflags}
 
 %files
 %{module_dir}
+
+%check
+qore -l ./python-api-1.3.qmod test/python.qtest -v
 
 %changelog
 * Tue Dec 6 2022 David Nichols <david@qore.org>
