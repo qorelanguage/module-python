@@ -4,7 +4,7 @@
 
     Qore Programming Language
 
-    Copyright 2020 - 2021 Qore Technologies, s.r.o.
+    Copyright 2020 - 2022 Qore Technologies, s.r.o.
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -401,7 +401,8 @@ typedef enum _Py_memory_order {
 
 #define _Py_atomic_store_explicit(ATOMIC_VAL, NEW_VAL, ORDER)   \
     atomic_store_explicit(&(ATOMIC_VAL)->_value, NEW_VAL, ORDER)
-#elif defined(__GNUC__) && defined(__aarch64__)
+#elif defined(__GNUC__)
+// assume all other architectures use standard atomic functions
 # include <atomic>
 
 typedef enum _Py_memory_order {
@@ -411,23 +412,6 @@ typedef enum _Py_memory_order {
     _Py_memory_order_acq_rel = std::memory_order_acq_rel,
     _Py_memory_order_seq_cst = std::memory_order_seq_cst
 } _Py_memory_order;
-
-#define atomic_load_explicit(PTR, MO)                                   \
-  __extension__                                                         \
-  ({                                                                    \
-    auto __atomic_load_ptr = (PTR);                              \
-    __typeof__ (*__atomic_load_ptr) __atomic_load_tmp;                  \
-    __atomic_load (__atomic_load_ptr, &__atomic_load_tmp, (MO));        \
-    __atomic_load_tmp;                                                  \
-  })
-
-#define atomic_store_explicit(PTR, VAL, MO)                             \
-  __extension__                                                         \
-  ({                                                                    \
-    auto __atomic_store_ptr = (PTR);                             \
-    __typeof__ (*__atomic_store_ptr) __atomic_store_tmp = (VAL);        \
-    __atomic_store (__atomic_store_ptr, &__atomic_store_tmp, (MO));     \
-  })
 
 #define atomic_load_explicit(PTR, MO)                                   \
   __extension__                                                         \

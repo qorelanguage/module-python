@@ -4,7 +4,7 @@
 
     Qore Programming Language
 
-    Copyright 2020 - 2021 Qore Technologies, s.r.o.
+    Copyright 2020 - 2022 Qore Technologies, s.r.o.
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -370,7 +370,8 @@ typedef enum _Py_memory_order {
 
 #define _Py_atomic_store_explicit(ATOMIC_VAL, NEW_VAL, ORDER)   \
     atomic_store_explicit(&(ATOMIC_VAL)->_value, NEW_VAL, ORDER)
-#elif defined(__GNUC__) && defined(__aarch64__)
+#elif defined(__GNUC__)
+// assume all other architectures use standard atomic functions
 # include <atomic>
 
 typedef enum _Py_memory_order {

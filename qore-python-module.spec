@@ -1,11 +1,12 @@
 %{?_datarootdir: %global mydatarootdir %_datarootdir}
 %{!?_datarootdir: %global mydatarootdir %{buildroot}/usr/share}
 
+%global module_api %(qore --latest-module-api 2>/dev/null)
 %global module_dir %{_libdir}/qore-modules
 %global user_module_dir %{mydatarootdir}/qore-modules/
 
 Name:           qore-python-module
-Version:        1.1.6
+Version:        1.1.7
 Release:        1
 Summary:        Qorus Integration Engine - Qore Python module
 License:        MIT
@@ -16,7 +17,7 @@ BuildRequires:  gcc-c++
 %if 0%{?el7}
 BuildRequires:  devtoolset-7-gcc-c++
 %endif
-BuildRequires:  cmake >= 3.12.4
+BuildRequires:  cmake >= 3.5
 %if 0%{?suse_version} || 0%{?fedora} || 0%{?sles_version} || 0%{?el9}
 BuildRequires:  python3-devel >= 3.8
 Requires:       python3 >= 3.8
@@ -29,6 +30,7 @@ Requires:       python38
 BuildRequires:  qore-devel >= 1.12.4
 BuildRequires:  qore-stdlib >= 1.12.4
 BuildRequires:  qore >= 1.12.4
+BuildRequires:  doxygen
 Requires:       qore-module(abi)%{?_isa} = %{module_api}
 Requires:       %{_bindir}/env
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
@@ -59,9 +61,25 @@ make DESTDIR=%{buildroot} install %{?_smp_mflags}
 %{module_dir}
 
 %check
-qore -l ./python-api-1.3.qmod test/python.qtest -v
+qore -l ./python-api-%{module_api}.qmod test/python.qtest -v
+
+%package doc
+Summary: python module for Qore
+Group: Development/Languages/Other
+
+%description doc
+python module for the Qore Programming Language.
+
+This RPM provides API documentation, test and example programs
+
+%files doc
+%defattr(-,root,root,-)
+%doc docs/python test/*.qtest
 
 %changelog
+* Tue Dec 20 2022 David Nichols <david@qore.org>
+- updated to version 1.1.7
+
 * Tue Dec 6 2022 David Nichols <david@qore.org>
 - updated to version 1.1.6
 

@@ -17,6 +17,9 @@
 %try-module jni
 %define NO_JAVA
 %endtry
+%try-module xml
+%define NO_XML
+%endtry
 
 %exec-class PythonTest
 
@@ -849,6 +852,10 @@ def dot():
     }
 
     objectLifecycleTest() {
+%ifdef NO_XML
+        testSkip("no xml module");
+%endif
+
         PythonProgram p("import qore.xml
 
 class PyXRC(qore.xml.XmlRpcClient):
