@@ -2,7 +2,7 @@
 /*
     qore Python module
 
-    Copyright (C) 2020 - 2021 Qore Technologies, s.r.o.
+    Copyright (C) 2020 - 2022 Qore Technologies, s.r.o.
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -22,6 +22,7 @@
 #include "PythonQoreClass.h"
 #include "QoreLoader.h"
 #include "QorePythonProgram.h"
+#include "QorePythonStackLocationHelper.h"
 
 #include <string.h>
 #include <memory>
@@ -435,6 +436,9 @@ PyObject* PythonQoreClass::exec_qore_method(PyObject* method_capsule, PyObject* 
                 ValueHolder rv(&xsink);
                 {
                     QorePythonReleaseGilHelper prgh;
+
+                    QorePythonStackLocationHelper slh(qph.getOldProgram());
+
                     rv = obj->evalMethod(*m, *qargs, &xsink);
                 }
                 if (!xsink) {
@@ -491,6 +495,9 @@ PyObject* PythonQoreClass::exec_qore_static_method(const QoreMethod& m, PyObject
                 ValueHolder rv(&xsink);
                 {
                     QorePythonReleaseGilHelper prgh;
+
+                    QorePythonStackLocationHelper slh(qph.getOldProgram());
+
                     rv = QoreObject::evalStaticMethod(m, m.getClass(), *qargs, &xsink);
                 }
                 if (!xsink) {
@@ -563,6 +570,9 @@ int PythonQoreClass::py_init(PyObject* self, PyObject* args, PyObject* kwds) {
             QoreExternalProgramContextHelper pch(&xsink, qore_python_pgm->getQoreProgram());
             if (!xsink) {
                 QorePythonReleaseGilHelper prgh;
+
+                QorePythonStackLocationHelper slh(qore_python_pgm);
+
                 ReferenceHolder<QoreObject> qobj(constructor_cls->execConstructor(*qcls, *qargs, true, &xsink),
                     &xsink);
                 if (!xsink) {
@@ -631,6 +641,9 @@ PyObject* PythonQoreClass::py_getattro(PyObject* self, PyObject* attr) {
         ValueHolder v(&xsink);
         {
             QorePythonReleaseGilHelper prgh;
+
+            QorePythonStackLocationHelper slh(qore_python_pgm);
+
             v = obj->evalMember(member, &xsink);
         }
         printd(5, "PythonQoreClass::py_getattro() obj %p %s.%s = %s\n", obj, qcls->getName(), member, v->getFullTypeName());

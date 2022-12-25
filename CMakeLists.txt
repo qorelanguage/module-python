@@ -72,6 +72,7 @@ set(CPP_SRC
     src/PythonQoreClass.cpp
     src/PythonQoreCallable.cpp
     src/ModuleNamespace.cpp
+    src/QorePythonStackLocationHelper.cpp
 )
 
 qore_wrap_qpp_value(QPP_SOURCES ${QPP_SRC})

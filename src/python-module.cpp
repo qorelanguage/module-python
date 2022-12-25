@@ -2,7 +2,7 @@
 /*
     python Qore module
 
-    Copyright (C) 2020 - 2021 Qore Technologies, s.r.o.
+    Copyright (C) 2020 - 2022 Qore Technologies, s.r.o.
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -22,6 +22,7 @@
 #include "python-module.h"
 #include "QC_PythonProgram.h"
 #include "QorePythonProgram.h"
+#include "QorePythonStackLocationHelper.h"
 
 static QoreStringNode* python_module_init();
 static void python_module_ns_init(QoreNamespace* rns, QoreNamespace* qns);
@@ -288,7 +289,8 @@ static QoreStringNode* python_module_init_intern(bool repeat) {
     // ensure that runtime version matches compiled version
     check_python_version();
 
-    if (init_global_qore_python_pgm() || QorePythonProgram::staticInit()) {
+    if (init_global_qore_python_pgm() || QorePythonProgram::staticInit()
+        || QorePythonStackLocationHelper::staticInit()) {
         throw QoreStandardException("PYTHON-MODULE-ERROR", "failed to initialize \"python\" module");
     }
 
@@ -521,7 +523,8 @@ extern "C" int python_module_import(ExceptionSink* xsink, QoreProgram* pgm, cons
 }
 
 QorePythonHelper::QorePythonHelper(const QorePythonProgram* pypgm)
-    : old_pgm(q_swap_thread_local_data(python_u_tld_key, (void*)pypgm)), old_state(pypgm->setContext()), new_pypgm(pypgm) {
+        : old_pgm(q_swap_thread_local_data(python_u_tld_key, (void*)pypgm)), old_state(pypgm->setContext()),
+            new_pypgm(pypgm) {
     //printd(5, "QorePythonHelper::QorePythonHelper() new: %p old: %p\n", pypgm, old_pgm);
 }
 

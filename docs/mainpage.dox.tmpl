@@ -500,6 +500,11 @@ PythonProgram::setSaveObjectCallback(callback);
 
     @section pythonreleasenotes python Module Release Notes
 
+    @subsection python_1_2 python Module Version 1.2
+    - enable proper Python stack trace reporting when exceptions are thrown in %Qore code called from %Python; %Python
+      stack frames are now included in the %Qore stack trace
+      (<a href="https://github.com/qorelanguage/qore/issues/4653">issue 4653</a>)
+
     @subsection python_1_1_7 python Module Version 1.1.7
     - enabled building with standard atomic operations for all platforms
 

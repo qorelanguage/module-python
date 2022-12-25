@@ -5,7 +5,7 @@
 
     Qore Programming Language
 
-    Copyright 2020 - 2021 Qore Technologies, s.r.o.
+    Copyright 2020 - 2022 Qore Technologies, s.r.o.
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -31,6 +31,7 @@
 #include "PythonCallableCallReferenceNode.h"
 #include "PythonQoreCallable.h"
 #include "ModuleNamespace.h"
+#include "QorePythonStackLocationHelper.h"
 
 #include <structmember.h>
 #include <frameobject.h>
@@ -74,8 +75,6 @@ QorePythonProgram::py_thr_map_t QorePythonProgram::py_thr_map;
 QorePythonProgram::py_global_tid_map_t QorePythonProgram::py_global_tid_map;
 QoreThreadLock QorePythonProgram::py_thr_lck;
 unsigned QorePythonProgram::pgm_count = 0;
-
-QorePythonReferenceHolder QorePythonProgram::extract_tb;
 
 QorePythonProgram::QorePythonProgram() : save_object_callback(nullptr) {
     printd(5, "QorePythonProgram::QorePythonProgram() this: %p\n", this);
@@ -275,16 +274,6 @@ QorePythonProgram* QorePythonProgram::getContext() {
 int QorePythonProgram::staticInit() {
     PyDateTime_IMPORT;
     assert(PyDateTimeAPI);
-    QorePythonReferenceHolder traceback_mod(PyImport_ImportModule("traceback"));
-    if (!traceback_mod) {
-        PyErr_Clear();
-        return -1;
-    }
-    extract_tb = PyObject_GetAttrString(*traceback_mod, "extract_tb");
-    if (!extract_tb || !PyCallable_Check(*extract_tb)) {
-        PyErr_Clear();
-        return -1;
-    }
     return 0;
 }
 
@@ -1973,14 +1962,21 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
             QorePythonReferenceHolder code((PyObject*)PyFrame_GetCode(frame));
             int line = PyCode_Addr2Line((PyCodeObject*)*code, PyFrame_GetLasti(frame));
             QorePythonReferenceHolder filename_obj(PyObject_GetAttrString(*code, "co_filename"));
-            const char* filename = PyUnicode_AsUTF8(*filename_obj);
+            const char* filename;
+            Py_INCREF(*filename_obj);
+            QorePythonReferenceHolder np_obj(QorePythonStackLocationHelper::normalizePath(*filename_obj));
+            if (np_obj) {
+                filename = getCString(*np_obj);
+            } else {
+                filename = PyUnicode_AsUTF8(*filename_obj);
+            }
 
             if (frame == tb->tb_frame) {
                 loc.set(filename, line, line, nullptr, 0, QORE_PYTHON_LANG_NAME);
             } else {
                 callstack.add(CT_USER, filename, line, line, funcname, QORE_PYTHON_LANG_NAME);
             }
-            QorePythonReferenceHolder funcname_obj(PyObject_GetAttrString(*code, "co_name"));
+            QorePythonReferenceHolder funcname_obj(PyObject_GetAttrString(*code, "co_qualname"));
             funcname = PyUnicode_AsUTF8(*funcname_obj);
 
             frame = PyFrame_GetBack(frame);
@@ -1988,7 +1984,16 @@ int QorePythonProgram::checkPythonException(ExceptionSink* xsink) {
 #else
         while (frame) {
             int line = PyCode_Addr2Line(frame->f_code, frame->f_lasti);
-            const char* filename = getCString(frame->f_code->co_filename);
+            const char* filename;
+            Py_INCREF(frame->f_code->co_filename);
+            QorePythonReferenceHolder np_obj(QorePythonStackLocationHelper::normalizePath(
+                frame->f_code->co_filename
+            ));
+            if (np_obj) {
+                filename = getCString(*np_obj);
+            } else {
+                filename = getCString(frame->f_code->co_filename);
+            }
 
             if (frame == tb->tb_frame) {
                  loc.set(filename, line, line, nullptr, 0, QORE_PYTHON_LANG_NAME);

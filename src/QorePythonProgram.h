@@ -4,7 +4,7 @@
 
   Qore Programming Language
 
-  Copyright (C) 2020 - 2021 Qore Technologies, s.r.o.
+  Copyright (C) 2020 - 2022 Qore Technologies, s.r.o.
 
   Permission is hereby granted, free of charge, to any person obtaining a
   copy of this software and associated documentation files (the "Software"),
@@ -462,9 +462,6 @@ protected:
 
     //! number of program objects; writable only in the py_thr_lck lock
     DLLLOCAL static unsigned pgm_count;
-
-    //! traceback.extract_tb() method
-    DLLLOCAL static QorePythonReferenceHolder extract_tb;
 
     // for local program thread management
     mutable int pgm_thr_cnt = 0;

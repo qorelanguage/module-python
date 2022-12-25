@@ -145,6 +145,10 @@ public:
 
     DLLLOCAL ~QorePythonHelper();
 
+    DLLLOCAL QorePythonProgram* getOldProgram() const {
+        return old_pgm ? reinterpret_cast<QorePythonProgram*>(old_pgm) : const_cast<QorePythonProgram*>(new_pypgm);
+    }
+
 protected:
     void* old_pgm;
     QorePythonThreadInfo old_state;
