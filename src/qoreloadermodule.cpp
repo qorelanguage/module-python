@@ -283,7 +283,7 @@ PyMODINIT_FUNC PyInit_qoreloader() {
     // first check if the runtime library differs from the dynamically-linked one
     if (!Py_TYPE(PyExc_RuntimeError)) {
         fprintf(stderr, "ERROR: the Python runtime library is different than the dynamically linked one; it's not " \
-            "possible to raise a Python exception in case without a crash; aborting\n");
+            "possible to raise a Python exception in this case without a crash; aborting\n");
         return nullptr;
     }
 
